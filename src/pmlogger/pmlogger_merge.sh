@@ -150,7 +150,8 @@ do
 	then
 	    empty=`expr $empty + 1`
 	fi
-	if [ ! -f "$file.0" ]
+	# assume we're only supporting xz and gz compression
+	if [ ! -f "$file.0" -a ! -f "$file.0.xz" -a ! -f "$file.0.gz" ]
 	then
 	    echo "$prog: Error: \"volume 0\" file missing for archive \"$file\""
 	    fail=true
