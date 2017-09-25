@@ -211,9 +211,9 @@ do
 	-x)	COMPRESSAFTER="$2"
 		shift
 		check=`echo "$COMPRESSAFTER" | sed -e 's/[0-9]//g'`
-		if [ ! -z "$check" ]
+		if [ ! -z "$check" -a "$check" != "all" ]
 		then
-		    echo "Error: -x option ($COMPRESSAFTER) must be numeric"
+		    echo "Error: -x option ($COMPRESSAFTER) must be numeric or \"all\""
 		    status=1
 		    exit
 		fi
@@ -913,18 +913,28 @@ END	{ if (inlist != "") print lastdate,inlist }' >$tmp/list
 	#
 	if [ ! -z "$COMPRESSAFTER" ]
 	then
-	    if [ "$PCP_PLATFORM" = freebsd -o "$PCP_PLATFORM" = netbsd -o "$PCP_PLATFORM" = openbsd ]
+	    if [ "$COMPRESSAFTER" -eq 0 -o "$COMPRESSAFTER" = "all" ]
 	    then
-		# See note above re. find(1) on FreeBSD/NetBSD/OpenBSD
-		#
-		mtime=`expr $COMPRESSAFTER - 1`
+		# Special case for zero days or keyword "all". This will compress all
+		# archive volumes except the last in the sorted list, which is normally
+		# the current archive still being written.
+		FINDCMD="find . -type f"
 	    else
-		mtime=$COMPRESSAFTER
+		if [ "$PCP_PLATFORM" = freebsd -o "$PCP_PLATFORM" = netbsd -o "$PCP_PLATFORM" = openbsd ]
+		then
+		    # See note above re. find(1) on FreeBSD/NetBSD/OpenBSD
+		    #
+		    mtime=`expr $COMPRESSAFTER - 1`
+		else
+		    mtime=$COMPRESSAFTER
+		fi
+		FINDCMD="find . -type f -mtime +$mtime"
 	    fi
-	    find . -type f -mtime +$mtime \
+	    $FINDCMD \
 	    | _filter_filename \
 	    | egrep -v "$COMPRESSREGEX" \
-	    | sort >$tmp/list
+	    | sort \
+	    | head -n-1 >$tmp/list
 	    if [ -s $tmp/list ]
 	    then
 		if $VERBOSE

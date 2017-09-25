@@ -73,7 +73,17 @@ The
 .B \-x
 option enables compression and
 specifies the number of days after which to compress archive data
-files, and the
+files.
+As a special case, if the
+.I compress
+argument to the
+.B \-x
+option is
+.B 0
+or
+.B all
+then all data volumes (except the volume currently being written) will be compressed.
+The
 .B \-X
 option specifies the program to use for compression \- by default this is
 .BR xz (1).
