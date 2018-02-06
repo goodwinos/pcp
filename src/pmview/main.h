@@ -15,7 +15,6 @@
 #define MAIN_H
 
 #include "pcp/pmapi.h"
-#include "pcp/impl.h"
 
 #include "qed_app.h"
 #include "main.h"
@@ -148,5 +147,7 @@ int setup(const char *appname, int *argc, char **argv,
 int warningMsg(const char *fileName, int line, const char *msg, ...);
 int errorMsg(const char *fileName, int line, const char *msg, ...);
 int fatalMsg(const char *fileName, int line, const char *msg, ...);
+
+extern QTextStream cerr;
 
 #endif	// MAIN_H

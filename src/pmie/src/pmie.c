@@ -27,7 +27,7 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 
 #include "dstruct.h"
 #include "stomp.h"
@@ -201,14 +201,14 @@ load(char *fname)
     Symbol	s;
     Expr	*d;
     int		sts = 0;
-    int		sep = __pmPathSeparator();
+    int		sep = pmPathSeparator();
     char	config[MAXPATHLEN+1];
 
     /* search for configfile on configuration file path */
     if (fname && access(fname, F_OK) != 0) {
 	sts = oserror();	/* always report the first error */
 	if (__pmAbsolutePath(fname)) {
-	    fprintf(stderr, "%s: cannot access config file %s: %s\n", pmProgname, 
+	    fprintf(stderr, "%s: cannot access config file %s: %s\n", pmGetProgname(), 
 		    fname, strerror(sts));
 	    exit(1);
 	}
@@ -219,7 +219,7 @@ load(char *fname)
 		pmGetConfig("PCP_VAR_DIR"), sep, sep, sep, fname);
 	if (access(config, F_OK) != 0) {
 	    fprintf(stderr, "%s: cannot access config file as either %s or %s: %s\n",
-		    pmProgname, fname, config, strerror(sts));
+		    pmGetProgname(), fname, config, strerror(sts));
 	    exit(1);
 	}
 	else if (pmDebugOptions.appl0) {
@@ -237,7 +237,7 @@ load(char *fname)
 	    strcpy(perf->config, "<stdin>");
 	else if (realpath(fname, perf->config) == NULL) {
 	    fprintf(stderr, "%s: failed to resolve realpath for %s: %s\n",
-		    pmProgname, fname, osstrerror());
+		    pmGetProgname(), fname, osstrerror());
 	    exit(1);
 	}
     }
@@ -264,7 +264,7 @@ list(char *name)
 	if ( (s = symLookup(&rules, name)) )
 	    showSyntax(stdout, s);
 	else
-	    printf("%s: error - rule \"%s\" not defined\n", pmProgname, name);
+	    printf("%s: error - rule \"%s\" not defined\n", pmGetProgname(), name);
     }
     else {	/* all rules */
 	t = taskq;
@@ -293,7 +293,7 @@ sublist(char *name)
 	if ( (s = symLookup(&rules, name)) )
 	    showSubsyntax(stdout, s);
 	else
-	    printf("%s: error - rule '%s' not defined\n", pmProgname, name);
+	    printf("%s: error - rule '%s' not defined\n", pmGetProgname(), name);
     }
     else {	/* all rules */
 	t = taskq;
@@ -331,18 +331,18 @@ startmonitor(void)
 
     /* try to create the port file directory. OK if it already exists */
     pmsprintf(pmie_dir, sizeof(pmie_dir), "%s%c%s",
-	     pmGetConfig("PCP_TMP_DIR"), __pmPathSeparator(), PMIE_SUBDIR);
+	     pmGetConfig("PCP_TMP_DIR"), pmPathSeparator(), PMIE_SUBDIR);
     if (mkdir2(pmie_dir, S_IRWXU | S_IRWXG | S_IRWXO) < 0) {
 	if (oserror() != EEXIST) {
 	    fprintf(stderr, "%s: warning cannot create stats file dir %s: %s\n",
-		    pmProgname, pmie_dir, osstrerror());
+		    pmGetProgname(), pmie_dir, osstrerror());
 	}
     }
     atexit(stopmonitor);
 
     /* create and initialize memory mapped performance data file */
     pmsprintf(perffile, sizeof(perffile),
-		"%s%c%" FMT_PID, pmie_dir, __pmPathSeparator(), getpid());
+		"%s%c%" FMT_PID, pmie_dir, pmPathSeparator(), (pid_t)getpid());
     unlink(perffile);
     if ((fd = open(perffile, O_RDWR | O_CREAT | O_EXCL | O_TRUNC,
 			     S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)) < 0) {
@@ -354,13 +354,13 @@ startmonitor(void)
     lseek(fd, sizeof(pmiestats_t)-1, SEEK_SET);
     if (write(fd, &zero, 1) != 1) {
 	fprintf(stderr, "%s: Warning: write failed for stats file %s: %s\n",
-		pmProgname, perffile, osstrerror());
+		pmGetProgname(), perffile, osstrerror());
     }
 
     /* map perffile & associate the instrumentation struct with it */
     if ((ptr = __pmMemoryMap(fd, sizeof(pmiestats_t), 1)) == NULL) {
 	fprintf(stderr, "%s: memory map failed for stats file %s: %s\n",
-		pmProgname, perffile, osstrerror());
+		pmGetProgname(), perffile, osstrerror());
 	perf = &instrument;
     } else {
 	perf = (pmiestats_t *)ptr;
@@ -389,7 +389,7 @@ sigintproc(int sig)
     __pmSetSignalHandler(SIGINT, SIG_IGN);
     __pmSetSignalHandler(SIGTERM, SIG_IGN);
     if (pmDebugOptions.desperate)
-	__pmNotifyErr(LOG_INFO, "%s caught SIGINT or SIGTERM\n", pmProgname);
+	pmNotifyErr(LOG_INFO, "%s caught SIGINT or SIGTERM\n", pmGetProgname());
     if (inrun)
 	doexit = sig;
     else {
@@ -413,7 +413,7 @@ remap_stdout_stderr(void)
     if ((j = dup(fileno(stderr))) != i)
 	fprintf(stderr, "%s: Warning: failed to link stdout ... "
 			"dup() returns %d, expected %d (stderr=%d)\n",
-			pmProgname, j, i, fileno(stderr));
+			pmGetProgname(), j, i, fileno(stderr));
 }
 
 void
@@ -422,14 +422,14 @@ logRotate(void)
     FILE *fp;
     int sts;
 
-    fp = __pmRotateLog(pmProgname, logfile, logfp, &sts);
+    fp = __pmRotateLog(pmGetProgname(), logfile, logfp, &sts);
     if (sts != 0) {
 	fprintf(stderr, "pmie: PID = %" FMT_PID ", via %s\n\n",
-                getpid(), dfltHostConn);
+                (pid_t)getpid(), dfltHostConn);
 	remap_stdout_stderr();
 	logfp = fp;
     } else {
-	__pmNotifyErr(LOG_ERR, "pmie: log rotation failed\n");
+	pmNotifyErr(LOG_ERR, "pmie: log rotation failed\n");
     }
 }
 
@@ -444,7 +444,7 @@ static void
 sigbadproc(int sig)
 {
     if (pmDebugOptions.desperate) {
-	__pmNotifyErr(LOG_ERR, "Unexpected signal %d ...\n", sig);
+	pmNotifyErr(LOG_ERR, "Unexpected signal %d ...\n", sig);
 	fprintf(stderr, "\nProcedure call traceback ...\n");
 	__pmDumpStack(stderr);
 	fflush(stderr);
@@ -489,7 +489,7 @@ getargs(int argc, char *argv[])
 	case 'a':			/* archives */
 	    if (dfltConn && dfltConn != PM_CONTEXT_ARCHIVE) {
                 /* (technically, multiple -a's are allowed.) */
-		pmprintf("%s: at most one of -a or -h allowed\n", pmProgname);
+		pmprintf("%s: at most one of -a or -h allowed\n", pmGetProgname());
 		opts.errors++;
 		break;
 	    }
@@ -517,7 +517,7 @@ getargs(int argc, char *argv[])
 
 	case 'c': 			/* configuration file */
 	    if (interactive) {
-		pmprintf("%s: at most one of -c and -d allowed\n", pmProgname);
+		pmprintf("%s: at most one of -c and -d allowed\n", pmGetProgname());
 		opts.errors++;
 		break;
 	    }
@@ -530,7 +530,7 @@ getargs(int argc, char *argv[])
 
 	case 'd': 			/* interactive mode */
 	    if (configfile) {
-		pmprintf("%s: at most one of -c and -d allowed\n", pmProgname);
+		pmprintf("%s: at most one of -c and -d allowed\n", pmGetProgname());
 		opts.errors++;
 		break;
 	    }
@@ -550,7 +550,7 @@ getargs(int argc, char *argv[])
 
 	case 'h': 			/* default host name */
 	    if (dfltConn) {
-		pmprintf("%s: at most one of -a or -h allowed\n", pmProgname);
+		pmprintf("%s: at most one of -a or -h allowed\n", pmGetProgname());
 		opts.errors++;
 		break;
 	    }
@@ -564,7 +564,7 @@ getargs(int argc, char *argv[])
 
 	case 'l':			/* alternate log file */
 	    if (commandlog != NULL) {
-		pmprintf("%s: at most one -l option is allowed\n", pmProgname);
+		pmprintf("%s: at most one -l option is allowed\n", pmGetProgname());
 		opts.errors++;
 		break;
 	    }
@@ -609,12 +609,12 @@ getargs(int argc, char *argv[])
 
     if (!opts.errors && configfile && opts.optind != argc) {
 	pmprintf("%s: extra filenames cannot be given after using -c\n",
-		pmProgname);
+		pmGetProgname());
 	opts.errors++;
     }
     if (!opts.errors && bflag && agent) {
 	pmprintf("%s: the -b and -x options are incompatible\n",
-		pmProgname);
+		pmGetProgname());
 	opts.errors++;
     }
     if (opts.errors) {
@@ -643,14 +643,14 @@ getargs(int argc, char *argv[])
     hostZone = opts.tzflag;
     timeZone = opts.timezone;
     if (opts.interval.tv_sec || opts.interval.tv_usec)
-	dfltDelta = __pmtimevalToReal(&opts.interval);
+	dfltDelta = pmtimevalToReal(&opts.interval);
 
     if (archives || interactive)
 	perf = &instrument;
 
     if (isdaemon) {			/* daemon mode */
 	/* done before opening log to get permissions right */
-	__pmSetProcessIdentity(username);
+	pmSetProcessIdentity(username);
 
 #if defined(HAVE_TERMIO_SIGNALS)
 	signal(SIGTTOU, SIG_IGN);
@@ -669,10 +669,10 @@ getargs(int argc, char *argv[])
     }
 
     if (commandlog != NULL) {
-	logfp = __pmOpenLog(pmProgname, commandlog, stderr, &sts);
+	logfp = pmOpenLog(pmGetProgname(), commandlog, stderr, &sts);
 	if (realpath(commandlog, logfile) == NULL) {
 	    fprintf(stderr, "%s: cannot find realpath for log %s: %s\n",
-		    pmProgname, commandlog, osstrerror());
+		    pmGetProgname(), commandlog, osstrerror());
 	    exit(1);
 	}
 	__pmSetSignalHandler(SIGHUP, (isdaemon && !agent) ? sighupproc : SIG_IGN);
@@ -701,7 +701,7 @@ getargs(int argc, char *argv[])
     if (!archives && !interactive) {
 	if (commandlog != NULL)
             fprintf(stderr, "pmie: PID = %" FMT_PID ", via %s\n\n",
-                    getpid(), dfltHostConn);
+                    (pid_t)getpid(), dfltHostConn);
 	startmonitor();
     }
 
@@ -711,9 +711,9 @@ getargs(int argc, char *argv[])
     reflectTime(dfltDelta);
 
     /* parse time window - just to check argument syntax */
-    __pmtimevalFromReal(now, &tv1);
+    pmtimevalFromReal(now, &tv1);
     if (archives) {
-	__pmtimevalFromReal(last, &tv2);
+	pmtimevalFromReal(last, &tv2);
     } else {
 	tv2.tv_sec = INT_MAX;		/* sizeof(time_t) == sizeof(int) */
 	tv2.tv_usec = 0;
@@ -726,8 +726,8 @@ getargs(int argc, char *argv[])
 	fputs(msg, stderr);
         exit(1);
     }
-    start = __pmtimevalToReal(&tv1);
-    stop = __pmtimevalToReal(&tv2);
+    start = pmtimevalToReal(&tv1);
+    stop = pmtimevalToReal(&tv2);
     runTime = stop - start;
 
     /* when not in secret agent mode, register client id with pmcd */
@@ -776,9 +776,9 @@ getargs(int argc, char *argv[])
     if (agent)
 	agentInit();			/* initialize secret agent stuff */
 
-    __pmtimevalFromReal(now, &tv1);
+    pmtimevalFromReal(now, &tv1);
     if (archives) {
-	__pmtimevalFromReal(last, &tv2);
+	pmtimevalFromReal(last, &tv2);
     } else {
 	tv2.tv_sec = INT_MAX;
 	tv2.tv_usec = 0;
@@ -793,8 +793,8 @@ getargs(int argc, char *argv[])
     }
 
     /* set run timing window */
-    start = __pmtimevalToReal(&tv1);
-    stop = __pmtimevalToReal(&tv2);
+    start = pmtimevalToReal(&tv1);
+    stop = pmtimevalToReal(&tv2);
     runTime = stop - start;
 }
 
@@ -837,7 +837,7 @@ interact(void)
 		token = scanArg(finger);
 		if (token) {
 		    if (pmParseInterval(token, &tv1, &msg) == 0)
-			runTime = __pmtimevalToReal(&tv1);
+			runTime = pmtimevalToReal(&tv1);
 		    else {
 			fputs(msg, stderr);
 			free(msg);
@@ -858,12 +858,12 @@ interact(void)
 	    case 'S':
 		token = scanArg(finger);
 		if (token == NULL) {
-		    fprintf(stderr, "%s: error - argument required\n", pmProgname);
+		    fprintf(stderr, "%s: error - argument required\n", pmGetProgname());
 		    break;
 		}
-		__pmtimevalFromReal(start, &tv1);
+		pmtimevalFromReal(start, &tv1);
 		if (archives) {
-		    __pmtimevalFromReal(last, &tv2);
+		    pmtimevalFromReal(last, &tv2);
 		} else {
 		    tv2.tv_sec = INT_MAX;
 		    tv2.tv_usec = 0;
@@ -873,7 +873,7 @@ interact(void)
 		    free(msg);
 		    break;
 		}
-		start = __pmtimevalToReal(&tv1);
+		start = pmtimevalToReal(&tv1);
 		if (archives)
 		    invalidate();
 		break;
@@ -881,7 +881,7 @@ interact(void)
 	    case 'T':
 		token = scanArg(finger);
 		if (token == NULL) {
-		    fprintf(stderr, "%s: error - argument required\n", pmProgname);
+		    fprintf(stderr, "%s: error - argument required\n", pmGetProgname());
 		    break;
 		}
 		if (pmParseInterval(token, &tv1, &msg) < 0) {
@@ -889,7 +889,7 @@ interact(void)
 		    free(msg);
 		    break;
 		}
-		runTime = __pmtimevalToReal(&tv1);
+		runTime = pmtimevalToReal(&tv1);
 		break;
 	    case 'q':
 		quit = 1;
@@ -921,7 +921,7 @@ interact(void)
 int
 main(int argc, char **argv)
 {
-    __pmGetUsername(&username);
+    pmGetUsername(&username);
     setlinebuf(stdout);
 
     /* PCP_COUNTER_WRAP in environment enables "counter wrap" logic */

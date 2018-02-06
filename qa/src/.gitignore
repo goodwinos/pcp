@@ -18,6 +18,7 @@ badmmv
 badpmcdpmid
 badpmda
 batch_import.pl
+chain
 check_fault_injection
 check_import
 check_import_name
@@ -45,6 +46,7 @@ clienttimeout
 compare
 context_fd_leak
 context_test
+countmark
 crashpmcd
 defctx
 derived
@@ -75,6 +77,7 @@ getversion
 github-50
 grind_conv
 grind_ctx
+hanoi
 hashwalk
 hex2nbo
 hp-mib
@@ -97,6 +100,7 @@ keycache
 keycache2
 killparent
 labels
+libpcp.h
 loadderived
 loadconfig2
 logcontrol
@@ -131,6 +135,7 @@ multithread8
 multithread9
 multithread10
 multithread11
+multithread12
 mv-bar.1
 mv-bar.2
 mv-bar.3
@@ -173,6 +178,7 @@ pmsocks_objstyle
 pmsprintf
 pmtimezone.so
 proc_test
+progname
 pv
 pv64
 pv64.c
@@ -183,9 +189,11 @@ record-setarg
 rootclient
 rtimetest
 scale
+scanmeta
 semstr
 slow_af
 sortinst
+spawn
 statvfs
 store
 storepast
@@ -206,6 +214,7 @@ torture_trace
 tstate
 tztest
 unpack
+unpickargs
 units-parse
 username
 whichtimezone

@@ -5,7 +5,6 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 
 #define BUILD_STANDALONE 1
 
@@ -26,7 +25,7 @@ main(int argc, char **argv)
     char	*name;
 
     /* trim cmd name of leading directory components */
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     while ((c = getopt(argc, argv, "a:D:h:Ln:x?")) != EOF) {
 	switch (c) {
@@ -34,9 +33,9 @@ main(int argc, char **argv)
 	case 'a':	/* archive name */
 	    if (type != 0) {
 #ifdef BUILD_STANDALONE
-		fprintf(stderr, "%s: at most one of -a, -h, -L and -x allowed\n", pmProgname);
+		fprintf(stderr, "%s: at most one of -a, -h, -L and -x allowed\n", pmGetProgname());
 #else
-		fprintf(stderr, "%s: at most one of -a, -h and -x allowed\n", pmProgname);
+		fprintf(stderr, "%s: at most one of -a, -h and -x allowed\n", pmGetProgname());
 #endif
 		errflag++;
 	    }
@@ -49,7 +48,7 @@ main(int argc, char **argv)
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
@@ -57,9 +56,9 @@ main(int argc, char **argv)
 	case 'h':	/* contact PMCD on this hostname */
 	    if (type != 0) {
 #ifdef BUILD_STANDALONE
-		fprintf(stderr, "%s: at most one of -a, -h, -L and -x allowed\n", pmProgname);
+		fprintf(stderr, "%s: at most one of -a, -h, -L and -x allowed\n", pmGetProgname());
 #else
-		fprintf(stderr, "%s: at most one of -a, -h and -x allowed\n", pmProgname);
+		fprintf(stderr, "%s: at most one of -a, -h and -x allowed\n", pmGetProgname());
 #endif
 		errflag++;
 	    }
@@ -71,7 +70,7 @@ main(int argc, char **argv)
 #ifdef BUILD_STANDALONE
 	case 'L':	/* LOCAL, no PMCD */
 	    if (type != 0) {
-		fprintf(stderr, "%s: at most one of -a, -h, -L and -x allowed\n", pmProgname);
+		fprintf(stderr, "%s: at most one of -a, -h, -L and -x allowed\n", pmGetProgname());
 		errflag++;
 	    }
 	    host = NULL;
@@ -90,9 +89,9 @@ main(int argc, char **argv)
 	case 'x':	/* no pmNewContext */
 	    if (type != 0) {
 #ifdef BUILD_STANDALONE
-		fprintf(stderr, "%s: at most one of -a, -h, -L and -x allowed\n", pmProgname);
+		fprintf(stderr, "%s: at most one of -a, -h, -L and -x allowed\n", pmGetProgname());
 #else
-		fprintf(stderr, "%s: at most one of -a, -h and -x allowed\n", pmProgname);
+		fprintf(stderr, "%s: at most one of -a, -h and -x allowed\n", pmGetProgname());
 #endif
 		errflag++;
 	    }
@@ -119,12 +118,12 @@ Options:\n\
 #endif
 "  -n pmnsfile    use an alternative PMNS\n\
   -x             don't call pmNewContext\n",
-                pmProgname);
+                pmGetProgname());
         exit(1);
     }
 
     if (pmnsfile != PM_NS_DEFAULT && (sts = pmLoadASCIINameSpace(pmnsfile, 1)) < 0) {
-	printf("%s: Cannot load namespace from \"%s\": %s\n", pmProgname, 
+	printf("%s: Cannot load namespace from \"%s\": %s\n", pmGetProgname(), 
 	       pmnsfile, pmErrStr(sts));
 	exit(1);
     }
@@ -138,10 +137,10 @@ Options:\n\
 	if ((sts = pmNewContext(type, host)) < 0) {
 	    if (type == PM_CONTEXT_HOST)
 		fprintf(stderr, "%s: Cannot connect to PMCD on host \"%s\": %s\n",
-		    pmProgname, host, pmErrStr(sts));
+		    pmGetProgname(), host, pmErrStr(sts));
 	    else
 		fprintf(stderr, "%s: Cannot open archive \"%s\": %s\n",
-		    pmProgname, host, pmErrStr(sts));
+		    pmGetProgname(), host, pmErrStr(sts));
 	    exit(1);
 	}
 
@@ -149,12 +148,12 @@ Options:\n\
 	    pmLogLabel	label;
 	    if ((sts = pmGetArchiveLabel(&label)) < 0) {
 		fprintf(stderr, "%s: Cannot get archive label record: %s\n",
-		    pmProgname, pmErrStr(sts));
+		    pmGetProgname(), pmErrStr(sts));
 		exit(1);
 	    }
 	    if (mode != PM_MODE_INTERP) {
 		if ((sts = pmSetMode(mode, &label.ll_start, 0)) < 0) {
-		    fprintf(stderr, "%s: pmSetMode: %s\n", pmProgname, pmErrStr(sts));
+		    fprintf(stderr, "%s: pmSetMode: %s\n", pmGetProgname(), pmErrStr(sts));
 		    exit(1);
 		}
 	    }
@@ -165,19 +164,19 @@ Options:\n\
     numpmid = argc - optind;
     namelist = (char **)malloc(numpmid*sizeof(namelist[0]));
     if (namelist == NULL) {
-	fprintf(stderr, "%s: namelist malloc(%d) failed\n", pmProgname, (int)(numpmid*sizeof(namelist[0])));
+	fprintf(stderr, "%s: namelist malloc(%d) failed\n", pmGetProgname(), (int)(numpmid*sizeof(namelist[0])));
 	exit(1);
     }
     pmidlist = (pmID *)malloc(numpmid*sizeof(pmidlist[0]));
     if (pmidlist == NULL) {
-	fprintf(stderr, "%s: pmidlist malloc(%d) failed\n", pmProgname, (int)(numpmid*sizeof(pmidlist[0])));
+	fprintf(stderr, "%s: pmidlist malloc(%d) failed\n", pmGetProgname(), (int)(numpmid*sizeof(pmidlist[0])));
 	exit(1);
     }
 
     for (i = 0; i < numpmid; i++) {
 	namelist[i] = argv[optind+i];
 	/* bogus pmID to be sure real values are set below pmLookupName() */
-	pmidlist[i] = pmid_build(i+1, i+1, i+1);
+	pmidlist[i] = pmID_build(i+1, i+1, i+1);
     }
 
     sts = pmLookupName(numpmid, namelist, pmidlist);

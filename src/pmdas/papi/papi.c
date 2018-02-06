@@ -14,9 +14,9 @@
  * for more details.
  */
 
-#include <pcp/pmapi.h>
-#include <pcp/impl.h>
-#include <pcp/pmda.h>
+#include "pmapi.h"
+#include "libpcp.h"
+#include "pmda.h"
 #include "domain.h"
 #include <papi.h>
 #include <assert.h>
@@ -99,7 +99,7 @@ expand_papi_info(int size)
 	size_t new_size = (size + 1) * sizeof(papi_m_user_tuple);
 	papi_info = realloc(papi_info, new_size);
 	if (papi_info == NULL)
-	    __pmNoMem("papi_info tuple", new_size, PM_FATAL_ERR);
+	    pmNoMem("papi_info tuple", new_size, PM_FATAL_ERR);
 	while (number_of_events <= size)
 	    memset(&papi_info[number_of_events++], 0, sizeof(papi_m_user_tuple));
     }
@@ -112,11 +112,11 @@ expand_values(int size)	 // XXX: collapse into expand_papi_info()
 	size_t new_size = (size + 1) * sizeof(long_long);
 	values = realloc(values, new_size);
 	if (values == NULL)
-	    __pmNoMem("values", new_size, PM_FATAL_ERR);
+	    pmNoMem("values", new_size, PM_FATAL_ERR);
 	while (size_of_active_counters <= size) {
 	    memset(&values[size_of_active_counters++], 0, sizeof(long_long));
 	    if (pmDebugOptions.appl0) {
-		__pmNotifyErr(LOG_DEBUG, "memsetting to zero, %d counters\n",
+		pmNotifyErr(LOG_DEBUG, "memsetting to zero, %d counters\n",
 				size_of_active_counters);
 	    }
 	}
@@ -131,7 +131,7 @@ enlarge_ctxtab(int context)
 	size_t need = (context + 1) * sizeof(struct uid_tuple);
 	ctxtab = realloc(ctxtab, need);
 	if (ctxtab == NULL)
-	    __pmNoMem("papi ctx table", need, PM_FATAL_ERR);
+	    pmNoMem("papi ctx table", need, PM_FATAL_ERR);
 	/* Blank out new entries. */
 	while (ctxtab_size <= context)
 	    memset(&ctxtab[ctxtab_size++], 0, sizeof(struct uid_tuple));
@@ -155,7 +155,7 @@ static void
 papi_endContextCallBack(int context)
 {
     if (pmDebugOptions.appl0)
-	__pmNotifyErr(LOG_DEBUG, "end context %d received\n", context);
+	pmNotifyErr(LOG_DEBUG, "end context %d received\n", context);
 
     /* ensure clients re-using this slot re-authenticate */
     if (context >= 0 && context < ctxtab_size)
@@ -165,7 +165,8 @@ papi_endContextCallBack(int context)
 static int
 papi_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 {
-    __pmID_int *idp = (__pmID_int *)&(mdesc->m_desc.pmid);
+    unsigned int cluster = pmID_cluster(mdesc->m_desc.pmid);
+    unsigned int item = pmID_item(mdesc->m_desc.pmid);
     int sts;
     int i;
     int state;
@@ -176,17 +177,17 @@ papi_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 
     now = time(NULL);
 
-    switch (idp->cluster) {
+    switch (cluster) {
     case CLUSTER_PAPI:
-	if (idp->item >= 0 && idp->item <= number_of_events) {
-	    // the 'case' && 'idp->item' value we get is the pmns_position
-	    if (papi_info[idp->item].position >= 0) { // live counter?
-		atom->ll = papi_info[idp->item].prev_value + values[papi_info[idp->item].position];
+	if (item >= 0 && item <= number_of_events) {
+	    // the 'case' && 'item' value we get is the pmns_position
+	    if (papi_info[item].position >= 0) { // live counter?
+		atom->ll = papi_info[item].prev_value + values[papi_info[item].position];
 		return PMDA_FETCH_STATIC;
 	    }
 	    else { // inactive counter?
-                if (papi_info[idp->item].metric_enabled) { // but requested?
-                    papi_info[idp->item].metric_enabled = 0; // give up
+                if (papi_info[item].metric_enabled) { // but requested?
+                    papi_info[item].metric_enabled = 0; // give up
                     return PM_ERR_VALUE; // i.e., expect no values ever
                 }
                 return PMDA_FETCH_NOVALUES;
@@ -196,7 +197,7 @@ papi_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 	return PM_ERR_PMID;
 
     case CLUSTER_CONTROL:
-	switch (idp->item) {
+	switch (item) {
 	case CONTROL_ENABLE:
 	    atom->cp = "";
 	    return PMDA_FETCH_STATIC;
@@ -266,11 +267,11 @@ papi_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 	break;
 
     case CLUSTER_AVAILABLE:
-	if (idp->item == AVAILABLE_NUM_COUNTERS) {
+	if (item == AVAILABLE_NUM_COUNTERS) {
 	    atom->ul = number_of_counters;
 	    return PMDA_FETCH_STATIC;
 	}
-	if (idp->item == AVAILABLE_VERSION) {
+	if (item == AVAILABLE_VERSION) {
 	    atom->cp = papi_version;
 	    return PMDA_FETCH_STATIC;
 	}
@@ -300,15 +301,15 @@ papi_fetch(int numpmid, pmID pmidlist[], pmResult **resp, pmdaExt *pmda)
         time_t now = time (NULL);
 
         for (i=0; i<numpmid; i++) {
-            __pmID_int *idp = (__pmID_int *)&(pmidlist[i]);
-            if (idp->cluster == CLUSTER_PAPI) {
-		if (idp->item >= 0 && idp->item <= number_of_events) {
-                    if (papi_info[idp->item].position < 0) { // new counter?
+	    unsigned int item = pmID_item(pmidlist[i]);
+            if (pmID_cluster(pmidlist[i]) == CLUSTER_PAPI) {
+		if (item >= 0 && item <= number_of_events) {
+                    if (papi_info[item].position < 0) { // new counter?
 			need_refresh_p = 1;
 		    }
 		    // update or initialize remaining lifetime
-		    if (papi_info[idp->item].metric_enabled != METRIC_ENABLED_FOREVER)
-			papi_info[idp->item].metric_enabled = now + auto_enable_time;
+		    if (papi_info[item].metric_enabled != METRIC_ENABLED_FOREVER)
+			papi_info[item].metric_enabled = now + auto_enable_time;
 		}
             }
         }
@@ -328,13 +329,12 @@ papi_fetch(int numpmid, pmID pmidlist[], pmResult **resp, pmdaExt *pmda)
        pcp metrics, we do this only for CLUSTER_PAPI pmids.  This is
        independent of auto-enable mode. */
     for (i=0; i<numpmid; i++) {
-        __pmID_int *idp = (__pmID_int *)&(pmidlist[i]);
-        if (idp->cluster == CLUSTER_PAPI) {
+        if (pmID_cluster(pmidlist[i]) == CLUSTER_PAPI) {
             sts = check_papi_state();
             if (sts & PAPI_RUNNING) {
                 sts = PAPI_read(EventSet, values);
                 if (sts != PAPI_OK) {
-                    __pmNotifyErr(LOG_ERR, "PAPI_read: %s\n", PAPI_strerror(sts));
+                    pmNotifyErr(LOG_ERR, "PAPI_read: %s\n", PAPI_strerror(sts));
                     return PM_ERR_VALUE;
                 }
             }
@@ -344,8 +344,7 @@ papi_fetch(int numpmid, pmID pmidlist[], pmResult **resp, pmdaExt *pmda)
     sts = 0; /* clear out any PAPI remnant flags */
 
     for (i = 0; i < numpmid; i++) {
-	__pmID_int *idp = (__pmID_int *)&(pmidlist[i]);
-	if (idp->cluster != CLUSTER_AVAILABLE)
+	if (pmID_cluster(pmidlist[i]) != CLUSTER_AVAILABLE)
 	    sts = 1;
     }
     if (sts == 0 || permission_check(pmda->e_context))
@@ -361,7 +360,7 @@ static void
 handle_papi_error(int error, int logged)
 {
     if (logged || pmDebugOptions.appl0)
-	__pmNotifyErr(LOG_ERR, "Papi error: %s\n", PAPI_strerror(error));
+	pmNotifyErr(LOG_ERR, "Papi error: %s\n", PAPI_strerror(error));
 }
 
 /*
@@ -448,7 +447,7 @@ refresh_metrics(int log)
 		if (pmDebugOptions.appl0) {
 		    char eventname[PAPI_MAX_STR_LEN];
 		    PAPI_event_code_to_name(papi_info[i].info.event_code, eventname);
-		    __pmNotifyErr(LOG_DEBUG, "Unable to add: %s due to error: %s\n",
+		    pmNotifyErr(LOG_DEBUG, "Unable to add: %s due to error: %s\n",
 				  eventname, PAPI_strerror(sts));
 		}
 		handle_papi_error(sts, log);
@@ -531,14 +530,13 @@ papi_store(pmResult *result, pmdaExt *pmda)
 	return PM_ERR_PERMISSION;
     for (i = 0; i < result->numpmid; i++) {
 	pmValueSet *vsp = result->vset[i];
-	__pmID_int *idp = (__pmID_int *)&(vsp->pmid);
 	pmAtomValue av;
 
-	if (idp->cluster != CLUSTER_CONTROL) {
+	if (pmID_cluster(vsp->pmid) != CLUSTER_CONTROL) {
 	    sts2 = PM_ERR_PERMISSION;
 	    continue;
 	}
-	switch (idp->item) {
+	switch (pmID_item(vsp->pmid)) {
 	case CONTROL_ENABLE:
 	case CONTROL_DISABLE: // NB: almost identical handling!
 	    if ((sts = pmExtractValue(vsp->valfmt, &vsp->vlist[0],
@@ -551,13 +549,13 @@ papi_store(pmResult *result, pmdaExt *pmda)
 		for (j = 0; j < number_of_events; j++) {
 		    if (!strcmp(substring, papi_info[j].papi_string_code)) {
 			papi_info[j].metric_enabled =
-			    (idp->item == CONTROL_ENABLE) ? METRIC_ENABLED_FOREVER : 0;
+			    (pmID_item(vsp->pmid) == CONTROL_ENABLE) ? METRIC_ENABLED_FOREVER : 0;
 			break;
 		    }
 		}
 		if (j == number_of_events) {
 		    if (pmDebugOptions.appl0)
-			__pmNotifyErr(LOG_DEBUG, "metric name %s does not match any known metrics\n", substring);
+			pmNotifyErr(LOG_DEBUG, "metric name %s does not match any known metrics\n", substring);
 		    sts = 1;
 		    /* NB: continue for other event names that may succeed */
 		}
@@ -618,9 +616,8 @@ static int
 papi_desc(pmID pmid, pmDesc *desc, pmdaExt *pmda)
 {
     int sts = PM_ERR_PMID; // presume fail; switch statements fall through to this
-    __pmID_int *idp = (__pmID_int *)&(pmid);
 
-    switch (idp->cluster) {
+    switch (pmID_cluster(pmid)) {
     case CLUSTER_PAPI:
 	desc->pmid = pmid;
 	desc->type = PM_TYPE_64;
@@ -631,7 +628,7 @@ papi_desc(pmID pmid, pmDesc *desc, pmdaExt *pmda)
 	break;
 
     case CLUSTER_CONTROL:
-	switch (idp->item) {
+	switch (pmID_item(pmid)) {
 	case CONTROL_ENABLE:
 	case CONTROL_RESET:
 	case CONTROL_DISABLE:
@@ -663,7 +660,7 @@ papi_desc(pmID pmid, pmDesc *desc, pmdaExt *pmda)
 	break;
 
     case CLUSTER_AVAILABLE:
-	switch (idp->item) {
+	switch (pmID_item(pmid)) {
 	case AVAILABLE_NUM_COUNTERS:
 	    desc->pmid = pmid;
 	    desc->type = PM_TYPE_U32;
@@ -691,18 +688,18 @@ papi_desc(pmID pmid, pmDesc *desc, pmdaExt *pmda)
 static int
 papi_text(int ident, int type, char **buffer, pmdaExt *ep)
 {
-    __pmID_int *pmidp = (__pmID_int *)&ident;
+    pmID pmid = (pmID)ident;
 
     /* no indoms - we only deal with metric help text */
     if ((type & PM_TEXT_PMID) != PM_TEXT_PMID)
 	return PM_ERR_TEXT;
 
-    if (pmidp->cluster == CLUSTER_PAPI) {
-	if (pmidp->item >= 0 && pmidp->item < number_of_events) {
+    if (pmID_cluster(pmid) == CLUSTER_PAPI) {
+	if (pmID_item(pmid) >= 0 && pmID_item(pmid) < number_of_events) {
 	    if (type & PM_TEXT_ONELINE)
-		*buffer = papi_info[pmidp->item].info.short_descr;
+		*buffer = papi_info[pmID_item(pmid)].info.short_descr;
 	    else
-		*buffer = papi_info[pmidp->item].info.long_descr;
+		*buffer = papi_info[pmID_item(pmid)].info.long_descr;
 	    return 0;
 	}
 	else
@@ -738,29 +735,29 @@ papi_internal_init(pmdaInterface *dp)
     sts = pmsprintf(papi_version, sizeof(papi_version), "%d.%d.%d", PAPI_VERSION_MAJOR(PAPI_VERSION),
 	    PAPI_VERSION_MINOR(PAPI_VERSION), PAPI_VERSION_REVISION(PAPI_VERSION));
     if (sts < 0) {
-	__pmNotifyErr(LOG_ERR, "%s failed to create papi version metric.\n",pmProgname);
+	pmNotifyErr(LOG_ERR, "%s failed to create papi version metric.\n",pmGetProgname());
 	return PM_ERR_GENERIC;
     }
 
     if ((sts = __pmNewPMNS(&papi_tree)) < 0) {
-	__pmNotifyErr(LOG_ERR, "%s failed to create dynamic papi pmns: %s\n",
-		      pmProgname, pmErrStr(sts));
+	pmNotifyErr(LOG_ERR, "%s failed to create dynamic papi pmns: %s\n",
+		      pmGetProgname(), pmErrStr(sts));
 	papi_tree = NULL;
 	return PM_ERR_GENERIC;
     }
 
     number_of_counters = PAPI_num_counters();
     if (number_of_counters < 0) {
-	__pmNotifyErr(LOG_ERR, "hardware does not support performance counters\n");
+	pmNotifyErr(LOG_ERR, "hardware does not support performance counters\n");
 	return PM_ERR_APPVERSION;
     }
     else if (number_of_counters == 0) {
-	__pmNotifyErr(LOG_WARNING, "no performance counters\n");
+	pmNotifyErr(LOG_WARNING, "no performance counters\n");
     }
 
     sts = PAPI_library_init(PAPI_VER_CURRENT);
     if (sts != PAPI_VER_CURRENT) {
-	__pmNotifyErr(LOG_ERR, "PAPI_library_init error (%d)\n", sts);
+	pmNotifyErr(LOG_ERR, "PAPI_library_init error (%d)\n", sts);
 	return PM_ERR_GENERIC;
     }
 
@@ -773,7 +770,7 @@ papi_internal_init(pmdaInterface *dp)
 		memcpy(&papi_info[i].info, &info, sizeof(PAPI_event_info_t));
 		memcpy(&papi_info[i].papi_string_code, info.symbol + 5, strlen(info.symbol)-5);
 		pmsprintf(entry, sizeof(entry),"papi.system.%s", papi_info[i].papi_string_code);
-		pmid = pmid_build(dp->domain, CLUSTER_PAPI, i);
+		pmid = pmID_build(dp->domain, CLUSTER_PAPI, i);
 		papi_info[i].pmid = pmid;
 		__pmAddPMNSNode(papi_tree, pmid, entry);
 		memset(&entry[0], 0, sizeof(entry));
@@ -834,7 +831,7 @@ papi_internal_init(pmdaInterface *dp)
 			    sizeof(papi_info[i].papi_string_code) - 1);
 		}
 		pmsprintf(entry, sizeof(entry),"papi.system.%s", papi_info[i].papi_string_code);
-		pmid = pmid_build(dp->domain, CLUSTER_PAPI, i);
+		pmid = pmID_build(dp->domain, CLUSTER_PAPI, i);
 		papi_info[i].pmid = pmid;
 		__pmAddPMNSNode(papi_tree, pmid, entry);
 		memset(&entry[0], 0, sizeof(entry));
@@ -872,7 +869,7 @@ papi_contextAttributeCallBack(int context, int attr,
     int id = -1;
 
     if (pmDebugOptions.appl0)
-	__pmNotifyErr(LOG_DEBUG, "attribute callback context %d attr=%d id==%d\n", context, attr, atoi(value));
+	pmNotifyErr(LOG_DEBUG, "attribute callback context %d attr=%d id==%d\n", context, attr, atoi(value));
 
     enlarge_ctxtab(context);
     assert(ctxtab != NULL && context < ctxtab_size);
@@ -884,12 +881,12 @@ papi_contextAttributeCallBack(int context, int attr,
     ctxtab[context].uid = id = atoi(value);
     if (id != 0) {
 	if (pmDebugOptions.auth)
-	    __pmNotifyErr(LOG_DEBUG, "access denied context %d attr=%d id=%d\n", context, attr, id);
+	    pmNotifyErr(LOG_DEBUG, "access denied context %d attr=%d id=%d\n", context, attr, id);
 	return PM_ERR_PERMISSION;
     }
 
     if (pmDebugOptions.auth)
-	__pmNotifyErr(LOG_DEBUG, "access granted attr=%d id=%d\n", attr, id);
+	pmNotifyErr(LOG_DEBUG, "access granted attr=%d id=%d\n", attr, id);
     return 0;
 }
 
@@ -900,7 +897,7 @@ papi_init(pmdaInterface *dp)
     int sts;
 
     if (isDSO) {
-	int	sep = __pmPathSeparator();
+	int	sep = pmPathSeparator();
 
 	pmsprintf(helppath, sizeof(helppath), "%s%c" "papi" "%c" "help",
 		 pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
@@ -913,13 +910,13 @@ papi_init(pmdaInterface *dp)
     dp->comm.flags |= PDU_FLAG_AUTH;
 
     if ((sts = papi_internal_init(dp)) < 0) {
-	__pmNotifyErr(LOG_ERR, "papi_internal_init: %s\n", pmErrStr(sts));
+	pmNotifyErr(LOG_ERR, "papi_internal_init: %s\n", pmErrStr(sts));
 	dp->status = PM_ERR_GENERIC;
 	return;
     }
 
     if ((sts = papi_setup_auto_af()) < 0) {
-	__pmNotifyErr(LOG_ERR, "papi_setup_auto_af: %s\n", pmErrStr(sts));
+	pmNotifyErr(LOG_ERR, "papi_setup_auto_af: %s\n", pmErrStr(sts));
 	dp->status = PM_ERR_GENERIC;
 	return;
     }
@@ -956,15 +953,15 @@ static pmdaOptions opts = {
 int
 main(int argc, char **argv)
 {
-    int sep = __pmPathSeparator();
+    int sep = pmPathSeparator();
     pmdaInterface dispatch;
 
     isDSO = 0;
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     pmsprintf(helppath, sizeof(helppath), "%s%c" "papi" "%c" "help",
 	     pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
-    pmdaDaemon(&dispatch, PMDA_INTERFACE_6, pmProgname, PAPI, "papi.log", helppath);	
+    pmdaDaemon(&dispatch, PMDA_INTERFACE_6, pmGetProgname(), PAPI, "papi.log", helppath);	
     pmdaGetOptions(argc, argv, &opts, &dispatch);
     if (opts.errors) {
 	pmdaUsageMessage(&opts);

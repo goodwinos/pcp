@@ -17,14 +17,15 @@
 
 #include <assert.h>
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 
 /*
  * raw read of next log record - largely stolen from __pmLogRead in libpcp
  */
 int
-_pmLogGet(__pmLogCtl *lcp, int vol, __pmPDU **pb)
+_pmLogGet(__pmArchCtl *acp, int vol, __pmPDU **pb)
 {
+    __pmLogCtl	*lcp = acp->ac_log;
     int		head;
     int		tail;
     int		sts;
@@ -36,7 +37,7 @@ _pmLogGet(__pmLogCtl *lcp, int vol, __pmPDU **pb)
     if (vol == PM_LOG_VOL_META)
 	f = lcp->l_mdfp;
     else
-	f = lcp->l_mfp;
+	f = acp->ac_mfp;
 
     offset = __pmFtell(f);
     assert(offset >= 0);
@@ -53,9 +54,9 @@ again:
 		fprintf(stderr, "AFTER end\n");
 	    __pmFseek(f, offset, SEEK_SET);
 	    if (vol != PM_LOG_VOL_META) {
-		if (lcp->l_curvol < lcp->l_maxvol) {
-		    if (__pmLogChangeVol(lcp, lcp->l_curvol+1) == 0) {
-			f = lcp->l_mfp;
+		if (acp->ac_curvol < lcp->l_maxvol) {
+		    if (__pmLogChangeVol(acp, acp->ac_curvol+1) == 0) {
+			f = acp->ac_mfp;
 			goto again;
 		    }
 		}
@@ -109,10 +110,10 @@ again:
 	    fprintf(stderr, "@");
 	    if (sts >= 0) {
 		struct timeval	stamp;
-		__pmTimeval		*tvp = (__pmTimeval *)&lpb[vol == PM_LOG_VOL_META ? 2 : 1];
+		pmTimeval		*tvp = (pmTimeval *)&lpb[vol == PM_LOG_VOL_META ? 2 : 1];
 		stamp.tv_sec = ntohl(tvp->tv_sec);
 		stamp.tv_usec = ntohl(tvp->tv_usec);
-		__pmPrintStamp(stderr, &stamp);
+		pmPrintStamp(stderr, &stamp);
 	    }
 	    else
 		fprintf(stderr, "unknown time");
@@ -123,13 +124,13 @@ again:
     if (pmDebugOptions.pdu) {
 	int		i, j;
 	struct timeval	stamp;
-	__pmTimeval	*tvp = (__pmTimeval *)&lpb[vol == PM_LOG_VOL_META ? 2 : 1];
+	pmTimeval	*tvp = (pmTimeval *)&lpb[vol == PM_LOG_VOL_META ? 2 : 1];
 	fprintf(stderr, "_pmLogGet");
 	if (vol != PM_LOG_VOL_META || ntohl(lpb[1]) == TYPE_INDOM) {
 	    fprintf(stderr, " timestamp=");
 	    stamp.tv_sec = ntohl(tvp->tv_sec);
 	    stamp.tv_usec = ntohl(tvp->tv_usec);
-	    __pmPrintStamp(stderr, &stamp);
+	    pmPrintStamp(stderr, &stamp);
 	}
 	fprintf(stderr, " " PRINTF_P_PFX "%p ... " PRINTF_P_PFX "%p", lpb, &lpb[ntohl(head)/sizeof(__pmPDU) - 1]);
 	fputc('\n', stderr);

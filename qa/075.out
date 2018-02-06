@@ -46,6 +46,7 @@ General options:
   -?, --help            show this usage message and exit
 
 Value options:
+  -F, --fetch           perform pmFetch after pmStore to confirm value
   -f, --force           store the value even if there is no current value set
   -i INSTS, --insts=INSTS
                         restrict store to comma-separated list of instances
@@ -67,15 +68,13 @@ General options:
   -?, --help            show this usage message and exit
 
 Value options:
+  -F, --fetch           perform pmFetch after pmStore to confirm value
   -f, --force           store the value even if there is no current value set
   -i INSTS, --insts=INSTS
                         restrict store to comma-separated list of instances
 
 $ pmstore -i bin-300,bin-400,bin-500 -h REMOTEHOST sample.bin 500
-sample.bin inst [300 or "bin-300"] old value=300 new value=500
-sample.bin inst [400 or "bin-400"] old value=400 new value=500
-sample.bin inst [500 or "bin-500"] old value=500 new value=500
-sample.bin: pmStore: No permission to perform requested operation
+sample.bin: new value="500" pmStore: No permission to perform requested operation
 
 $ pmval -s 2 -i bin-300,bin-400,bin-500 sample.bin
 

@@ -22,6 +22,7 @@
 #include "main.h"
 #include "openviewdialog.h"
 #include "saveviewdialog.h"
+#include <pcp/libpcp.h>
 
 /*
  * View file parsing routines and global variables follow.  These are
@@ -103,11 +104,11 @@ static void err(int severity, int do_where, QString msg)
     }
     else {
 	if (severity == E_CRIT)
-	    QMessageBox::critical(pmchart, pmProgname,  msg);
+	    QMessageBox::critical(pmchart, pmGetProgname(),  msg);
 	else if (severity == E_WARN)
-	    QMessageBox::warning(pmchart, pmProgname,  msg);
+	    QMessageBox::warning(pmchart, pmGetProgname(),  msg);
 	else
-	    QMessageBox::information(pmchart, pmProgname,  msg);
+	    QMessageBox::information(pmchart, pmGetProgname(),  msg);
     }
     _errors++;
 }
@@ -262,7 +263,7 @@ bool OpenViewDialog::openView(const char *path)
     int			version;
     QString		errmsg;
     QRegExp		regex;
-    int			sep = __pmPathSeparator();
+    int			sep = pmPathSeparator();
     int			sts = 0;
 
     if (strcmp(path, "-") == 0) {
@@ -312,13 +313,16 @@ bool OpenViewDialog::openView(const char *path)
 		}
 	    }
 	}
-	// check for executable and popen() as needed
+	// check for executable and __pmProcessPipe() as needed
 	//
 	if (fgetc(f) == '#' && fgetc(f) == '!') {
 	    char	cmd[MAXPATHLEN];
+	    __pmExecCtl_t	*argp = NULL;
 	    pmsprintf(cmd, sizeof(cmd), "%s", _fname);
 	    fclose(f);
-	    if ((f = popen(cmd, "r")) == NULL)
+	    if (__pmProcessUnpickArgs(&argp, cmd) < 0)
+		goto nopipe;
+	    if (__pmProcessPipe(&argp, "r", PM_EXEC_TOSS_NONE, &f) < 0)
 		goto nopipe;
 	    is_popen = 1;
 	}
@@ -1128,7 +1132,7 @@ abandon:
 
     if (f != stdin) {
 	if (is_popen)
-	    pclose(f);
+	    __pmProcessPipeClose(f);
 	else
 	    fclose(f);
     }

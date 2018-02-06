@@ -15,7 +15,6 @@
 
 #include <sys/stat.h>
 #include "pmapi.h"
-#include "impl.h"
 
 #ifdef HAVE_VALUES_H
 #include <values.h>
@@ -32,7 +31,7 @@
 #include "./lex.h"
 #include "./gram.h"
 
-static __pmTimeval	now;
+static pmTimeval	now;
 
 int			infd;
 int			outfd;
@@ -220,7 +219,7 @@ open_unix_socket(char *fname)
 void
 open_unix_socket(char *fname)
 {
-    __pmNotifyErr(LOG_CRIT, "UNIX domain sockets unsupported\n");
+    pmNotifyErr(LOG_CRIT, "UNIX domain sockets unsupported\n");
 }
 #endif
 
@@ -314,9 +313,9 @@ dopmda_desc(pmID pmid, pmDesc *desc, int print)
 	if ((pinpdu = sts = __pmGetPDU(infd, ANY_SIZE, TIMEOUT_NEVER, &pb)) == PDU_DESC) {
 	    if ((sts = __pmDecodeDesc(pb, desc)) >= 0) {
 		if (print)
-		    __pmPrintDesc(stdout, desc);
+		    pmPrintDesc(stdout, desc);
 		    else if (pmDebugOptions.pdu)
-			__pmPrintDesc(stdout, desc);
+			pmPrintDesc(stdout, desc);
             }
 	    else
 		printf("Error: __pmDecodeDesc() failed: %s\n", pmErrStr(sts));
@@ -349,7 +348,7 @@ dopmda(int pdu)
     pmDesc		*desc_list = NULL;
     pmResult		*result = NULL;
     pmLabelSet		*labelset = NULL;
-    __pmInResult	*inresult;
+    pmInResult	*inresult;
     __pmPDU		*pb;
     int			i;
     int			j;
@@ -368,7 +367,7 @@ dopmda(int pdu)
     int			pinpdu;
 
     if (timer != 0)
-	__pmtimevalNow(&start);
+	pmtimevalNow(&start);
   
     switch (pdu) {
 
@@ -621,9 +620,13 @@ dopmda(int pdu)
 		printf("Cluster: %s\n", strcluster(param.pmid));
 		ident = param.pmid;
 	    }
-	    else if (param.number & (PM_LABEL_ITEM|PM_LABEL_INSTANCES)) {
+	    else if (param.number & PM_LABEL_ITEM) {
 		printf("PMID: %s\n", pmIDStr(param.pmid));
 		ident = param.pmid;
+	    }
+	    else if (param.number & PM_LABEL_INSTANCES) {
+		printf("Instances of pmInDom: %s\n", pmInDomStr(param.indom));
+		ident = param.indom;
 	    }
 	    else /* param.number & (PM_LABEL_DOMAIN|PM_LABEL_CONTEXT) */
 		ident = PM_IN_NULL;
@@ -815,8 +818,8 @@ dopmda(int pdu)
     }
 
     if (sts >= 0 && timer != 0) {
-	__pmtimevalNow(&end);
-	printf("Timer: %f seconds\n", __pmtimevalSub(&end, &start));
+	pmtimevalNow(&end);
+	printf("Timer: %f seconds\n", pmtimevalSub(&end, &start));
     }
 }
 
@@ -882,12 +885,14 @@ fillResult(pmResult *result, int type)
 
 	if (vsp->numval == 0) {
 	    printf("Error: %s not available!\n", pmIDStr(param.pmid));
-	    return PM_ERR_VALUE;
+	    sts = PM_ERR_VALUE;
+	    goto done;
 	}
 
 	if (vsp->numval < 0) {
 	    printf("Error: %s: %s\n", pmIDStr(param.pmid), pmErrStr(vsp->numval));
-	    return vsp->numval;
+	    sts = vsp->numval;
+	    goto done;
 	}
 
 	for (i = 0; i < vsp->numval; i++) {
@@ -903,6 +908,10 @@ fillResult(pmResult *result, int type)
 	    putchar('\n');
 	}
     }
+
+done:
+    if (type == PM_TYPE_STRING && atom.cp != NULL)
+	free(atom.cp);
 
     return sts;
 }

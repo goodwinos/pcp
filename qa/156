@@ -13,16 +13,11 @@ echo "QA output created by $seq"
 . ./common.filter
 . ./common.check
 
-_service pcp restart | _filter_pcp_start
-_wait_for_pmcd
-_wait_for_pmlogger
-
 _filter()
 {
     _filter_pmda_install | \
     sed -e 's/ 13[0-9][0-9] values/ 1300+ values/' \
 	-e 's/ 1[0-9] warnings/ 10+ warnings/' \
-	-e 's/ 3 warnings/ 10+ warnings/' \
 	-e 's/ 1[0-9][0-9] metrics/ 100+ metrics/' \
 	-e "s;$tmp;TMP;" \
 	-e "s/$port1/PORT1/" \
@@ -41,7 +36,11 @@ _check_pmda_gone()
 {
     sleep 2
     pminfo -v $1 && echo "Error: pminfo -v found some \"$1\" metrics"
-    $PCP_PS_PROG $PCP_PS_ALL_FLAGS | grep "[p]mda$1" >$tmp.tmp
+    # PMDA process may be a zombie because pmcd has not yet harvested
+    # it ... in this case, name will appear as [pmda$1] or (pmda$1)
+    # so skip these ones
+    #
+    $PCP_PS_PROG $PCP_PS_ALL_FLAGS | grep "[^([][p]mda$1[^])]" >$tmp.tmp
     if [ -s $tmp.tmp ]
     then
 	echo "Error: some \"$1\" PMDAs still present"
@@ -65,12 +64,11 @@ fi
 cd $home/$iam
 unset ROOT MAKEFLAGS
 
-if [ ! -f dynamic.indom ]
-then
-    echo "1 one" >$tmp.indom
-    echo "2 two" >>$tmp.indom
-    $sudo cp $tmp.indom dynamic.indom
-fi
+# force dynamic.indom to be what we expect ...
+#
+echo "1 one" >$tmp.indom
+echo "2 two" >>$tmp.indom
+$sudo cp $tmp.indom dynamic.indom
 
 # make sure sample agent is running again at the end, so other QA tests
 # continue to work
@@ -87,12 +85,10 @@ _check_pmda_gone $iam
 
 echo
 echo "=== pipe agent ==="
-echo 'both
-pipe' | $sudo ./Install -e >$tmp.out 2>&1
+echo pipe | $sudo ./Install -e >$tmp.out 2>&1
 _filter <$tmp.out
 pminfo -v sample || echo "... failed!"
-echo 'both
-pipe' | $sudo ./Install -e >$tmp.out 2>&1
+echo pipe | $sudo ./Install -e >$tmp.out 2>&1
 _filter <$tmp.out
 pminfo -v sample || echo "... failed!"
 
@@ -108,8 +104,7 @@ then
     exit 1
 fi
 
-echo 'both
-socket
+echo 'socket
 Internet
 '$port1 | $sudo ./Install -e >$tmp.out 2>&1
 _filter <$tmp.out
@@ -118,8 +113,7 @@ pminfo -v sample || echo "... failed!"
 # use next port this time
 port2=`expr $port1 + 1`
 
-echo 'both
-socket
+echo 'socket
 Internet
 '$port2 | $sudo ./Install -e >$tmp.out 2>&1
 _filter <$tmp.out
@@ -127,14 +121,12 @@ pminfo -v sample || echo "... failed!"
 
 echo
 echo "=== socket Unix agent ==="
-echo 'both
-socket
+echo 'socket
 Unix
 '"$tmp.fifo" | $sudo ./Install -e >$tmp.out 2>&1
 _filter <$tmp.out
 pminfo -v sample || echo "... failed!"
-echo 'both
-socket
+echo 'socket
 Unix
 '"$tmp.fifo" | $sudo ./Install -e >$tmp.out 2>&1
 _filter <$tmp.out

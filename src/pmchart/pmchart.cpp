@@ -67,7 +67,7 @@ PmChart::PmChart() : QMainWindow(NULL)
     toolbarAction->setChecked(true);
     my.toolbarHidden = !globalSettings.initialToolbar;
     my.consoleHidden = true;
-    if (!pmDebug)
+    if (!Dflag)
 	consoleAction->setVisible(false);
     consoleAction->setChecked(false);
 
@@ -413,13 +413,13 @@ void PmChart::helpManual()
 {
     bool ok;
     QString documents("file://");
-    QString separator = QString(__pmPathSeparator());
+    QString separator = QString(pmPathSeparator());
     documents.append(pmGetConfig("PCP_HTML_DIR"));
     documents.append(separator).append("index.html");
     ok = QDesktopServices::openUrl(QUrl(documents, QUrl::TolerantMode));
     if (!ok) {
 	documents.prepend("Failed to open:\n");
-	QMessageBox::warning(this, pmProgname, documents);
+	QMessageBox::warning(this, pmGetProgname(), documents);
     }
 }
 
@@ -472,7 +472,7 @@ void PmChart::optionsToolbar()
 
 void PmChart::optionsConsole()
 {
-    if (pmDebug) {
+    if (Dflag) {
 	if (my.consoleHidden)
 	    console->show();
 	else

@@ -30,7 +30,7 @@ log mandatory on 1 second {
 }
 EOFEOF
 
-pmlogextract $tmp.first $tmp.second $tmp.result
+pmlogextract -m $tmp.first $tmp.second $tmp.result
 
 echo "=== pminfo, no mark, no core ==="
 pminfo -f -a $tmp.result sample.long.ten
@@ -38,7 +38,7 @@ status=$?
 
 echo
 echo "=== pmdumplog, mark ==="
-pmdumplog -m $tmp.result | sed -e '/pmcd.pmlogger/d' | _filter_pmdumplog
+pmdumplog -m $tmp.result | sed -e '/pmcd\./d' | _filter_pmdumplog
 status=`expr $status + $?`
 
 # all done

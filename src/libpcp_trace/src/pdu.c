@@ -15,7 +15,7 @@
 
 #include <signal.h>
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "trace.h"
 #include "trace_dev.h"
 
@@ -135,7 +135,7 @@ pduread(int fd, char *buf, int len, int mode, int timeout)
 		    return status;
 		}
 		else {
-		    __pmtimevalFromReal(def_timeout, &def_wait);
+		    pmtimevalFromReal(def_timeout, &def_wait);
 		}
 	    }
 	    done_default = 1;
@@ -399,7 +399,7 @@ __pmtracegetPDU(int fd, int timeout, __pmTracePDU **result)
 	    *p++ = '~';	/* buffer end */
 
 	fprintf(stderr, "[%" FMT_PID "]__pmtracegetPDU: %s fd=%d len=%d from=%d",
-		getpid(), pdutypestr(php->type), fd, php->len, php->from);
+		(pid_t)getpid(), pdutypestr(php->type), fd, php->len, php->from);
 
 	for (j = 0; j < jend; j++) {
 	    if ((j % 8) == 0)

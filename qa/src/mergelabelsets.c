@@ -7,7 +7,6 @@
 #include <ctype.h>
 #include <assert.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 
 #define LOCATION \
     "{\"datacenter\":\"torquay\",\"environment\":\"production\"}"
@@ -119,14 +118,14 @@ main(int argc, char **argv)
     void	*test;
     pmLabelSet	*sets[5];
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     while ((c = getopt(argc, argv, "D:?")) != EOF) {
 	switch (c) {
 	case 'D':	/* debug flag */
 	    if ((sts = pmSetDebug(optarg)) < 0) {
 		fprintf(stderr, "%s: unrecognized debug flag specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;

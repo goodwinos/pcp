@@ -14,7 +14,7 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 
 static pmLongOptions longopts[] = {
     PMAPI_OPTIONS_HEADER("Options"),
@@ -46,7 +46,7 @@ main(int argc, char **argv)
 
     if (argc == opts.optind) {
 	if (gethostname(host, MAXHOSTNAMELEN) < 0) {
-	    fprintf(stderr, "%s: gethostname failure\n", pmProgname);
+	    fprintf(stderr, "%s: gethostname failure\n", pmGetProgname());
 	    exit(1);
 	}
 	name = host;

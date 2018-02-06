@@ -15,7 +15,7 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "pmda.h"
 #include "domain.h"
 
@@ -238,7 +238,7 @@ cifs_instance_refresh(void)
 }
 
 static int
-cifs_instance(pmInDom indom, int inst, char *name, __pmInResult **result, pmdaExt *pmda)
+cifs_instance(pmInDom indom, int inst, char *name, pmInResult **result, pmdaExt *pmda)
 {
     cifs_instance_refresh();
     return pmdaInstance(indom, inst, name, result, pmda);
@@ -276,9 +276,8 @@ cifs_fetch(int numpmid, pmID pmidlist[], pmResult **resp, pmdaExt *pmda)
     int i, sts, need_refresh[NUM_CLUSTERS] = { 0 };
 
     for (i = 0; i < numpmid; i++) {
-	__pmID_int *idp = (__pmID_int *)&(pmidlist[i]);
-	if (idp->cluster < NUM_CLUSTERS)
-	    need_refresh[idp->cluster]++;
+	if (pmID_cluster(pmidlist[i]) < NUM_CLUSTERS)
+	    need_refresh[pmID_cluster(pmidlist[i])]++;
     }
 
     if ((sts = cifs_fetch_refresh(pmda, need_refresh)) < 0)
@@ -293,19 +292,18 @@ cifs_fetch(int numpmid, pmID pmidlist[], pmResult **resp, pmdaExt *pmda)
 static int
 cifs_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 {
-    __pmID_int *idp = (__pmID_int *)&(mdesc->m_desc.pmid);
     struct cifs_fs *fs;
     int sts;
 
-    switch (idp->cluster) {
+    switch (pmID_cluster(mdesc->m_desc.pmid)) {
     case CLUSTER_GLOBAL_STATS:
-        return cifs_global_stats_fetch(idp->item, atom);
+        return cifs_global_stats_fetch(pmID_item(mdesc->m_desc.pmid), atom);
 
     case CLUSTER_FS_STATS:
 	sts = pmdaCacheLookup(INDOM(CIFS_FS_INDOM), inst, NULL, (void **)&fs);
 	if (sts < 0)
 	    return sts;
-	return cifs_fs_stats_fetch(idp->item, &fs->fs_stats, atom);
+	return cifs_fs_stats_fetch(pmID_item(mdesc->m_desc.pmid), &fs->fs_stats, atom);
 
     default: /* unknown cluster */
 	return PM_ERR_PMID;
@@ -363,7 +361,7 @@ cifs_init(pmdaInterface *dp)
 
     if (_isDSO) {
 	char helppath[MAXPATHLEN];
-	int sep = __pmPathSeparator();
+	int sep = pmPathSeparator();
 	pmsprintf(helppath, sizeof(helppath), "%s%c" "cifs" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
 	pmdaDSO(dp, PMDA_INTERFACE_4, "CIFS DSO", helppath);
@@ -404,16 +402,16 @@ static pmdaOptions opts = {
 int
 main(int argc, char **argv)
 {
-    int	sep = __pmPathSeparator();
+    int	sep = pmPathSeparator();
     pmdaInterface dispatch;
     char helppath[MAXPATHLEN];
 
     _isDSO = 0;
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
     pmsprintf(helppath, sizeof(helppath), "%s%c" "cifs" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
-    pmdaDaemon(&dispatch, PMDA_INTERFACE_4, pmProgname, CIFS, "cifs.log", helppath);
+    pmdaDaemon(&dispatch, PMDA_INTERFACE_4, pmGetProgname(), CIFS, "cifs.log", helppath);
 
     pmdaGetOptions(argc, argv, &opts, &dispatch);
     if (opts.errors) {

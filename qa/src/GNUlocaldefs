@@ -44,7 +44,9 @@ CFILES = disk_test.c exercise.c context_test.c chkoptfetch.c \
 	loadderived.c sum16.c badmmv.c multictx.c mmv_simple.c \
 	mmv2_genstats.c mmv2_instances.c mmv2_nostats.c mmv2_simple.c \
 	httpfetch.c json_test.c check_pmiend_fdleak.c loadconfig2.c \
-	archctl_segfault.c debug.c int2pmid.c int2indom.c exectest.c
+	archctl_segfault.c debug.c int2pmid.c int2indom.c exectest.c \
+	unpickargs.c hanoi.c chain.c progname.c countmark.c spawn.c \
+	scanmeta.c
 
 ifeq ($(shell test -f ../localconfig && echo 1), 1)
 include ../localconfig
@@ -60,15 +62,18 @@ ifeq ($(shell test $(PCP_VER) -ge 3600 && echo 1), 1)
 CFILES += multithread0.c multithread1.c multithread2.c multithread3.c \
 	multithread4.c multithread5.c multithread6.c multithread7.c \
 	multithread8.c multithread9.c multithread10.c multithread11.c \
+	multithread12.c \
 	exerlock.c
 else
 MYFILES += multithread0.c multithread1.c multithread2.c multithread3.c \
 	multithread4.c multithread5.c multithread6.c multithread7.c \
 	multithread8.c multithread9.c multithread10.c multithread11.c \
+	multithread12.c \
 	exerlock.c
 LDIRT += multithread0 multithread1 multithread2 multithread3 \
 	multithread4 multithread5 multithread6 multithread7 \
 	multithread8 multithread9 multithread10 multithread11 \
+	multithread12 \
 	exerlock
 endif
 
@@ -152,10 +157,11 @@ endif
 MYFILES += \
 	err_v1.dump \
 	root_irix root_pmns tiny.pmns sgi.bf versiondefs \
-	pthread_barrier.h pv.c qa_test.c qa_timezone.c \
+	pthread_barrier.h libpcp.h pv.c qa_test.c qa_timezone.c \
 	permslist \
 	qa_shmctl.c qa_sem_msg_ctl.c \
-	qa_shmctl_stat.c qa_msgctl_stat.c qa_semctl_stat.c
+	qa_shmctl_stat.c qa_msgctl_stat.c qa_semctl_stat.c \
+	qa_libpcp_compat.c
 
 MYSCRIPTS = grind-tools ipcs_clear show-args fixhosts mkpermslist \
 	memcachestats.pl
@@ -576,6 +582,10 @@ multithread11:	multithread11.c
 	rm -f $@
 	$(CCF) $(CDEFS) -o $@ $@.c $(LIB_FOR_PTHREADS) $(LDLIBS)
 
+multithread12:	multithread12.c
+	rm -f $@
+	$(CCF) $(CDEFS) -o $@ $@.c $(LIB_FOR_PTHREADS) $(LDLIBS)
+
 exerlock:	exerlock.c
 	rm -f $@
 	$(CCF) $(CDEFS) -o $@ $@.c $(LIB_FOR_PTHREADS) $(LDLIBS)
@@ -635,6 +645,92 @@ endif
 
 arch_maxfd.o:	localconfig.h
 scale.o:	localconfig.h
+
+779246.o:	libpcp.h
+aggrstore.o:	libpcp.h
+badmmv.o:	libpcp.h
+chkacc1.o:	libpcp.h
+chkacc2.o:	libpcp.h
+chkacc3.o:	libpcp.h
+chkacc4.o:	libpcp.h
+chkhelp.o:	libpcp.h
+chk_memleak.o:	libpcp.h
+chknumval.o:	libpcp.h
+chkoptfetch.o:	libpcp.h
+chkputlogresult.o:	libpcp.h
+churnctx.o:	libpcp.h
+clientid.o:	libpcp.h
+clienttimeout.o:	libpcp.h
+context_test.o:	libpcp.h
+crashpmcd.o:	libpcp.h
+debug.o:	libpcp.h
+defctx.o:	libpcp.h
+descreqX2.o:	libpcp.h
+disk_test.o:	libpcp.h
+dumb_pmda.o:	libpcp.h
+endian.o:	libpcp.h
+eofarch.o:	libpcp.h
+eol.o:	libpcp.h
+exectest.o:	libpcp.h
+exercise.o:	libpcp.h
+exerlock.o:	libpcp.h
+fetchpdu.o:	libpcp.h
+github-50.o:	libpcp.h
+hashwalk.o:	libpcp.h
+hex2nbo.o:	libpcp.h
+hp-mib.o:	libpcp.h
+hrunpack.o:	libpcp.h
+interp0.o:	libpcp.h
+interp1.o:	libpcp.h
+interp2.o:	libpcp.h
+interp3.o:	libpcp.h
+interp4.o:	libpcp.h
+interp_bug2.o:	libpcp.h
+interp_bug.o:	libpcp.h
+ipc.o:	libpcp.h
+logcontrol.o:	libpcp.h
+mmv_noinit.o:	libpcp.h
+mmv_poke.o:	libpcp.h
+multictx.o:	libpcp.h
+multithread0.o:	libpcp.h
+multithread1.o:	libpcp.h
+multithread2.o:	libpcp.h
+multithread3.o:	libpcp.h
+multithread4.o:	libpcp.h
+multithread8.o:	libpcp.h
+multithread9.o:	libpcp.h
+nameall.o:	libpcp.h
+parsehostattrs.o:	libpcp.h
+parsehostspec.o:	libpcp.h
+pdubufbounds.o:	libpcp.h
+pducheck.o:	libpcp.h
+pducrash.o:	libpcp.h
+pdu-server.o:	libpcp.h
+pmcdgone.o:	libpcp.h
+pmlcmacro.o:	libpcp.h
+pmnsinarchives.o:	libpcp.h
+pmnsunload.o:	libpcp.h
+proc_test.o:	libpcp.h
+qa_libpcp_compat.o:	libpcp.h
+qa_timezone.o:	libpcp.h
+recon.o:	libpcp.h
+rtimetest.o:	libpcp.h
+slow_af.o:	libpcp.h
+sortinst.o:	libpcp.h
+store.o:	libpcp.h
+storepmcd.o:	libpcp.h
+stripmark.o:	libpcp.h
+torture_api.o:	libpcp.h
+torture_indom.o:	libpcp.h
+torture_logmeta.o:	libpcp.h
+torture_pmns.o:	libpcp.h
+tztest.o:	libpcp.h
+unpack.o:	libpcp.h
+unpickargs.o:	libpcp.h
+xarch.o:	libpcp.h
+xlog.o:	libpcp.h
+xmktime.o:	libpcp.h
+xxx.o:	libpcp.h
 
 bozo:
 	@echo TARGETS=$(TARGETS)

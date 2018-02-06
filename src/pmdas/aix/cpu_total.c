@@ -38,11 +38,10 @@ static __uint64_t
 cpu_total_derived(pmdaMetric *mdesc, int inst)
 {
     pmID        pmid;
-    __pmID_int  *ip = (__pmID_int *)&pmid;
     __uint64_t  val;
                                                                                 
     pmid = mdesc->m_desc.pmid;
-    ip->domain = 0;
+    pmID_build(0, pmID_cluster(pmid), pmID_item(pmid));
 
     switch (pmid) {
 

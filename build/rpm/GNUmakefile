@@ -91,12 +91,14 @@ pcp.spec: pcp.spec.in
 	    -e's|@enable_secure@|$(ENABLE_SECURE)|g' \
 	    -e's|@enable_probes@|$(ENABLE_PROBES)|g' \
 	    -e's|@enable_avahi@|$(ENABLE_AVAHI)|g' \
+	    -e's|@have_boost@|$(HAVE_BOOST)|g' \
 	    -e's|@enable_qt@|$(ENABLE_QT)|g' \
 	    -e's|@enable_python2@|$(ENABLE_PYTHON2)|g' \
 	    -e's|@enable_python3@|$(ENABLE_PYTHON3)|g' \
 	    -e's|@enable_manager@|$(ENABLE_MANAGER)|g' \
 	    -e's|@enable_webapi@|$(ENABLE_WEBAPI)|g' \
 	    -e's|@enable_selinux@|$(ENABLE_SELINUX)|g' \
+	    -e's|@enable_lzma@|$(ENABLE_LZMA)|g' \
 	    -e's|@have_libmicrohttpd@|$(have_libmicrohttpd)|g' \
 	    -e's|@have_cairo@|$(have_cairo)|g' \
 	    -e's|@have_python@|$(HAVE_PYTHON)|g' \

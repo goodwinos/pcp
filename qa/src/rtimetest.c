@@ -13,7 +13,7 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include "libpcp.h"
 
 void
 set_tm(struct timeval *ntv, struct tm *ntm, struct tm *btm, int mon,
@@ -67,7 +67,7 @@ main(int argc, char *argv[])
     int c;
     int sts;
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     while ((c = getopt(argc, argv, "D:?")) != EOF) {
 	switch (c) {
@@ -76,7 +76,7 @@ main(int argc, char *argv[])
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
@@ -89,7 +89,7 @@ main(int argc, char *argv[])
     }
 
     if (errflag) {
-	fprintf(stderr, "Usage: %s [-D debug] [strftime_fmt ...]\n", pmProgname);
+	fprintf(stderr, "Usage: %s [-D debug] [strftime_fmt ...]\n", pmGetProgname());
 	exit(1);
     }
 
@@ -114,7 +114,8 @@ main(int argc, char *argv[])
     set_tm(NULL, &tmtmp, &tmstart, 0, 19, 11, 45);
     tmtmp_str = asctime(&tmtmp);
     char *tmtmp_c = strchr(tmtmp_str, '\n');
-    *tmtmp_c = ' ';
+    if (tmtmp_c)
+	*tmtmp_c = ' ';
     if (__pmParseTime(tmtmp_str, &tvstart, &tvend, &tvrslt, &errmsg) != 0) {
 	printf ("%s: %s\n", errmsg, tmtmp_str);
     }

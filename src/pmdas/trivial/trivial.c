@@ -16,7 +16,6 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include <pcp/pmda.h>
 #include "domain.h"
 
@@ -68,9 +67,7 @@ static pmdaOptions opts = {
 static int
 trivial_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 {
-    __pmID_int		*idp = (__pmID_int *)&(mdesc->m_desc.pmid);
-
-    if (idp->cluster != 0 || idp->item != 0)
+    if (pmID_cluster(mdesc->m_desc.pmid) != 0 || pmID_item(mdesc->m_desc.pmid) != 0)
 	return PM_ERR_PMID;
     else if (inst != PM_IN_NULL)
 	return PM_ERR_INST;
@@ -86,12 +83,12 @@ void
 trivial_init(pmdaInterface *dp)
 {
     if (isDSO) {
-	int sep = __pmPathSeparator();
+	int sep = pmPathSeparator();
 	pmsprintf(mypath, sizeof(mypath), "%s%c" "trivial" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
 	pmdaDSO(dp, PMDA_INTERFACE_2, "trivial DSO", mypath);
     } else {
-	__pmSetProcessIdentity(username);
+	pmSetProcessIdentity(username);
     }
 
     if (dp->status != 0)
@@ -109,16 +106,16 @@ trivial_init(pmdaInterface *dp)
 int
 main(int argc, char **argv)
 {
-    int			sep = __pmPathSeparator();
+    int			sep = pmPathSeparator();
     pmdaInterface	desc;
 
     isDSO = 0;
-    __pmSetProgname(argv[0]);
-    __pmGetUsername(&username);
+    pmSetProgname(argv[0]);
+    pmGetUsername(&username);
 
     pmsprintf(mypath, sizeof(mypath), "%s%c" "trivial" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
-    pmdaDaemon(&desc, PMDA_INTERFACE_2, pmProgname, TRIVIAL,
+    pmdaDaemon(&desc, PMDA_INTERFACE_2, pmGetProgname(), TRIVIAL,
 		"trivial.log", mypath);
 
     pmdaGetOptions(argc, argv, &opts, &desc);

@@ -20,7 +20,6 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 #include "pmapi.h"
-#include "impl.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -180,7 +179,7 @@ report(char *msg)
 {
     LexIn *x = lin;
 
-    fprintf(stderr, "%s: %s - ", pmProgname, msg);
+    fprintf(stderr, "%s: %s - ", pmGetProgname(), msg);
     if (x) {
         fprintf(stderr, "near line %d of ", x->lno);
         if (x->stream) {

@@ -43,9 +43,6 @@
 #include "qed_timecontrol.h"
 #include "qed_recorddialog.h"
 
-#include <iostream>
-using namespace std;
-
 QString		theConfigName;
 QString		theAltConfigName;
 FILE		*theConfigFile;
@@ -53,6 +50,8 @@ FILE		*theAltConfig;
 float		theGlobalScale = 1.2;
 char		**frontend_argv;
 int		frontend_argc;
+
+extern int	somedebug;
 
 PmView::PmView() : QMainWindow(NULL)
 {
@@ -82,7 +81,7 @@ PmView::PmView() : QMainWindow(NULL)
     my.toolbarHidden = !globalSettings.initialToolbar;
     toolbarAction->setChecked(globalSettings.initialToolbar);
     my.consoleHidden = true;
-    if (!pmDebug)
+    if (somedebug)
 	consoleAction->setVisible(false);
     consoleAction->setChecked(false);
 
@@ -140,7 +139,7 @@ bool PmView::view(bool showAxis,
 
     viewer()->setSceneGraph(my.root);
     viewer()->setAutoRedraw(true);
-    viewer()->setTitle(pmProgname);
+    viewer()->setTitle(pmGetProgname());
     if (showAxis)
 	viewer()->setFeedbackVisibility(true);
 
@@ -157,19 +156,15 @@ bool PmView::view(bool showAxis,
 	passes = atoi(sval);
 #endif
 
-#ifdef PCP_DEBUG
-    if (pmDebug & DBG_TRACE_APPL1)
+    if (pmDebugOptions.appl1)
 	cerr << "PmView::view: antialiasing set to smooth = "
 	     << (smooth == TRUE ? "true" : "false")
 	     << ", passes = " << passes << endl;
-#endif
 
     if (passes > 1)
         viewer()->setAntialiasing(smooth, atoi(sval));
-#ifdef PCP_DEBUG
-    if (pmDebug & DBG_TRACE_APPL1)
+    if (pmDebugOptions.appl1)
 	cerr << "PmView::view: displaying window" << endl;
-#endif
 
     viewer()->viewAll();
 
@@ -207,11 +202,9 @@ void PmView::render(RenderOptions options, time_t theTime)
 		;
 	    else {
 		// TODO: set label string to my.text
-#ifdef PCP_DEBUG
-	    if (pmDebug & DBG_TRACE_APPL1)
-		cerr << "PmView::render: metricLabel text \"" <<
-			my.text() << "\"" << endl;
-#endif
+		if (pmDebugOptions.appl1)
+		    cerr << "PmView::render: metricLabel text \"" <<
+			my.text << "\"" << endl;
 	    }
 	}
     }
@@ -299,7 +292,7 @@ void PmView::timeZone(bool live, QmcTime::Packet *packet, char *tzdata)
 
 void PmView::filePrint()
 {
-    QMessageBox::information(this, pmProgname, "Print, print, print... whirrr");
+    QMessageBox::information(this, pmGetProgname(), "Print, print, print... whirrr");
 }
 
 void PmView::fileQuit()
@@ -311,13 +304,13 @@ void PmView::helpManual()
 {
     bool ok;
     QString documents("file://");
-    QString separator = QString(__pmPathSeparator());
+    QString separator = QString(pmPathSeparator());
     documents.append(pmGetConfig("PCP_HTML_DIR"));
     documents.append(separator).append("index.html");
     ok = QDesktopServices::openUrl(QUrl(documents, QUrl::TolerantMode));
     if (!ok) {
 	documents.prepend("Failed to open:\n");
-	QMessageBox::warning(this, pmProgname, documents);
+	QMessageBox::warning(this, pmGetProgname(), documents);
     }
 }
 
@@ -325,13 +318,13 @@ void PmView::helpTutorial()
 {
     bool ok;
     QString documents("file://");
-    QString separator = QString(__pmPathSeparator());
+    QString separator = QString(pmPathSeparator());
     documents.append(pmGetConfig("PCP_HTML_DIR"));
     documents.append(separator).append("tutorial.html");
     ok = QDesktopServices::openUrl(QUrl(documents, QUrl::TolerantMode));
     if (!ok) {
 	documents.prepend("Failed to open:\n");
-	QMessageBox::warning(this, pmProgname, documents);
+	QMessageBox::warning(this, pmGetProgname(), documents);
     }
 }
 
@@ -644,7 +637,7 @@ bool View::stopRecording()
     if (error) {
 	cleanupRecording();
 	pmview->setRecordState(false);
-	QMessageBox::warning(NULL, pmProgname, errmsg,
+	QMessageBox::warning(NULL, pmGetProgname(), errmsg,
 		QMessageBox::Ok|QMessageBox::Default|QMessageBox::Escape,
 		QMessageBox::NoButton, QMessageBox::NoButton);
     }
@@ -675,7 +668,7 @@ bool View::queryRecording(void)
 
     if (error) {
 	pmview->setRecordState(false);
-	QMessageBox::warning(NULL, pmProgname, errmsg,
+	QMessageBox::warning(NULL, pmGetProgname(), errmsg,
 		QMessageBox::Ok|QMessageBox::Default|QMessageBox::Escape,
 		QMessageBox::NoButton, QMessageBox::NoButton);
     }
@@ -689,7 +682,7 @@ bool View::detachLoggers(void)
 
     if (error) {
 	pmview->setRecordState(false);
-	QMessageBox::warning(NULL, pmProgname, errmsg,
+	QMessageBox::warning(NULL, pmGetProgname(), errmsg,
 		QMessageBox::Ok|QMessageBox::Default|QMessageBox::Escape,
 		QMessageBox::NoButton, QMessageBox::NoButton);
     }

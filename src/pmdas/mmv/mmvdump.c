@@ -17,9 +17,10 @@
 #include <pcp/pmapi.h>
 #include <pcp/mmv_stats.h>
 #include <pcp/mmv_dev.h>
-#include <pcp/impl.h>
+#include <pcp/libpcp.h>
 #include <inttypes.h>
 #include <sys/stat.h>
+#include <strings.h>
 
 int
 dump_indoms(void *addr, size_t size, int idx, long base, __uint64_t offset, __int32_t count)
@@ -384,7 +385,7 @@ dump_value(void *addr, size_t size, mmv_disk_value_t *vals, int i, int toc, int 
 	printf(" = \"%s\"", string->payload);
 	break;
     case MMV_TYPE_ELAPSED:
-	__pmtimevalNow(&tv);
+	pmtimevalNow(&tv);
 	t = vals[i].value.ll;
 	if (vals[i].extra < 0)
 	    t += ((tv.tv_sec*1e6 + tv.tv_usec) + vals[i].extra);
@@ -678,7 +679,7 @@ main(int argc, char **argv)
     else
 	pmsprintf(file, MAXPATHLEN, "%s%cmmv%ctest",
 		pmGetConfig("PCP_TMP_DIR"),
-		__pmPathSeparator(), __pmPathSeparator());
+		pmPathSeparator(), pmPathSeparator());
     file[MAXPATHLEN-1] = '\0';
 
     if ((fd = open(file, O_RDONLY)) < 0)

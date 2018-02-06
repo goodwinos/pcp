@@ -13,6 +13,8 @@
 # GNU General Public License for more details.
 #
 
+# Last updated for: haproxy 1.8.0
+
 # pylint: disable=superfluous-parens, bad-whitespace
 # pylint: disable=invalid-name, line-too-long, no-self-use
 # pylint: disable=too-many-instance-attributes, too-many-locals
@@ -147,7 +149,7 @@ class HAProxyPMDA(PMDA):
         ]
 
         self.stat_indom = self.indom(0)
-        self.stat_insts = pmdaIndom(self.stat_indom, [])
+        self.stat_insts = pmdaIndom(self.stat_indom, {})
         self.add_indom(self.stat_insts)
 
         self.stat_cluster = 1

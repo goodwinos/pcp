@@ -21,6 +21,7 @@
 
 char		*configfile;		/* current config filename, must be *alloc()d */
 __pmLogCtl	logctl;
+__pmArchCtl	archctl;
 int		exit_samples = -1;       /* number of samples 'til exit */
 __int64_t	exit_bytes = -1;         /* number of bytes 'til exit */
 __int64_t	vol_bytes;		 /* total in earlier volumes */
@@ -47,7 +48,7 @@ int		rflag;			/* report sizes */
 int		Cflag;			/* parse config and exit */
 struct timeval	epoch;
 struct timeval	delta = { 60, 0 };	/* default logging interval */
-int		exit_code;		/* code to pass to exit (zero/signum) */
+int		sig_code;		/* caught signal */
 int		qa_case;		/* QA error injection state */
 char		*note;			/* note for port map file */
 
@@ -66,6 +67,19 @@ static int	sep;
 void
 run_done(int sts, char *msg)
 {
+    int	lsts;
+
+    if (pmDebugOptions.log && pmDebugOptions.desperate) {
+	fprintf(stderr, "run_done(%d, %s) last_log_offset=%d last_stamp=",
+		sts, msg, last_log_offset);
+	pmPrintStamp(stderr, &last_stamp);
+	fputc('\n', stderr);
+    }
+
+    if ((lsts = do_epilogue()) < 0)
+	fprintf(stderr, "Warning: problem writing archive epilogue: %s\n",
+	    pmErrStr(lsts));
+
     if (msg != NULL)
     	fprintf(stderr, "pmlogger: %s, exiting\n", msg);
     else
@@ -77,11 +91,11 @@ run_done(int sts, char *msg)
      * _before_ the last log record
      */
     if (last_stamp.tv_sec != 0) {
-	__pmTimeval	tmp;
+	pmTimeval	tmp;
 	tmp.tv_sec = (__int32_t)last_stamp.tv_sec;
 	tmp.tv_usec = (__int32_t)last_stamp.tv_usec;
-	__pmFseek(logctl.l_mfp, last_log_offset, SEEK_SET);
-	__pmLogPutIndex(&logctl, &tmp);
+	__pmFseek(archctl.ac_mfp, last_log_offset, SEEK_SET);
+	__pmLogPutIndex(&archctl, &tmp);
     }
 
     exit(sts);
@@ -233,7 +247,7 @@ ParseSize(char *size_arg, int *sample_counter, __int64_t *byte_size,
 static void
 tsub(struct timeval *a, struct timeval *b)
 {
-    __pmtimevalDec(a, b);
+    pmtimevalDec(a, b);
     if (a->tv_sec < 0) {
         /* clip negative values at zero */
         a->tv_sec = 0;
@@ -266,6 +280,7 @@ static int
 add_msg(char **bp, int nchar, char *p)
 {
     int		add_len;
+    char	*tmp_bp;
 
     if (nchar < 0 || p == NULL)
 	return nchar;
@@ -273,8 +288,12 @@ add_msg(char **bp, int nchar, char *p)
     add_len = (int)strlen(p);
     if (nchar == 0)
 	add_len++;
-    if ((*bp = realloc(*bp, nchar+add_len)) == NULL)
+    if ((tmp_bp = (char *)realloc(*bp, nchar+add_len)) == NULL) {
+	free(*bp);
+	*bp = NULL;
 	return -1;
+    }
+    *bp = tmp_bp;
     if (nchar == 0)
 	strcpy(*bp, p);
     else
@@ -309,6 +328,8 @@ do_dialog(char cmd)
 #if HAVE_MKSTEMP
     char	tmp[MAXPATHLEN];
 #endif
+    int			sts;
+    __pmExecCtl_t	*argp = NULL;
 
     time(&now);
     now -= rsc_start;
@@ -316,7 +337,7 @@ do_dialog(char cmd)
 	/* hack is close enough! */
 	now = 1;
 
-    archsize = vol_bytes + __pmFtell(logctl.l_mfp);
+    archsize = vol_bytes + __pmFtell(archctl.ac_mfp);
 
     nchar = add_msg(&p, 0, "");
     p[0] = '\0';
@@ -374,7 +395,7 @@ do_dialog(char cmd)
     if (cmd != 'Q') {
 	nchar = add_msg(&p, nchar, "\n\nAt any time this pmlogger process may be terminated with the");
 	nchar = add_msg(&p, nchar, " following command:\n");
-	pmsprintf(lbuf, sizeof(lbuf), "  $ pmsignal -s TERM %" FMT_PID "\n", getpid());
+	pmsprintf(lbuf, sizeof(lbuf), "  $ pmsignal -s TERM %" FMT_PID "\n", (pid_t)getpid());
 	nchar = add_msg(&p, nchar, lbuf);
     }
 
@@ -386,7 +407,7 @@ do_dialog(char cmd)
 	int fd = -1;
 
 #if HAVE_MKSTEMP
-	pmsprintf(tmp, sizeof(tmp), "%s%cmsgXXXXXX", pmGetConfig("PCP_TMPFILE_DIR"), __pmPathSeparator());
+	pmsprintf(tmp, sizeof(tmp), "%s%cmsgXXXXXX", pmGetConfig("PCP_TMPFILE_DIR"), pmPathSeparator());
 	msg = tmp;
 	fd = mkstemp(tmp);
 #else
@@ -415,7 +436,14 @@ do_dialog(char cmd)
 			  "-b Close 2>/dev/null",
 		    xconfirm, dialog_title, rsc_prog, msg);
 
-	if ((msgf = popen(lbuf, "r")) == NULL) {
+
+	if ((sts = __pmProcessUnpickArgs(&argp, lbuf)) < 0) {
+	    fprintf(stderr, "\nError: __pmProcessUnpickArgs failed for recording session dialog\n");
+	    fprintf(stderr, "Command: \"%s\"\n", lbuf);
+	    fprintf(stderr, "Error: %s\n", pmErrStr(sts));
+	    goto failed;
+	}
+	if ((sts = __pmProcessPipe(&argp, "r", PM_EXEC_TOSS_NONE, &msgf)) < 0) {
 	    fprintf(stderr, "\nError: failed to start command for recording session dialog\n");
 	    fprintf(stderr, "Command: \"%s\"\n", lbuf);
 	    goto failed;
@@ -437,7 +465,7 @@ failed:
 	}
 
 	if (msgf != NULL)
-	    pclose(msgf);
+	    __pmProcessPipeClose(msgf);
 	unlink(msg);
     }
     else {
@@ -503,11 +531,13 @@ do_pmcpp(char *configfile)
     char	cmd[3*MAXPATHLEN+80];
     char	*bin_dir = pmGetConfig("PCP_BINADM_DIR");
     char	*lib_dir = pmGetConfig("PCP_VAR_DIR");
+    int		sts;
+    __pmExecCtl_t	*argp = NULL;
 
     if (configfile != NULL) {
 	if ((f = fopen(configfile, "r")) == NULL) {
 	    fprintf(stderr, "%s: Cannot open config file \"%s\": %s\n",
-		pmProgname, configfile, osstrerror());
+		pmGetProgname(), configfile, osstrerror());
 	    exit(1);
 	}
 	fclose(f);
@@ -515,12 +545,12 @@ do_pmcpp(char *configfile)
 
     if (bin_dir == NULL) {
 	fprintf(stderr, "%s: pmGetConfig: cannot get $PCP_BINADM_DIR value\n",
-		pmProgname);
+		pmGetProgname());
 	exit(1);
     }
     if (lib_dir == NULL) {
 	fprintf(stderr, "%s: pmGetConfig: cannot get $PCP_VAR_DIR value\n",
-		pmProgname);
+		pmGetProgname());
 	exit(1);
     }
 
@@ -528,9 +558,15 @@ do_pmcpp(char *configfile)
 	bin_dir, sep, configfile == NULL ? "" : configfile, lib_dir, sep, sep);
     fprintf(stderr, "preprocessor cmd: %s\n", cmd);
 
-    if ((f = popen(cmd, "r")) == NULL) {
-	fprintf(stderr, "%s: popen(\"%s\", \"r\") failed: %s\n",
-		pmProgname, cmd, osstrerror());
+    if ((sts = __pmProcessUnpickArgs(&argp, cmd)) < 0) {
+	fprintf(stderr, "%s: __pmProcessUnpickArgs(..., \"%s\") failed: %s\n",
+		pmGetProgname(), cmd, pmErrStr(sts));
+	exit(1);
+    }
+
+    if ((sts = __pmProcessPipe(&argp, "r", PM_EXEC_TOSS_NONE, &f)) < 0) {
+	fprintf(stderr, "%s: __pmProcessPipe for \"%s\" failed: %s\n",
+		pmGetProgname(), cmd, pmErrStr(sts));
 	exit(1);
     }
 
@@ -559,9 +595,11 @@ main(int argc, char **argv)
     __pmContext  	*ctxp;		/* pmlogger has just this one context */
     int			niter;
     pid_t               target_pid = 0;
+    int			exit_code = 0;
+    char		*exit_msg;
 
-    __pmGetUsername(&username);
-    sep = __pmPathSeparator();
+    pmGetUsername(&username);
+    sep = pmPathSeparator();
     if ((endnum = getenv("PMLOGGER_INTERVAL")) != NULL)
 	delta.tv_sec = atoi(endnum);
 
@@ -582,7 +620,7 @@ main(int argc, char **argv)
 		char *sysconf = pmGetConfig("PCP_VAR_DIR");
 		int sz = strlen(sysconf)+strlen("/config/pmlogger/")+strlen(opts.optarg)+1;
 		if ((configfile = (char *)malloc(sz)) == NULL)
-		    __pmNoMem("config file name", sz, PM_FATAL_ERR);
+		    pmNoMem("config file name", sz, PM_FATAL_ERR);
 		pmsprintf(configfile, sz,
 			"%s%c" "config%c" "pmlogger%c" "%s",
 			sysconf, sep, sep, sep, opts.optarg);
@@ -602,7 +640,7 @@ main(int argc, char **argv)
 	    sts = pmSetDebug(opts.optarg);
 	    if (sts < 0) {
 		pmprintf("%s: unrecognized debug flag specification (%s)\n",
-			pmProgname, opts.optarg);
+			pmGetProgname(), opts.optarg);
 		opts.errors++;
 	    }
 	    break;
@@ -620,9 +658,9 @@ main(int argc, char **argv)
 	    break;
 
 	case 'K':
-	    if ((endnum = __pmSpecLocalPMDA(opts.optarg)) != NULL) {
-		pmprintf("%s: __pmSpecLocalPMDA failed: %s\n",
-			pmProgname, endnum);
+	    if ((endnum = pmSpecLocalPMDA(opts.optarg)) != NULL) {
+		pmprintf("%s: pmSpecLocalPMDA failed: %s\n",
+			pmGetProgname(), endnum);
 		opts.errors++;
 	    }
 	    break;
@@ -656,11 +694,11 @@ main(int argc, char **argv)
 	    target_pid = (int)strtol(opts.optarg, &endnum, 10);
 	    if (*endnum != '\0') {
 		pmprintf("%s: invalid process identifier (%s)\n",
-			 pmProgname, opts.optarg);
+			 pmGetProgname(), opts.optarg);
 		opts.errors++;
 	    } else if (!__pmProcessExists(target_pid)) {
 		pmprintf("%s: PID error - no such process (%d)\n",
-			 pmProgname, target_pid);
+			 pmGetProgname(), target_pid);
 		opts.errors++;
 	    }
 	    break;
@@ -678,7 +716,7 @@ main(int argc, char **argv)
 	    sts = ParseSize(opts.optarg, &exit_samples, &exit_bytes, &exit_time);
 	    if (sts < 0) {
 		pmprintf("%s: illegal size argument '%s' for exit size\n",
-			pmProgname, opts.optarg);
+			pmGetProgname(), opts.optarg);
 		opts.errors++;
 	    }
 	    else if (exit_time.tv_sec > 0) {
@@ -692,7 +730,7 @@ main(int argc, char **argv)
 
 	case 't':		/* change default logging interval */
 	    if (pmParseInterval(opts.optarg, &delta, &p) < 0) {
-		pmprintf("%s: illegal -t argument\n%s", pmProgname, p);
+		pmprintf("%s: illegal -t argument\n%s", pmGetProgname(), p);
 		free(p);
 		opts.errors++;
 	    }
@@ -715,7 +753,7 @@ main(int argc, char **argv)
 			    &vol_switch_time);
 	    if (sts < 0) {
 		pmprintf("%s: illegal size argument '%s' for volume size\n", 
-			pmProgname, opts.optarg);
+			pmGetProgname(), opts.optarg);
 		opts.errors++;
 	    }
 	    else if (vol_switch_time.tv_sec > 0) {
@@ -728,7 +766,7 @@ main(int argc, char **argv)
 	    archive_version = (int)strtol(opts.optarg, &endnum, 10);
 	    if (*endnum != '\0' || archive_version != PM_LOG_VERS02) {
 		pmprintf("%s: -V requires a version number of %d\n",
-			 pmProgname, PM_LOG_VERS02); 
+			 pmGetProgname(), PM_LOG_VERS02); 
 		opts.errors++;
 	    }
 	    break;
@@ -736,7 +774,7 @@ main(int argc, char **argv)
 	case 'x':		/* recording session control fd */
 	    rsc_fd = (int)strtol(opts.optarg, &endnum, 10);
 	    if (*endnum != '\0' || rsc_fd < 0) {
-		pmprintf("%s: -x requires a non-negative numeric argument\n", pmProgname);
+		pmprintf("%s: -x requires a non-negative numeric argument\n", pmGetProgname());
 		opts.errors++;
 	    }
 	    else {
@@ -759,7 +797,7 @@ main(int argc, char **argv)
 	pmprintf(
 	    "%s: -P and -h are mutually exclusive; use -P only when running\n"
 	    "%s on the same (local) host as the PMCD to which it connects.\n",
-		pmProgname, pmProgname);
+		pmGetProgname(), pmGetProgname());
 	opts.errors++;
     }
 
@@ -767,12 +805,12 @@ main(int argc, char **argv)
 	pmprintf(
 	    "%s: -o and -h are mutually exclusive; use -o only when running\n"
 	    "%s on the same (local) host as the DSO PMDA(s) being used.\n",
-		pmProgname, pmProgname);
+		pmGetProgname(), pmGetProgname());
 	opts.errors++;
     }
 
     if (!opts.errors && opts.optind != argc - 1) {
-	pmprintf("%s: insufficient arguments\n", pmProgname);
+	pmprintf("%s: insufficient arguments\n", pmGetProgname());
 	opts.errors++;
     }
 
@@ -790,12 +828,12 @@ main(int argc, char **argv)
 
     /* if we are running as a daemon, change user early */
     if (isdaemon)
-	__pmSetProcessIdentity(username);
+	pmSetProcessIdentity(username);
 
     if (Cflag == 0) {
-	__pmOpenLog("pmlogger", logfile, stderr, &sts);
+	pmOpenLog("pmlogger", logfile, stderr, &sts);
 	if (sts != 1) {
-	    fprintf(stderr, "%s: Warning: log file (%s) creation failed\n", pmProgname, logfile);
+	    fprintf(stderr, "%s: Warning: log file (%s) creation failed\n", pmGetProgname(), logfile);
 	    /* continue on ... writing to stderr */
 	}
     }
@@ -807,13 +845,13 @@ main(int argc, char **argv)
     if (__pmAccAddOp(PM_OP_LOG_ADV) < 0 ||
 	__pmAccAddOp(PM_OP_LOG_MAND) < 0 ||
 	__pmAccAddOp(PM_OP_LOG_ENQ) < 0) {
-	fprintf(stderr, "%s: access control initialisation failed\n", pmProgname);
+	fprintf(stderr, "%s: access control initialisation failed\n", pmGetProgname());
 	exit(1);
     }
 
     if (pmnsfile != PM_NS_DEFAULT) {
 	if ((sts = pmLoadASCIINameSpace(pmnsfile, 1)) < 0) {
-	    fprintf(stderr, "%s: Cannot load namespace from \"%s\": %s\n", pmProgname, pmnsfile, pmErrStr(sts));
+	    fprintf(stderr, "%s: Cannot load namespace from \"%s\": %s\n", pmGetProgname(), pmnsfile, pmErrStr(sts));
 	    exit(1);
 	}
     }
@@ -824,13 +862,13 @@ main(int argc, char **argv)
 	pmcd_host_conn = "local:";
 
     if ((ctx = pmNewContext(host_context, pmcd_host_conn)) < 0) {
-	fprintf(stderr, "%s: Cannot connect to PMCD on host \"%s\": %s\n", pmProgname, pmcd_host_conn, pmErrStr(ctx));
+	fprintf(stderr, "%s: Cannot connect to PMCD on host \"%s\": %s\n", pmGetProgname(), pmcd_host_conn, pmErrStr(ctx));
 	exit(1);
     }
     pmcd_host = (char *)pmGetContextHostName(ctx);
     if (strlen(pmcd_host) == 0) {
 	fprintf(stderr, "%s: pmGetContextHostName(%d) failed\n",
-	    pmProgname, ctx);
+	    pmGetProgname(), ctx);
 	exit(1);
     }
 
@@ -844,7 +882,7 @@ main(int argc, char **argv)
      */
     if (host_context != PM_CONTEXT_LOCAL) {
 	if ((ctxp = __pmHandleToPtr(ctx)) == NULL) {
-	    fprintf(stderr, "%s: botch: __pmHandleToPtr(%d) returns NULL!\n", pmProgname, ctx);
+	    fprintf(stderr, "%s: botch: __pmHandleToPtr(%d) returns NULL!\n", pmGetProgname(), ctx);
 	    exit(1);
 	}
 	pmcdfd = ctxp->c_pmcd->pc_fd;
@@ -865,7 +903,7 @@ main(int argc, char **argv)
 
     if (yyparse() != 0)
 	exit(1);
-    fclose(yyin);
+    __pmProcessPipeClose(yyin);
     yyend();
 
     fprintf(stderr, "Config parsed\n");
@@ -908,7 +946,8 @@ main(int argc, char **argv)
 	pmcd_host=pmcd_host_label;
     }
 
-    if ((sts = __pmLogCreate(pmcd_host, archBase, archive_version, &logctl)) < 0) {
+    archctl.ac_log = &logctl;
+    if ((sts = __pmLogCreate(pmcd_host, archBase, archive_version, &archctl)) < 0) {
 	fprintf(stderr, "__pmLogCreate: %s\n", pmErrStr(sts));
 	exit(1);
     }
@@ -921,7 +960,7 @@ main(int argc, char **argv)
 	pmID		pmid;
 	pmResult	*resp;
 
-	__pmtimevalNow(&epoch);
+	pmtimevalNow(&epoch);
 	sts = pmUseContext(ctx);
 
 	if (sts >= 0)
@@ -964,7 +1003,7 @@ main(int argc, char **argv)
         end.tv_usec = INT_MAX;
         sts = __pmParseTime(runtime, &start, &end, &res_end, &err_msg);
         if (sts < 0) {
-	    fprintf(stderr, "%s: illegal -T argument\n%s", pmProgname, err_msg);
+	    fprintf(stderr, "%s: illegal -T argument\n%s", pmGetProgname(), err_msg);
             exit(1);
         }
 
@@ -998,8 +1037,8 @@ main(int argc, char **argv)
 	__pmFD_SET(rsc_fd, &fds);
     numfds = maxfd() + 1;
 
-    if ((sts = do_preamble()) < 0)
-	fprintf(stderr, "Warning: problem writing archive preamble: %s\n",
+    if ((sts = do_prologue()) < 0)
+	fprintf(stderr, "Warning: problem writing archive prologue: %s\n",
 	    pmErrStr(sts));
 
     sts = 0;		/* default exit status */
@@ -1010,7 +1049,7 @@ main(int argc, char **argv)
     for ( ; ; ) {
 	int		nready;
 
-	if ((pmDebugOptions.appl2) && (pmDebugOptions.desperate)) {
+	if (pmDebugOptions.appl2 && pmDebugOptions.desperate) {
 	    fprintf(stderr, "before __pmSelectRead(%d,...): run_done_alarm=%d vol_switch_alarm=%d log_alarm=%d\n", numfds, run_done_alarm, vol_switch_alarm, log_alarm);
 	}
 
@@ -1048,7 +1087,7 @@ main(int argc, char **argv)
 	__pmFD_COPY(&readyfds, &fds);
 	nready = __pmSelectRead(numfds, &readyfds, NULL);
 
-	if ((pmDebugOptions.appl2) && (pmDebugOptions.desperate)) {
+	if (pmDebugOptions.appl2 && pmDebugOptions.desperate) {
 	    fprintf(stderr, "__pmSelectRead(%d,...) done: nready=%d run_done_alarm=%d vol_switch_alarm=%d log_alarm=%d\n", numfds, nready, run_done_alarm, vol_switch_alarm, log_alarm);
 	}
 
@@ -1188,20 +1227,29 @@ main(int argc, char **argv)
 
 	__pmAFunblock();
 
-	if (target_pid && !__pmProcessExists(target_pid))
-	    exit(EXIT_SUCCESS);
-
-	if (exit_code)
+	if (target_pid && !__pmProcessExists(target_pid)) {
+	    exit_msg = "process from -p has vanished";
 	    break;
+	}
+
+	if (sig_code) {
+	    static char sig_msg[100];
+	    pmsprintf(sig_msg, sizeof(sig_msg), "Caught signal %d", sig_code);
+	    exit_msg = sig_msg;
+	    break;
+	}
     }
-    exit(exit_code);
+
+    run_done(exit_code, exit_msg);
+    /*NOTREACHED*/
+    return(0);
 }
 
 int
 newvolume(int vol_switch_type)
 {
     __pmFILE	*newfp;
-    int		nextvol = logctl.l_curvol + 1;
+    int		nextvol = archctl.ac_curvol + 1;
     time_t	now;
     static char *vol_sw_strs[] = {
        "SIGHUP", "pmlc request", "sample counter",
@@ -1209,7 +1257,7 @@ newvolume(int vol_switch_type)
     };
 
     vol_samples_counter = 0;
-    vol_bytes += __pmFtell(logctl.l_mfp);
+    vol_bytes += __pmFtell(archctl.ac_mfp);
     if (exit_bytes != -1) {
         if (vol_bytes >= exit_bytes) 
 	    run_done(0, "Byte limit reached");
@@ -1233,7 +1281,7 @@ newvolume(int vol_switch_type)
 	    /*
 	     * nothing has been logged as yet, force out the label records
 	     */
-	    __pmtimevalNow(&last_stamp);
+	    pmtimevalNow(&last_stamp);
 	    logctl.l_label.ill_start.tv_sec = (__int32_t)last_stamp.tv_sec;
 	    logctl.l_label.ill_start.tv_usec = (__int32_t)last_stamp.tv_usec;
 	    logctl.l_label.ill_vol = PM_LOG_VOL_TI;
@@ -1241,7 +1289,7 @@ newvolume(int vol_switch_type)
 	    logctl.l_label.ill_vol = PM_LOG_VOL_META;
 	    __pmLogWriteLabel(logctl.l_mdfp, &logctl.l_label);
 	    logctl.l_label.ill_vol = 0;
-	    __pmLogWriteLabel(logctl.l_mfp, &logctl.l_label);
+	    __pmLogWriteLabel(archctl.ac_mfp, &logctl.l_label);
 	    logctl.l_state = PM_LOG_STATE_INIT;
 	}
 
@@ -1254,10 +1302,10 @@ newvolume(int vol_switch_type)
 	 *	this happens in do_work() over in callback.c
 	 */
 
-	__pmFclose(logctl.l_mfp);
-	logctl.l_mfp = newfp;
-	logctl.l_label.ill_vol = logctl.l_curvol = nextvol;
-	__pmLogWriteLabel(logctl.l_mfp, &logctl.l_label);
+	__pmFclose(archctl.ac_mfp);
+	archctl.ac_mfp = newfp;
+	logctl.l_label.ill_vol = archctl.ac_curvol = nextvol;
+	__pmLogWriteLabel(archctl.ac_mfp, &logctl.l_label);
 	time(&now);
 	fprintf(stderr, "New log volume %d, via %s at %s",
 		nextvol, vol_sw_strs[vol_switch_type], ctime(&now));
@@ -1272,12 +1320,12 @@ disconnect(int sts)
 {
     time_t  		now;
     int			ctx;
-    __pmContext		*ctxp;
+    __pmContext		*ctxp = NULL;	/* pander to cppcheck */
 
     if ((ctx = pmWhichContext()) >= 0)
 	ctxp = __pmHandleToPtr(ctx);
     if (ctx < 0 || ctxp == NULL) {
-	fprintf(stderr, "%s: disconnect botch: cannot get context: %s\n", pmProgname, pmErrStr(ctx));
+	fprintf(stderr, "%s: disconnect botch: cannot get context: %s\n", pmGetProgname(), pmErrStr(ctx));
 	exit(1);
     }
     /*
@@ -1299,9 +1347,9 @@ disconnect(int sts)
 	if (sts != -EINTR) {
 	    time(&now);
 	    if (sts != 0)
-		fprintf(stderr, "%s: Error: %s\n", pmProgname, pmErrStr(sts));
+		fprintf(stderr, "%s: Error: %s\n", pmGetProgname(), pmErrStr(sts));
 	    fprintf(stderr, "%s: Lost connection to PMCD on \"%s\" at %s",
-		pmProgname, pmcd_host, ctime(&now));
+		pmGetProgname(), pmcd_host, ctime(&now));
 	}
 	if (pmcdfd != -1) {
 	    close(pmcdfd);
@@ -1319,13 +1367,13 @@ reconnect(void)
     int	    		sts;
     int			ctx;
     time_t		now;
-    __pmContext		*ctxp;
+    __pmContext		*ctxp = NULL;	/* pander to cppcheck */
 
     if ((ctx = pmWhichContext()) >= 0)
 	ctxp = __pmHandleToPtr(ctx);
     if (ctx < 0 || ctxp == NULL) {
 	fprintf(stderr, "%s: reconnect botch: cannot get context: %s\n",
-		pmProgname, pmErrStr(ctx));
+		pmGetProgname(), pmErrStr(ctx));
 	exit(1);
     }
     /*
@@ -1347,7 +1395,7 @@ reconnect(void)
 
     time(&now);
     fprintf(stderr, "%s: re-established connection to PMCD on \"%s\" at %s",
-	    pmProgname, pmcd_host, ctime(&now));
+	    pmGetProgname(), pmcd_host, ctime(&now));
 
     /*
      * Metrics may have changed while PMCD was unreachable, so we

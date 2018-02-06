@@ -19,7 +19,7 @@
 
 #include <ctype.h>
 #include "pmapi.h"
-#include "impl.h"
+#include "deprecated.h"
 #include "../libpcp/src/pmdbg.h"
 
 static char	*fmt_old = "DBG_TRACE_%-11.11s  %10d  %s\n";
@@ -61,7 +61,7 @@ main(int argc, char **argv)
 
 	case 'D':
 	    if ((i = __pmParseDebug(opts.optarg)) < 0) {
-		fprintf(stderr, "%s: unrecognized debug option specification (%s)\n", pmProgname, opts.optarg);
+		fprintf(stderr, "%s: unrecognized debug option specification (%s)\n", pmGetProgname(), opts.optarg);
 		exit(1);
 	    }
 	    else 

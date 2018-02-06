@@ -5,7 +5,6 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 
 #ifdef IS_MINGW
 int
@@ -49,14 +48,14 @@ main(int argc, char **argv)
     int		tzh;
     off_t	trunc_size = 0;
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     while ((c = getopt(argc, argv, "a:D:t:qv?")) != EOF) {
 	switch (c) {
 
 	case 'a':	/* archive name */
 	    if (ahtype != 0) {
-		fprintf(stderr, "%s: at most one of -a and/or -h allowed\n", pmProgname);
+		fprintf(stderr, "%s: at most one of -a and/or -h allowed\n", pmGetProgname());
 		errflag++;
 	    }
 	    ahtype = PM_CONTEXT_ARCHIVE;
@@ -68,7 +67,7 @@ main(int argc, char **argv)
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
@@ -101,12 +100,12 @@ Options\n\
   -t   size       truncate archive to size bytes\n\
   -q              quick (read last 3 records, not the whole archive)\n\
   -v              verbose\n",
-		pmProgname);
+		pmGetProgname());
 	exit(1);
     }
 
     if (ahtype != PM_CONTEXT_ARCHIVE) {
-	fprintf(stderr, "%s: -a is not optional!\n", pmProgname);
+	fprintf(stderr, "%s: -a is not optional!\n", pmGetProgname());
 	exit(1);
     }
 
@@ -115,7 +114,7 @@ Options\n\
 	if (access(host, W_OK) == 0) {
 	    if (truncate(host, trunc_size) != 0) {
 		fprintf(stderr, "%s: file %s exists, but cannot truncate\n",
-		    pmProgname, host);
+		    pmGetProgname(), host);
 		exit(1);
 	    }
 	}
@@ -126,13 +125,13 @@ Options\n\
 	    if (access(path, W_OK) == 0) {
 		if (truncate(path, trunc_size) != 0) {
 		    fprintf(stderr, "%s: file %s exists, but cannot truncate\n",
-			pmProgname, path);
+			pmGetProgname(), path);
 		    exit(1);
 		}
 	    }
 	    else {
 		fprintf(stderr, "%s: cannot find writeable %s or %s\n",
-			pmProgname, host, path);
+			pmGetProgname(), host, path);
 		exit(1);
 	    }
 	}
@@ -140,14 +139,14 @@ Options\n\
 
     if ((sts = pmNewContext(ahtype, host)) < 0) {
 	fprintf(stderr, "%s: Cannot open archive \"%s\": %s\n",
-	    pmProgname, host, pmErrStr(sts));
+	    pmGetProgname(), host, pmErrStr(sts));
 	exit(1);
     }
 
     /* force -z (timezone of archive */
     if ((tzh = pmNewContextZone()) < 0) {
 	fprintf(stderr, "%s: Cannot set context timezone: %s\n",
-	    pmProgname, pmErrStr(tzh));
+	    pmGetProgname(), pmErrStr(tzh));
 	exit(1);
     }
 

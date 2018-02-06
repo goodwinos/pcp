@@ -1,7 +1,7 @@
 /*
  * Simple, configurable PMDA
  *
- * Copyright (c) 2012-2014 Red Hat.
+ * Copyright (c) 2012-2014,2017 Red Hat.
  * Copyright (c) 1995,2004 Silicon Graphics, Inc.  All Rights Reserved.
  * 
  * This program is free software; you can redistribute it and/or modify it
@@ -16,10 +16,15 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include <pcp/pmda.h>
 #include "domain.h"
 #include <sys/stat.h>
+
+/*
+ * internal routine from libpcp, defined in libpcp.h but not the
+ * public headers
+ */
+extern int __pmProcessRunTimes(double *, double *);
 
 /*
  * Simple PMDA
@@ -154,18 +159,19 @@ simple_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
     int			sts;
     static int		oldfetch;
     static double	usr, sys;
-    __pmID_int		*idp = (__pmID_int *)&(mdesc->m_desc.pmid);
+    unsigned int	cluster = pmID_cluster(mdesc->m_desc.pmid);
+    unsigned int	item = pmID_item(mdesc->m_desc.pmid);
 
     if (inst != PM_IN_NULL &&
-	!(idp->cluster == 0 && idp->item == 1) &&
-	!(idp->cluster == 2 && idp->item == 4))
+	!(cluster == 0 && item == 1) &&
+	!(cluster == 2 && item == 4))
 	return PM_ERR_INST;
 
-    if (idp->cluster == 0) {
-	if (idp->item == 0) {			/* simple.numfetch */
+    if (cluster == 0) {
+	if (item == 0) {			/* simple.numfetch */
 	    atom->l = numfetch;
 	}
-	else if (idp->item == 1) {		/* simple.color */
+	else if (item == 1) {		/* simple.color */
 	    switch (inst) {
 	    case 0:				/* red */
 		red = (red + 1) % 256;
@@ -186,24 +192,24 @@ simple_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 	else
 	    return PM_ERR_PMID;
     }
-    else if (idp->cluster == 1) {		/* simple.time */
+    else if (cluster == 1) {		/* simple.time */
 	if (oldfetch < numfetch) {
 	    __pmProcessRunTimes(&usr, &sys);
 	    oldfetch = numfetch;
 	}
-	if (idp->item == 2)			/* simple.time.user */
+	if (item == 2)			/* simple.time.user */
 	    atom->d = usr;
-	else if (idp->item == 3)      		/* simple.time.sys */
+	else if (item == 3)      		/* simple.time.sys */
 	    atom->d = sys;
 	else
 	    return PM_ERR_PMID;
      }
-     else if (idp->cluster == 2) {
-	if (idp->item == 4) {			/* simple.now */
+     else if (cluster == 2) {
+	if (item == 4) {			/* simple.now */
 	    struct timeslice *tsp;
 	    if ((sts = pmdaCacheLookup(*now_indom, inst, NULL, (void *)&tsp)) != PMDA_CACHE_ACTIVE) {
 		if (sts < 0)
-		    __pmNotifyErr(LOG_ERR, "pmdaCacheLookup failed: inst=%d: %s", inst, pmErrStr(sts));
+		    pmNotifyErr(LOG_ERR, "pmdaCacheLookup failed: inst=%d: %s", inst, pmErrStr(sts));
 		return PM_ERR_INST;
 	    }
 	    atom->l = tsp->tm_field;
@@ -214,7 +220,7 @@ simple_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
     else
 	return PM_ERR_PMID;
 
-    return 0;
+    return PMDA_FETCH_STATIC;
 }
 
 /*
@@ -239,7 +245,7 @@ simple_fetch(int numpmid, pmID pmidlist[], pmResult **resp, pmdaExt *pmda)
  * _current_ contents of the NOW instance domain.
  */
 static int
-simple_instance(pmInDom indom, int foo, char *bar, __pmInResult **iresp, pmdaExt *pmda)
+simple_instance(pmInDom indom, int foo, char *bar, pmInResult **iresp, pmdaExt *pmda)
 {
     simple_timenow_check();
     return pmdaInstance(indom, foo, bar, iresp, pmda);
@@ -256,7 +262,7 @@ simple_timenow_check(void)
 {
     struct stat		statbuf;
     static int		last_error = 0;
-    int			sep = __pmPathSeparator();
+    int			sep = pmPathSeparator();
 
     /* stat the file & check modification time has changed */
     pmsprintf(mypath, sizeof(mypath), "%s%c" "simple" "%c" "simple.conf",
@@ -264,7 +270,7 @@ simple_timenow_check(void)
     if (stat(mypath, &statbuf) == -1) {
 	if (oserror() != last_error) {
 	    last_error = oserror();
-	    __pmNotifyErr(LOG_ERR, "stat failed on %s: %s\n",
+	    pmNotifyErr(LOG_ERR, "stat failed on %s: %s\n",
 			  mypath, pmErrStr(-last_error));
 	}
 	simple_timenow_clear();
@@ -312,7 +318,7 @@ simple_timenow_clear(void)
 
     sts = pmdaCacheOp(*now_indom, PMDA_CACHE_INACTIVE);
     if (sts < 0)
-	__pmNotifyErr(LOG_ERR, "pmdaCacheOp(INACTIVE) failed: indom=%s: %s",
+	pmNotifyErr(LOG_ERR, "pmdaCacheOp(INACTIVE) failed: indom=%s: %s",
 	    pmInDomStr(*now_indom), pmErrStr(sts));
 #ifdef DESPERATE
     __pmdaCacheDump(stderr, *now_indom, 1);
@@ -327,7 +333,7 @@ simple_timenow_init(void)
 {
     int		i;
     int		sts;
-    int		sep = __pmPathSeparator();
+    int		sep = pmPathSeparator();
     FILE	*fp;
     char	*p, *q;
     char	buf[SIMPLE_BUFSIZE];
@@ -335,12 +341,12 @@ simple_timenow_init(void)
     pmsprintf(mypath, sizeof(mypath), "%s%c" "simple" "%c" "simple.conf",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
     if ((fp = fopen(mypath, "r")) == NULL) {
-	__pmNotifyErr(LOG_ERR, "fopen on %s failed: %s\n",
+	pmNotifyErr(LOG_ERR, "fopen on %s failed: %s\n",
 		      mypath, pmErrStr(-oserror()));
 	return;
     }
     if ((p = fgets(&buf[0], SIMPLE_BUFSIZE, fp)) == NULL) {
-	__pmNotifyErr(LOG_ERR, "fgets on %s found no data\n", mypath);
+	pmNotifyErr(LOG_ERR, "fgets on %s found no data\n", mypath);
 	fclose(fp);
 	return;
     }
@@ -353,7 +359,7 @@ simple_timenow_init(void)
 	    if (strcmp(timeslices[i].tm_name, q) == 0) {
 		sts = pmdaCacheStore(*now_indom, PMDA_CACHE_ADD, q, &timeslices[i]);
 		if (sts < 0) {
-		    __pmNotifyErr(LOG_ERR, "pmdaCacheStore failed: %s", pmErrStr(sts));
+		    pmNotifyErr(LOG_ERR, "pmdaCacheStore failed: %s", pmErrStr(sts));
 		    fclose(fp);
 		    return;
 		}
@@ -361,14 +367,14 @@ simple_timenow_init(void)
 	    }
 	}
 	if (i == num_timeslices)
-	    __pmNotifyErr(LOG_WARNING, "ignoring \"%s\" in %s", q, mypath);
+	    pmNotifyErr(LOG_WARNING, "ignoring \"%s\" in %s", q, mypath);
 	q = strtok(NULL, ",");
     }
 #ifdef DESPERATE
     __pmdaCacheDump(stderr, *now_indom, 1);
 #endif
     if (pmdaCacheOp(*now_indom, PMDA_CACHE_SIZE_ACTIVE) < 1)
-	__pmNotifyErr(LOG_WARNING, "\"timenow\" instance domain is empty");
+	pmNotifyErr(LOG_WARNING, "\"timenow\" instance domain is empty");
 
     fclose(fp);
 }
@@ -384,16 +390,19 @@ simple_store(pmResult *result, pmdaExt *pmda)
     int		val;
     int		sts = 0;
     pmValueSet	*vsp = NULL;
-    __pmID_int	*pmidp = NULL;
 
     /* a store request may affect multiple metrics at once */
     for (i = 0; i < result->numpmid; i++) {
+	unsigned int	cluster;
+	unsigned int	item;
+
 	vsp = result->vset[i];
-	pmidp = (__pmID_int *)&vsp->pmid;
+	cluster = pmID_cluster(vsp->pmid);
+	item = pmID_item(vsp->pmid);
 
-	if (pmidp->cluster == 0) {	/* all storable metrics are cluster 0 */
+	if (cluster == 0) {	/* all storable metrics are cluster 0 */
 
-	    switch (pmidp->item) {
+	    switch (item) {
 	    	case 0:					/* simple.numfetch */
 		    val = vsp->vlist[0].value.lval;
 		    if (val < 0) {
@@ -438,9 +447,9 @@ simple_store(pmResult *result, pmdaExt *pmda)
 		    break;
 	    }
 	}
-	else if ((pmidp->cluster == 1 && 
-		 (pmidp->item == 2 || pmidp->item == 3)) ||
-		 (pmidp->cluster == 2 && pmidp->item == 4)) {
+	else if ((cluster == 1 && 
+		 (item == 2 || item == 3)) ||
+		 (cluster == 2 && item == 4)) {
 	    sts = PM_ERR_PERMISSION;
 	    break;
 	}
@@ -452,6 +461,47 @@ simple_store(pmResult *result, pmdaExt *pmda)
     return sts;
 }
 
+static int
+simple_label(int ident, int type, pmLabelSet **lpp, pmdaExt *pmda)
+{
+    int		serial;
+
+    switch (type) {
+    case PM_LABEL_DOMAIN:
+	pmdaAddLabels(lpp, "{\"role\":\"testing\"}");
+	break;
+    case PM_LABEL_INDOM:
+	serial = pmInDom_serial((pmInDom)ident);
+	if (serial == COLOR_INDOM) {
+	    pmdaAddLabels(lpp, "{\"indom_name\":\"color\"}");
+	    pmdaAddLabels(lpp, "{\"model\":\"RGB\"}");
+	}
+	if (serial == NOW_INDOM) {
+	    pmdaAddLabels(lpp, "{\"indom_name\":\"time\"}");
+	    pmdaAddLabels(lpp, "{\"unitsystem\":\"SI\"}");
+	}
+	break;
+    case PM_LABEL_CLUSTER:
+    case PM_LABEL_ITEM:
+	/* no labels to add for these types, fall through */
+    default:
+        break;
+    }
+    return pmdaLabel(ident, type, lpp, pmda);
+}
+
+static int
+simple_labelCallBack(pmInDom indom, unsigned int inst, pmLabelSet **lp)
+{
+    struct timeslice *tsp;
+
+    if (pmInDom_serial(indom) != NOW_INDOM)
+	return 0;
+    if (pmdaCacheLookup(indom, inst, NULL, (void *)&tsp) != PMDA_CACHE_ACTIVE)
+	return 0;
+    /* SI units label, value: sec (seconds), min (minutes), hour (hours) */
+    return pmdaAddLabels(lp, "{\"units\":\"%s\"}", tsp->tm_name);
+}
 
 /*
  * Initialise the agent (both daemon and DSO).
@@ -460,12 +510,12 @@ void
 simple_init(pmdaInterface *dp)
 {
     if (isDSO) {
-	int sep = __pmPathSeparator();
+	int sep = pmPathSeparator();
 	pmsprintf(mypath, sizeof(mypath), "%s%c" "simple" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
-	pmdaDSO(dp, PMDA_INTERFACE_2, "simple DSO", mypath);
+	pmdaDSO(dp, PMDA_INTERFACE_7, "simple DSO", mypath);
     } else {
-	__pmSetProcessIdentity(username);
+	pmSetProcessIdentity(username);
     }
 
     if (dp->status != 0)
@@ -474,8 +524,10 @@ simple_init(pmdaInterface *dp)
     dp->version.any.fetch = simple_fetch;
     dp->version.any.store = simple_store;
     dp->version.any.instance = simple_instance;
+    dp->version.seven.label = simple_label;
 
     pmdaSetFetchCallBack(dp, simple_fetchCallBack);
+    pmdaSetLabelCallBack(dp, simple_labelCallBack);
 
     pmdaInit(dp, indomtab, sizeof(indomtab)/sizeof(indomtab[0]), metrictab,
 	     sizeof(metrictab)/sizeof(metrictab[0]));
@@ -487,16 +539,16 @@ simple_init(pmdaInterface *dp)
 int
 main(int argc, char **argv)
 {
-    int			sep = __pmPathSeparator();
+    int			sep = pmPathSeparator();
     pmdaInterface	dispatch;
 
     isDSO = 0;
-    __pmSetProgname(argv[0]);
-    __pmGetUsername(&username);
+    pmSetProgname(argv[0]);
+    pmGetUsername(&username);
 
     pmsprintf(mypath, sizeof(mypath), "%s%c" "simple" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
-    pmdaDaemon(&dispatch, PMDA_INTERFACE_2, pmProgname, SIMPLE,
+    pmdaDaemon(&dispatch, PMDA_INTERFACE_7, pmGetProgname(), SIMPLE,
 		"simple.log", mypath);
 
     pmdaGetOptions(argc, argv, &opts, &dispatch);

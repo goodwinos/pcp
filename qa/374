@@ -30,7 +30,7 @@ _filter()
 /datax/				{ skip = 3 }
 skip > 0			{ skip--; next }
 $1 == "log" && $2 == "size"	{ if ($3 > 100 && $3 <= 200) $3 = "more than 100"
-				  else if ($3 > 200 && $3 <= 300) $3 = "more than 200"
+				  else if ($3 > 200 && $3 <= 400) $3 = "more than 200"
 				}
 				{ print }'
 }
@@ -102,7 +102,7 @@ End-of-File
 		echo "Arrgh ... pmlogger (pid=$pid) on host $host failed to start after 20 seconds"
 		ssh -q pcpqa@$host ps -ef | grep pmlogger
 		ssh -q pcpqa@$host ls -l /tmp/$base.*
-		ssh -q pcpqa@$host pmdumplog -a /tmp/$base
+		ssh -q pcpqa@$host pmdumplog -dilmst /tmp/$base
 		ssh -q pcpqa@$host cat /tmp/$base.log
 		sleep 60
 		exit 1

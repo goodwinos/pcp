@@ -57,6 +57,7 @@ struct webcontext {
     unsigned mypolltimeout;
     time_t expires;		/* poll timeout, 0 if never expires */
     int context;			/* PMAPI context handle; owned */
+    string spec;
 
     map <string, pmID> metric_id_cache;
     map <pmID, string> metric_name_cache;
@@ -158,7 +159,7 @@ webcontext_allocate (int webapi_ctx, struct webcontext **wc)
 
 
 int
-pmwebapi_bind_permanent (int webapi_ctx, int pcp_context)
+pmwebapi_bind_permanent (int webapi_ctx, int pcp_context, string spec)
 {
     struct webcontext *c;
     int rc = webcontext_allocate (webapi_ctx, &c);
@@ -166,10 +167,10 @@ pmwebapi_bind_permanent (int webapi_ctx, int pcp_context)
         return rc;
     }
     assert (c);
-    assert (pcp_context >= 0);
     c->context = pcp_context;
     c->mypolltimeout = ~0;
     c->expires = 0;
+    c->spec = spec;
     return 0;
 }
 
@@ -256,7 +257,7 @@ pmwebapi_respond_new_context (struct MHD_Connection *connection,
         string archivefile = params["archivefile"];
         if (archivefile != "") {
             if (!__pmAbsolutePath ((char *) archivefile.c_str ())) {
-                archivefile = archivesdir + (char) __pmPathSeparator () + archivefile;
+                archivefile = archivesdir + (char) pmPathSeparator () + archivefile;
             }
 
             if (cursed_path_p (archivesdir, archivefile)) {
@@ -286,7 +287,8 @@ pmwebapi_respond_new_context (struct MHD_Connection *connection,
 
     if (context < 0) {
         char pmmsg[PM_MAXERRMSGLEN];
-        connstamp (cerr, connection) << "new context failed: " << pmErrStr_r (context, pmmsg, sizeof (pmmsg)) << endl;
+        connstamp (cerr, connection) << "new context failed: "
+                                     << pmErrStr_r (context, pmmsg, sizeof (pmmsg)) << endl;
         rc = context;
         goto out;
     }
@@ -483,7 +485,11 @@ pmwebapi_respond_metric_list (struct MHD_Connection *connection,
     *mltc.mhdb << "{ \"metrics\":[\n";
 
     val = params["prefix"];
-    (void) pmTraversePMNS_r (val.c_str (), &metric_list_traverse, &mltc);	/* cannot fail */
+    rc = pmTraversePMNS_r (val.c_str (), &metric_list_traverse, &mltc);	/* cannot fail */
+    if (rc == PM_ERR_IPC) {
+	pmDestroyContext (c->context);
+	mltc.c->context = c->context = -1;
+    }
     /* XXX: also handle pmids=... */
     /* XXX: also handle names=... */
 
@@ -737,7 +743,11 @@ pmwebapi_respond_metric_fetch (struct MHD_Connection *connection,
             val_names += strlen (val_names);	/* skip onto \0 */
         }
         names[0] = name;
-        num = pmLookupName (1, names, &found_pmid);
+	num = pmLookupName (1, names, &found_pmid);
+	if (rc == PM_ERR_IPC) {
+	    pmDestroyContext (c->context);
+	    c->context = -1;
+	}
         free (name);
         if (num == 1) {
             assert (num_metrics < max_num_metrics);
@@ -906,7 +916,11 @@ pmwebapi_respond_instance_list (struct MHD_Connection *connection,
     }
     /* Obtain the instance domain. */
     if (0 == strcmp (val_indom, "")) {
-        rc = pmLookupName (1, (char **) &val_name, &metric_id);
+	rc = pmLookupName (1, (char **) &val_name, &metric_id);
+	if (rc == PM_ERR_IPC) {
+	    pmDestroyContext (c->context);
+	    c->context = -1;
+	}
         if (rc != 1) {
             connstamp (cerr, connection) << "failed to lookup metric " << val_name << endl;
             goto out;
@@ -989,7 +1003,11 @@ pmwebapi_respond_instance_list (struct MHD_Connection *connection,
     /* Time to fetch the instance info. */
     if (num_instances == 0) {
         free (instances);
-        num_instances = pmGetInDom (inDom, &instlist, &namelist);
+	num_instances = pmGetInDom (inDom, &instlist, &namelist);
+	if (num_instances == PM_ERR_IPC) {
+	    pmDestroyContext (c->context);
+	    c->context = -1;
+	}
         if (num_instances < 1) {
             connstamp (cerr, connection) << "pmGetInDom failed" << endl;
             rc = num_instances;
@@ -1183,8 +1201,6 @@ metric_prometheus_batch_fetch(void *closure) {
         string pn = metric;
         replace (pn.begin(), pn.end(), '.', ':');
 
-        output << "# HELP " << pn << " " << help_text << endl;
-
         // Append a metric_desc.units-based suffix, and compute an
         // pmConvScale vector to match conventions as per
         // https://prometheus.io/docs/practices/naming/
@@ -1216,6 +1232,17 @@ metric_prometheus_batch_fetch(void *closure) {
         } else {
             continue; // skip quietly
         }
+
+        // append pcp metadata snapshot: metric semantics units
+	char sembuf[64], unitsbuf[64];
+	pmSemStr_r(metric_desc.sem, sembuf, sizeof(sembuf));
+	pmUnitsStr_r(&metric_desc.units, unitsbuf, sizeof(unitsbuf));
+	if (strlen(unitsbuf) == 0)
+	    strncpy(unitsbuf, "none", sizeof(unitsbuf));
+        output << "# PCP " << metric << " " << sembuf << " " << unitsbuf << endl;
+        
+        // append help text
+        output << "# HELP " << pn << " " << help_text << endl;
 
         // append semantics tag
         if (metric_desc.sem == PM_SEM_COUNTER) {
@@ -1276,7 +1303,7 @@ metric_prometheus_batch_fetch(void *closure) {
             // NB: skip the timestamp
         }
         // Only now, with everything collected, append our data to the prometheus output stream
-        (*mptc->output) << output.str();
+        (*mptc->output) << output.str() << endl; // plus a blank line between metrics
         mptc->num_metrics_completed++;
     }
 }
@@ -1300,7 +1327,11 @@ pmwebapi_respond_prometheus (struct MHD_Connection *connection,
     mptc.num_metrics_completed = 0;
     for (unsigned i=0; i<metrics.size(); i++) {
         const string& m = metrics[i];
-        (void) pmTraversePMNS_r (m.c_str(), &metric_prometheus_traverse, &mptc); /* cannot fail */
+	rc = pmTraversePMNS_r (m.c_str(), &metric_prometheus_traverse, &mptc); /* cannot fail */
+	if (rc == PM_ERR_IPC) {
+	    pmDestroyContext (c->context);
+	    mptc.c->context = c->context = -1;
+	}
     }
     (void) metric_prometheus_batch_fetch(&mptc);
     (*mptc.output) << endl
@@ -1315,7 +1346,7 @@ pmwebapi_respond_prometheus (struct MHD_Connection *connection,
         goto out;
     }
 
-    rc = MHD_add_response_header (resp, "Content-Type", "application/json");
+    rc = MHD_add_response_header (resp, "Content-Type", "text/plain");
     if (rc != MHD_YES) {
         connstamp (cerr, connection) << "MHD_add_response_header failed" << endl;
         rc = -ENOMEM;
@@ -1397,7 +1428,11 @@ pmwebapi_respond_metric_store (struct MHD_Connection *connection,
 
     /* Extract target metric identifier from name or pmid. */
     if (*val_name != '\0') {
-        rc = pmLookupName (1, (char **) &val_name, &metric_id);
+	rc = pmLookupName (1, (char **) &val_name, &metric_id);
+	if (rc == PM_ERR_IPC) {
+	    pmDestroyContext (c->context);
+	    c->context = -1;
+	}
         if (rc != 1) {
             connstamp (cerr, connection) << "failed to lookup metric " << val_name << endl;
             goto out;
@@ -1417,6 +1452,10 @@ pmwebapi_respond_metric_store (struct MHD_Connection *connection,
         goto out;
     }
     rc = pmLookupDesc (metric_id, &metric_desc);
+    if (rc == PM_ERR_IPC) {
+	pmDestroyContext (c->context);
+	c->context = -1;
+    }
     if (rc != 0) {
         connstamp (cerr, connection) << "store failed to lookup desc" << endl;
         goto out;
@@ -1709,7 +1748,10 @@ pmwebapi_respond (struct MHD_Connection *connection, const http_params & params,
 
     /* Switch to this context for subsequent operations. */
     /* if-multithreaded: watch out. */
-    rc = pmUseContext (c->context);
+    if (c->context < 0)
+	c->context = pmNewContext(PM_CONTEXT_HOST, c->spec.c_str());
+    else
+	rc = pmUseContext (c->context);
     if (rc) {
         char pmmsg[PM_MAXERRMSGLEN];
 	connstamp (cerr, connection) << "pmUseContext(" << c->context << ") failed: " << pmErrStr_r (rc, pmmsg, sizeof (pmmsg)) << endl;

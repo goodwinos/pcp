@@ -46,14 +46,15 @@
 /*
  * globals defined in pmlogreduce.h
  */
-__pmTimeval	current;		/* most recent timestamp overall */
+pmTimeval	current;		/* most recent timestamp overall */
 char		*iname;			/* name of input archive */
 pmLogLabel	ilabel;			/* input archive label */
 int		numpmid;		/* all metrics from the input archive */
 pmID		*pmidlist;
 char		**namelist;
 metric_t	*metriclist;
-__pmLogCtl	logctl;			/* output archive control */
+__pmArchCtl	archctl;		/* output archive control */
+__pmLogCtl	logctl;			/* output log control */
 /* command line args */
 double		targ = 600.0;		/* -t arg - interval b/n output samples */
 int		sarg = -1;		/* -s arg - finish after X samples */
@@ -122,7 +123,7 @@ parseargs(int argc, char *argv[])
 	    sts = pmSetDebug(opts.optarg);
 	    if (sts < 0) {
 		pmprintf("%s: unrecognized debug options specification (%s)\n",
-			pmProgname, opts.optarg);
+			pmGetProgname(), opts.optarg);
 		opts.errors++;
 	    }
 	    break;
@@ -131,7 +132,7 @@ parseargs(int argc, char *argv[])
 	    sarg = (int)strtol(opts.optarg, &endnum, 10);
 	    if (*endnum != '\0' || sarg < 0) {
 		pmprintf("%s: -s requires numeric argument\n",
-			pmProgname);
+			pmGetProgname());
 		opts.errors++;
 	    }
 	    break;
@@ -151,14 +152,14 @@ parseargs(int argc, char *argv[])
 		opts.errors++;
 	    }
 	    else
-		targ = __pmtimevalToReal(&interval);
+		targ = pmtimevalToReal(&interval);
 	    break;
 
 	case 'v':	/* number of samples per volume */
 	    varg = (int)strtol(opts.optarg, &endnum, 10);
 	    if (*endnum != '\0' || varg < 0) {
 		pmprintf("%s: -v requires numeric argument\n",
-			pmProgname);
+			pmGetProgname());
 		opts.errors++;
 	    }
 	    break;
@@ -166,7 +167,7 @@ parseargs(int argc, char *argv[])
 	case 'Z':	/* use timezone from command line */
 	    if (zarg) {
 		pmprintf("%s: at most one of -Z and/or -z allowed\n",
-			pmProgname);
+			pmGetProgname());
 		opts.errors++;
 
 	    }
@@ -176,7 +177,7 @@ parseargs(int argc, char *argv[])
 	case 'z':	/* use timezone from archive */
 	    if (tz != NULL) {
 		pmprintf("%s: at most one of -Z and/or -z allowed\n",
-			pmProgname);
+			pmGetProgname());
 		opts.errors++;
 	    }
 	    zarg++;
@@ -190,7 +191,7 @@ parseargs(int argc, char *argv[])
     }
 
     if (opts.errors == 0 && opts.optind > argc-2) {
-	pmprintf("%s: Error: insufficient arguments\n", pmProgname);
+	pmprintf("%s: Error: insufficient arguments\n", pmGetProgname());
 	opts.errors++;
     }
 
@@ -231,12 +232,12 @@ main(int argc, char **argv)
      */
     if ((ictx_a = pmNewContext(PM_CONTEXT_ARCHIVE, iname)) < 0) {
 	fprintf(stderr, "%s: Error: cannot open archive \"%s\" (ctx_a): %s\n",
-		pmProgname, iname, pmErrStr(ictx_a));
+		pmGetProgname(), iname, pmErrStr(ictx_a));
 	exit(1);
     }
 
     if ((sts = pmGetArchiveLabel(&ilabel)) < 0) {
-	fprintf(stderr, "%s: Error: cannot get archive label record (%s): %s\n", pmProgname, iname, pmErrStr(sts));
+	fprintf(stderr, "%s: Error: cannot get archive label record (%s): %s\n", pmGetProgname(), iname, pmErrStr(sts));
 	exit(1);
     }
 
@@ -247,7 +248,7 @@ main(int argc, char **argv)
     /* end time */
     if ((sts = pmGetArchiveEnd(&logend_tval)) < 0) {
 	fprintf(stderr, "%s: Error: cannot get end of archive (%s): %s\n",
-		pmProgname, iname, pmErrStr(sts));
+		pmGetProgname(), iname, pmErrStr(sts));
 	exit(1);
     }
 
@@ -255,7 +256,7 @@ main(int argc, char **argv)
 	/* use TZ from metrics source (input-archive) */
 	if ((sts = pmNewZone(ilabel.ll_tz)) < 0) {
 	    fprintf(stderr, "%s: Cannot set context timezone: %s\n",
-		    pmProgname, pmErrStr(sts));
+		    pmGetProgname(), pmErrStr(sts));
             exit(1);
 	}
 	printf("Note: timezone set to local timezone of host \"%s\" from archive\n\n", ilabel.ll_hostname);
@@ -264,7 +265,7 @@ main(int argc, char **argv)
 	/* use TZ as specified by user */
 	if ((sts = pmNewZone(tz)) < 0) {
 	    fprintf(stderr, "%s: Cannot set timezone to \"%s\": %s\n",
-		    pmProgname, tz, pmErrStr(sts));
+		    pmGetProgname(), tz, pmErrStr(sts));
 	    exit(1);
 	}
 	printf("Note: timezone set to \"TZ=%s\"\n\n", tz);
@@ -275,7 +276,7 @@ main(int argc, char **argv)
 	/* use TZ from local host */
 	if ((sts = pmNewZone(tz)) < 0) {
 	    fprintf(stderr, "%s: Cannot set local host's timezone: %s\n",
-		    pmProgname, pmErrStr(sts));
+		    pmGetProgname(), pmErrStr(sts));
 	    exit(1);
 	}
     }
@@ -286,7 +287,7 @@ main(int argc, char **argv)
 			    &winstart_tval, &winend_tval, &unused, &msg);
     if (sts < 0) {
 	fprintf(stderr, "%s: Invalid time window specified: %s\n",
-		pmProgname, msg);
+		pmGetProgname(), msg);
 	exit(1);
     }
     if (pmDebugOptions.appl0) {
@@ -300,14 +301,15 @@ main(int argc, char **argv)
     if ((sts = pmSetMode(PM_MODE_INTERP | PM_XTB_SET(PM_TIME_SEC),
                          &winstart_tval, (int)targ)) < 0) {
 	fprintf(stderr, "%s: pmSetMode(PM_MODE_INTERP ...) failed: %s\n",
-		pmProgname, pmErrStr(sts));
+		pmGetProgname(), pmErrStr(sts));
 	exit(1);
     }
 
     /* create output log - must be done before writing label */
-    if ((sts = __pmLogCreate("", oname, PM_LOG_VERS02, &logctl)) < 0) {
+    archctl.ac_log = &logctl;
+    if ((sts = __pmLogCreate("", oname, PM_LOG_VERS02, &archctl)) < 0) {
 	fprintf(stderr, "%s: Error: __pmLogCreate: %s\n",
-		pmProgname, pmErrStr(sts));
+		pmGetProgname(), pmErrStr(sts));
 	exit(1);
     }
 
@@ -333,7 +335,7 @@ main(int argc, char **argv)
      */
     if ((sts = pmTraversePMNS ("", dometric)) < 0) {
 	fprintf(stderr, "%s: Error traversing namespace ... %s\n",
-		pmProgname, pmErrStr(sts));
+		pmGetProgname(), pmErrStr(sts));
 	goto cleanup;
     }
 
@@ -341,7 +343,7 @@ main(int argc, char **argv)
      * All the initial metadata has been generated, add timestamp
      */
     __pmFflush(logctl.l_mdfp);
-    __pmLogPutIndex(&logctl, &current);
+    __pmLogPutIndex(&archctl, &current);
 
     written = 0;
 
@@ -354,14 +356,14 @@ main(int argc, char **argv)
 	 */
 	if ((sts = pmUseContext(ictx_a)) < 0) {
 	    fprintf(stderr, "%s: Error: cannot use context (%s): %s\n",
-		    pmProgname, iname, pmErrStr(sts));
+		    pmGetProgname(), iname, pmErrStr(sts));
 	    goto cleanup;
 	}
 	if ((sts = pmFetch(numpmid, pmidlist, &irp)) < 0) {
 	    if (sts == PM_ERR_EOL)
 		break;
 	    fprintf(stderr,
-		"%s: Error: pmFetch failed: %s\n", pmProgname, pmErrStr(sts));
+		"%s: Error: pmFetch failed: %s\n", pmGetProgname(), pmErrStr(sts));
 	    exit(1);
 	}
 	if (irp->timestamp.tv_sec > winend_tval.tv_sec ||
@@ -387,7 +389,7 @@ main(int argc, char **argv)
 
 	if ((sts = pmUseContext(ictx_a)) < 0) {
 	    fprintf(stderr, "%s: Error: cannot use context (%s): %s\n",
-		    pmProgname, iname, pmErrStr(sts));
+		    pmGetProgname(), iname, pmErrStr(sts));
 	    goto cleanup;
 	}
 
@@ -410,14 +412,14 @@ main(int argc, char **argv)
 	sts = __pmEncodeResult(PDU_OVERRIDE2, orp, &pb);
 	if (sts < 0) {
 	    fprintf(stderr, "%s: Error: __pmEncodeResult: %s\n",
-		    pmProgname, pmErrStr(sts));
+		    pmGetProgname(), pmErrStr(sts));
 	    goto cleanup;
 	}
 
 	/* switch volumes if required */
 	if (varg > 0) {
 	    if (written > 0 && (written % varg) == 0) {
-		__pmTimeval	next_stamp;
+		pmTimeval	next_stamp;
 		next_stamp.tv_sec = irp->timestamp.tv_sec;
 		next_stamp.tv_usec = irp->timestamp.tv_usec;
 		newvolume(oname, &next_stamp);
@@ -427,10 +429,10 @@ main(int argc, char **argv)
 	 * Even without a -v option, we may need to switch volumes
 	 * if the data file exceeds 2^31-1 bytes
 	 */
-	peek_offset = __pmFtell(logctl.l_mfp);
+	peek_offset = __pmFtell(archctl.ac_mfp);
 	peek_offset += ((__pmPDUHdr *)pb)->len - sizeof(__pmPDUHdr) + 2*sizeof(int);
 	if (peek_offset > 0x7fffffff) {
-	    __pmTimeval	next_stamp;
+	    pmTimeval	next_stamp;
 	    next_stamp.tv_sec = irp->timestamp.tv_sec;
 	    next_stamp.tv_usec = irp->timestamp.tv_usec;
 	    newvolume(oname, &next_stamp);
@@ -442,11 +444,11 @@ main(int argc, char **argv)
 	doindom(orp);
 
 	/* write out log record */
-	sts = __pmLogPutResult2(&logctl, pb);
+	sts = __pmLogPutResult2(&archctl, pb);
 	__pmUnpinPDUBuf(pb);
 	if (sts < 0) {
 	    fprintf(stderr, "%s: Error: __pmLogPutResult2: log data: %s\n",
-		    pmProgname, pmErrStr(sts));
+		    pmGetProgname(), pmErrStr(sts));
 	    goto cleanup;
 	}
 	written++;
@@ -458,9 +460,9 @@ next:
     }
 
     /* write the last time stamp */
-    __pmFflush(logctl.l_mfp);
+    __pmFflush(archctl.ac_mfp);
     __pmFflush(logctl.l_mdfp);
-    __pmLogPutIndex(&logctl, &current);
+    __pmLogPutIndex(&archctl, &current);
 
     exit(exit_status);
 

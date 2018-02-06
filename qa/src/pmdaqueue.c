@@ -1,5 +1,4 @@
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include <pcp/pmda.h>
 
 /*
@@ -96,7 +95,7 @@ main(int argc, char **argv)
     char *s, *name;
     void *event;
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     while ((c = getopt(argc, argv, "A:a:C:c:D:E:e:F:f:q:s:S:")) != EOF) {
 	switch (c) {
@@ -107,7 +106,7 @@ main(int argc, char **argv)
 	    name = strsep(&s, ",");
 	    if (!s) {
 		fprintf(stderr, "%s: invalid client queue access specification (%s)\n",
-			pmProgname, optarg);
+			pmGetProgname(), optarg);
 		errflag++;
 		break;
 	    }
@@ -141,7 +140,7 @@ main(int argc, char **argv)
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
@@ -151,7 +150,7 @@ main(int argc, char **argv)
 	    name = strsep(&s, ",");
 	    if (!s) {
 		fprintf(stderr, "%s: invalid event size specification (%s)\n",
-			pmProgname, optarg);
+			pmGetProgname(), optarg);
 		errflag++;
 		break;
 	    }
@@ -159,7 +158,7 @@ main(int argc, char **argv)
 	    queueid = pmdaEventQueueHandle(name);
 	    if (queueid < 0) {
 		fprintf(stderr, "%s: invalid event queue specification (%s)\n",
-			pmProgname, name);
+			pmGetProgname(), name);
 		errflag++;
 		break;
 	    }
@@ -167,7 +166,7 @@ main(int argc, char **argv)
 	    sts = pmdaEventQueueAppend(queueid, event, size, &tv);
 	    fprintf(stderr, "add event(%s,%d) -> %d ", name, (int)size, sts);
 	    if (sts < 0) fprintf(stderr, "%s", pmErrStr(sts));
-	    else __pmPrintStamp(stderr, &tv);
+	    else pmPrintStamp(stderr, &tv);
 	    fputc('\n', stderr);
 	    break;
 
@@ -176,7 +175,7 @@ main(int argc, char **argv)
 	    name = strsep(&s, ",");
 	    if (!s) {
 		fprintf(stderr, "%s: invalid event size specification (%s)\n",
-			pmProgname, optarg);
+			pmGetProgname(), optarg);
 		errflag++;
 		break;
 	    }
@@ -187,7 +186,7 @@ main(int argc, char **argv)
 	    fprintf(stderr, "add queue#%d event(%s,%d) -> %d ",
 		    queueid, name, (int)size, sts);
 	    if (sts < 0) fprintf(stderr, "%s", pmErrStr(sts));
-	    else __pmPrintStamp(stderr, &tv);
+	    else pmPrintStamp(stderr, &tv);
 	    fputc('\n', stderr);
 	    break;
 
@@ -196,7 +195,7 @@ main(int argc, char **argv)
 	    name = strsep(&s, ",");
 	    if (!s) {
 		fprintf(stderr, "%s: invalid queue memory specification (%s)\n",
-			pmProgname, optarg);
+			pmGetProgname(), optarg);
 		errflag++;
 		break;
 	    }
@@ -212,7 +211,7 @@ main(int argc, char **argv)
 	    name = strsep(&s, ",");
 	    if (!s) {
 		fprintf(stderr, "%s: invalid client filter queue specification (%s)\n",
-			pmProgname, optarg);
+			pmGetProgname(), optarg);
 		errflag++;
 		break;
 	    }
@@ -220,7 +219,7 @@ main(int argc, char **argv)
 	    name = strsep(&s, ",");
 	    if (!s) {
 		fprintf(stderr, "%s: invalid client filter size specification (%s)\n",
-			pmProgname, optarg);
+			pmGetProgname(), optarg);
 		errflag++;
 		break;
 	    }
@@ -239,7 +238,7 @@ main(int argc, char **argv)
 	    name = strsep(&s, ",");
 	    if (!s) {
 		fprintf(stderr, "%s: invalid client filter queue specification (%s)\n",
-			pmProgname, optarg);
+			pmGetProgname(), optarg);
 		errflag++;
 		break;
 	    }
@@ -257,7 +256,7 @@ main(int argc, char **argv)
 	    queueid = pmdaEventQueueHandle(name);
 	    if (queueid < 0) {
 		fprintf(stderr, "%s: invalid queue specification (%s)\n",
-			pmProgname, name);
+			pmGetProgname(), name);
 		errflag++;
 		break;
 	    }
@@ -269,7 +268,7 @@ main(int argc, char **argv)
 	    name = strsep(&s, ",");
 	    if (!s) {
 		fprintf(stderr, "%s: invalid client filter queue specification (%s)\n",
-			pmProgname, optarg);
+			pmGetProgname(), optarg);
 		errflag++;
 		break;
 	    }
@@ -286,7 +285,7 @@ main(int argc, char **argv)
     }
 
     if (errflag) {
-	fprintf(stderr, "Usage: %s ...\n", pmProgname);
+	fprintf(stderr, "Usage: %s ...\n", pmGetProgname());
 	fprintf(stderr, "Options:\n");
 	fprintf(stderr, "  -a id,name     disable a clients access\n");
 	fprintf(stderr, "  -A id,name     enable a clients access\n");

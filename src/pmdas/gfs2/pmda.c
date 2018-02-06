@@ -15,13 +15,14 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "pmda.h"
 #include "domain.h"
 
 #include "pmdagfs2.h"
 
 #include <sys/types.h>
+#include <sys/sysmacros.h>
 #include <ctype.h>
 
 static char *gfs2_sysfsdir = "/sys/kernel/debug/gfs2";
@@ -763,7 +764,7 @@ gfs2_instance_refresh(void)
 }
 
 static int
-gfs2_instance(pmInDom indom, int inst, char *name, __pmInResult **result, pmdaExt *pmda)
+gfs2_instance(pmInDom indom, int inst, char *name, pmInResult **result, pmdaExt *pmda)
 {
     gfs2_instance_refresh();
     return pmdaInstance(indom, inst, name, result, pmda);
@@ -805,9 +806,9 @@ gfs2_fetch(int numpmid, pmID pmidlist[], pmResult **resp, pmdaExt *pmda)
     int		i, sts, need_refresh[NUM_CLUSTERS] = { 0 };
 
     for (i = 0; i < numpmid; i++) {
-	__pmID_int *idp = (__pmID_int *)&(pmidlist[i]);
-	if (idp->cluster < NUM_CLUSTERS)
-	    need_refresh[idp->cluster]++;
+	unsigned int	cluster = pmID_cluster(pmidlist[i]);
+	if (cluster < NUM_CLUSTERS)
+	    need_refresh[cluster]++;
     }
 
     if ((sts = gfs2_fetch_refresh(pmda, need_refresh)) < 0)
@@ -821,49 +822,49 @@ gfs2_fetch(int numpmid, pmID pmidlist[], pmResult **resp, pmdaExt *pmda)
 static int
 gfs2_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 {
-    __pmID_int		*idp = (__pmID_int *)&(mdesc->m_desc.pmid);
+    unsigned int	item = pmID_item(mdesc->m_desc.pmid);
     struct gfs2_fs	*fs;
     int			sts;
 
-    switch (idp->cluster) {
+    switch (pmID_cluster(mdesc->m_desc.pmid)) {
     case CLUSTER_GLOCKS:
 	sts = pmdaCacheLookup(INDOM(GFS_FS_INDOM), inst, NULL, (void **)&fs);
 	if (sts < 0)
 	    return sts;
-	return gfs2_glocks_fetch(idp->item, &fs->glocks, atom);
+	return gfs2_glocks_fetch(item, &fs->glocks, atom);
 
     case CLUSTER_SBSTATS:
 	sts = pmdaCacheLookup(INDOM(GFS_FS_INDOM), inst, NULL, (void **)&fs);
 	if (sts < 0)
 	    return sts;
-	return gfs2_sbstats_fetch(idp->item, &fs->sbstats, atom);
+	return gfs2_sbstats_fetch(item, &fs->sbstats, atom);
 
     case CLUSTER_GLSTATS:
         sts = pmdaCacheLookup(INDOM(GFS_FS_INDOM), inst, NULL, (void **)&fs);
 	if (sts < 0)
 	    return sts;
-	return gfs2_glstats_fetch(idp->item, &fs->glstats, atom);
+	return gfs2_glstats_fetch(item, &fs->glstats, atom);
 
     case CLUSTER_TRACEPOINTS:
         sts = pmdaCacheLookup(INDOM(GFS_FS_INDOM), inst, NULL, (void **)&fs);
 	if (sts < 0)
 	    return sts;
-        return gfs2_ftrace_fetch(idp->item, &fs->ftrace, atom);
+        return gfs2_ftrace_fetch(item, &fs->ftrace, atom);
 
     case CLUSTER_WORSTGLOCK:
         sts = pmdaCacheLookup(INDOM(GFS_FS_INDOM), inst, NULL, (void**)&fs);
         if (sts < 0)
             return sts;
-        return gfs2_worst_glock_fetch(idp->item, &fs->worst_glock, atom);
+        return gfs2_worst_glock_fetch(item, &fs->worst_glock, atom);
 
     case CLUSTER_LATENCY:
         sts = pmdaCacheLookup(INDOM(GFS_FS_INDOM), inst, NULL, (void**)&fs);
         if (sts < 0)
             return sts;
-        return gfs2_latency_fetch(idp->item, &fs->latency, atom);
+        return gfs2_latency_fetch(item, &fs->latency, atom);
 
     case CLUSTER_CONTROL:
-        return gfs2_control_fetch(idp->item, atom);
+        return gfs2_control_fetch(item, atom);
 
     default: /* unknown cluster */
 	return PM_ERR_PMID;
@@ -929,26 +930,29 @@ gfs2_store(pmResult *result, pmdaExt *pmda)
 {
     int		i;
     int		sts = 0;
-    pmValueSet	*vsp;
-    __pmID_int	*pmidp;
 
     for (i = 0; i < result->numpmid && !sts; i++) {
-	vsp = result->vset[i];
-	pmidp = (__pmID_int *)&vsp->pmid;
+	unsigned int	cluster;
+	unsigned int	item;
+	pmValueSet	*vsp;
 
-	if (pmidp->cluster == CLUSTER_CONTROL && pmidp->item <= CONTROL_BUFFER_SIZE_KB) {
-            sts = gfs2_control_set_value(control_locations[pmidp->item], vsp);
+	vsp = result->vset[i];
+	cluster = pmID_cluster(vsp->pmid);
+	item = pmID_item(vsp->pmid);
+
+	if (cluster == CLUSTER_CONTROL && item <= CONTROL_BUFFER_SIZE_KB) {
+            sts = gfs2_control_set_value(control_locations[item], vsp);
         }
 
-        if (pmidp->cluster == CLUSTER_CONTROL && pmidp->item == CONTROL_WORSTGLOCK) {
+        if (cluster == CLUSTER_CONTROL && item == CONTROL_WORSTGLOCK) {
             sts = worst_glock_set_state(vsp);
         }
 
-        if (pmidp->cluster == CLUSTER_CONTROL && pmidp->item == CONTROL_LATENCY) {
+        if (cluster == CLUSTER_CONTROL && item == CONTROL_LATENCY) {
             sts = latency_set_state(vsp);
         }
 
-        if (pmidp->cluster == CLUSTER_CONTROL && pmidp->item == CONTROL_FTRACE_GLOCK_THRESHOLD) {
+        if (cluster == CLUSTER_CONTROL && item == CONTROL_FTRACE_GLOCK_THRESHOLD) {
             sts = ftrace_set_threshold(vsp);
         }
     }
@@ -1008,8 +1012,8 @@ gfs2_init(pmdaInterface *dp)
     dp->version.four.children = gfs2_children;
     pmdaSetFetchCallBack(dp, gfs2_fetchCallBack);
 
-    gfs2_sbstats_init(metrictable, nmetrics);
-    gfs2_worst_glock_init(metrictable, nmetrics);
+    gfs2_sbstats_init(dp->version.any.ext, metrictable, nmetrics);
+    gfs2_worst_glock_init(dp->version.any.ext, metrictable, nmetrics);
 
     pmdaSetFlags(dp, PMDA_EXT_FLAG_HASHED);
     pmdaInit(dp, indomtable, nindoms, metrictable, nmetrics);
@@ -1040,14 +1044,14 @@ static pmdaOptions opts = {
 int
 main(int argc, char **argv)
 {
-    int			sep = __pmPathSeparator();
+    int			sep = pmPathSeparator();
     pmdaInterface	dispatch;
     char		helppath[MAXPATHLEN];
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
     pmsprintf(helppath, sizeof(helppath), "%s%c" "gfs2" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
-    pmdaDaemon(&dispatch, PMDA_INTERFACE_4, pmProgname, GFS2, "gfs2.log", helppath);
+    pmdaDaemon(&dispatch, PMDA_INTERFACE_4, pmGetProgname(), GFS2, "gfs2.log", helppath);
 
     pmdaGetOptions(argc, argv, &opts, &dispatch);
     if (opts.errors) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013,2017 Red Hat.
+ * Copyright (c) 2013,2017-2018 Red Hat.
  * Copyright (c) 1995-2000 Silicon Graphics, Inc.  All Rights Reserved.
  * 
  * This library is free software; you can redistribute it and/or modify it
@@ -14,7 +14,7 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "pmda.h"
 #include "libdefs.h"
 
@@ -24,7 +24,7 @@ __pmdaInFd(pmdaInterface *dispatch)
     if (HAVE_ANY(dispatch->comm.pmda_interface))
 	return dispatch->version.any.ext->e_infd;
 
-    __pmNotifyErr(LOG_CRIT, "PMDA interface version %d not supported",
+    pmNotifyErr(LOG_CRIT, "PMDA interface version %d not supported",
 		    dispatch->comm.pmda_interface);
     return -1;
 }
@@ -47,17 +47,17 @@ __pmdaMainPDU(pmdaInterface *dispatch)
     pmResult		*result;
     int			ctxnum;
     int			length;
-    __pmTimeval		when;
+    pmTimeval		when;
     int			ident;
     int			type;
     pmInDom		indom;
     int			inst;
     char		*iname;
-    __pmInResult	*inres;
+    pmInResult		*inres;
     pmLabelSet		*labels = NULL;
     char		*buffer;
-    __pmProfile  	*new_profile;
-    static __pmProfile	*profile = NULL;
+    pmProfile  		*new_profile;
+    static pmProfile	*profile = NULL;
     static int		first_time = 1;
     static pmdaExt	*pmda = NULL;
     int			pinpdu;
@@ -65,11 +65,11 @@ __pmdaMainPDU(pmdaInterface *dispatch)
     /* Initial version checks */
     if (first_time) {
 	if (dispatch->status != 0) {
-	    __pmNotifyErr(LOG_ERR, "PMDA Initialisation Failed");
+	    pmNotifyErr(LOG_ERR, "PMDA Initialisation Failed");
 	    return -1;
 	}
 	if (!HAVE_ANY(dispatch->comm.pmda_interface)) {
-	    __pmNotifyErr(LOG_CRIT, "PMDA interface version %d not supported",
+	    pmNotifyErr(LOG_CRIT, "PMDA interface version %d not supported",
 			 dispatch->comm.pmda_interface);
 	    return -1;
 	}
@@ -82,7 +82,7 @@ __pmdaMainPDU(pmdaInterface *dispatch)
     if (sts == 0)
 	return PM_ERR_EOF;
     if (sts < 0) {
-	__pmNotifyErr(LOG_ERR, "IPC Error: %s\n", pmErrStr(sts));
+	pmNotifyErr(LOG_ERR, "IPC Error: %s\n", pmErrStr(sts));
 	return sts;
     }
 
@@ -118,7 +118,7 @@ __pmdaMainPDU(pmdaInterface *dispatch)
 	    if (op_sts == PM_ERR_NOTCONN) {
 		if (HAVE_V_FIVE(dispatch->comm.pmda_interface)) {
 		    if (pmDebugOptions.context) {
-			__pmNotifyErr(LOG_DEBUG, "Received PDU_ERROR (end context %d)\n", dispatch->version.four.ext->e_context);
+			pmNotifyErr(LOG_DEBUG, "Received PDU_ERROR (end context %d)\n", dispatch->version.four.ext->e_context);
 		    }
 		    if (pmda->e_endCallBack != NULL) {
 			(*(pmda->e_endCallBack))(dispatch->version.four.ext->e_context);
@@ -126,7 +126,7 @@ __pmdaMainPDU(pmdaInterface *dispatch)
 		}
 	    }
 	    else {
-		__pmNotifyErr(LOG_ERR,
+		pmNotifyErr(LOG_ERR,
 		      "%s: unexpected error pdu from pmcd: %s?\n",
 		      pmda->e_name, pmErrStr(op_sts));
 	    }
@@ -140,7 +140,7 @@ __pmdaMainPDU(pmdaInterface *dispatch)
 	 */
 
 	if (pmDebugOptions.libpmda) {
-	    __pmNotifyErr(LOG_DEBUG, "Received PDU_PROFILE\n");
+	    pmNotifyErr(LOG_DEBUG, "Received PDU_PROFILE\n");
 	}
 
 	/*
@@ -166,7 +166,7 @@ __pmdaMainPDU(pmdaInterface *dispatch)
 	 */
 
 	if (pmDebugOptions.libpmda) {
-	    __pmNotifyErr(LOG_DEBUG, "Received PDU_FETCH\n");
+	    pmNotifyErr(LOG_DEBUG, "Received PDU_FETCH\n");
 	}
 
 	sts = __pmDecodeFetch(pb, &ctxnum, &when, &npmids, &pmidlist);
@@ -177,20 +177,16 @@ __pmdaMainPDU(pmdaInterface *dispatch)
 	if (sts < 0)
 	    __pmSendError(pmda->e_outfd, FROM_ANON, sts);
 	else {
-	    /* this is for PURIFY to prevent a UMR in __pmXmitPDU */
-	    result->timestamp.tv_sec = 0;
-	    result->timestamp.tv_usec = 0;
 	    __pmSendResult(pmda->e_outfd, FROM_ANON, result);
-	    if (pmda->e_resultCallBack != NULL) {
-		(pmda->e_resultCallBack)(result);
-	    }
+	    if (pmda->e_resultCallBack)
+		pmda->e_resultCallBack(result);
 	}
 	break;
 
     case PDU_PMNS_NAMES:
 
 	if (pmDebugOptions.libpmda) {
-	    __pmNotifyErr(LOG_DEBUG, "Received PDU_PMNS_NAMES\n");
+	    pmNotifyErr(LOG_DEBUG, "Received PDU_PMNS_NAMES\n");
 	}
 
 	if ((sts = __pmDecodeNameList(pb, &npmids, &namelist, NULL)) >= 0) {
@@ -219,7 +215,7 @@ __pmdaMainPDU(pmdaInterface *dispatch)
     case PDU_PMNS_CHILD:
 
 	if (pmDebugOptions.libpmda) {
-	    __pmNotifyErr(LOG_DEBUG, "Received PDU_PMNS_CHILD\n");
+	    pmNotifyErr(LOG_DEBUG, "Received PDU_PMNS_CHILD\n");
 	}
 
 	if ((sts = __pmDecodeChildReq(pb, &name, &subtype)) >= 0) {
@@ -249,7 +245,7 @@ __pmdaMainPDU(pmdaInterface *dispatch)
     case PDU_PMNS_TRAVERSE:
 
 	if (pmDebugOptions.libpmda) {
-	    __pmNotifyErr(LOG_DEBUG, "Received PDU_PMNS_TRAVERSE\n");
+	    pmNotifyErr(LOG_DEBUG, "Received PDU_PMNS_TRAVERSE\n");
 	}
 
 	if ((sts = __pmDecodeTraversePMNSReq(pb, &name)) >= 0) {
@@ -276,7 +272,7 @@ __pmdaMainPDU(pmdaInterface *dispatch)
     case PDU_PMNS_IDS:
 
 	if (pmDebugOptions.libpmda) {
-	    __pmNotifyErr(LOG_DEBUG, "Received PDU_PMNS_IDS\n");
+	    pmNotifyErr(LOG_DEBUG, "Received PDU_PMNS_IDS\n");
 	}
 
 	sts = __pmDecodeIDList(pb, 1, &pmid, &op_sts);
@@ -301,7 +297,7 @@ __pmdaMainPDU(pmdaInterface *dispatch)
     case PDU_DESC_REQ:
 
 	if (pmDebugOptions.libpmda) {
-	    __pmNotifyErr(LOG_DEBUG, "Received PDU_DESC_REQ\n");
+	    pmNotifyErr(LOG_DEBUG, "Received PDU_DESC_REQ\n");
 	}
 
 	if ((sts = __pmDecodeDescReq(pb, &pmid)) >= 0)
@@ -315,7 +311,7 @@ __pmdaMainPDU(pmdaInterface *dispatch)
     case PDU_LABEL_REQ:
 
 	if (pmDebugOptions.libpmda) {
-	    __pmNotifyErr(LOG_DEBUG, "Received PDU_LABEL_REQ\n");
+	    pmNotifyErr(LOG_DEBUG, "Received PDU_LABEL_REQ\n");
 	}
 
 	if ((sts = __pmDecodeLabelReq(pb, &ident, &type)) >= 0 &&
@@ -326,6 +322,8 @@ __pmdaMainPDU(pmdaInterface *dispatch)
 	if (sts < 0)
 	    __pmSendError(pmda->e_outfd, FROM_ANON, sts);
 	else {
+	    if (sts > 0 && !(type & PM_LABEL_INSTANCES))
+		sts = 1;
 	    __pmSendLabel(pmda->e_outfd, FROM_ANON, ident, type, labels, sts);
 	    pmFreeLabelSets(labels, sts);
 	}
@@ -334,7 +332,7 @@ __pmdaMainPDU(pmdaInterface *dispatch)
     case PDU_INSTANCE_REQ:
 
 	if (pmDebugOptions.libpmda) {
-	    __pmNotifyErr(LOG_DEBUG, "Received PDU_INSTANCE_REQ\n");
+	    pmNotifyErr(LOG_DEBUG, "Received PDU_INSTANCE_REQ\n");
 	}
 
 	if ((sts = __pmDecodeInstanceReq(pb, &when, &indom, &inst, &iname)) >= 0)
@@ -352,7 +350,7 @@ __pmdaMainPDU(pmdaInterface *dispatch)
     case PDU_TEXT_REQ:
 
 	if (pmDebugOptions.libpmda) {
-	    __pmNotifyErr(LOG_DEBUG, "Received PDU_TEXT_REQ\n");
+	    pmNotifyErr(LOG_DEBUG, "Received PDU_TEXT_REQ\n");
 	}
 
 	if ((sts = __pmDecodeTextReq(pb, &ident, &type)) >= 0)
@@ -367,7 +365,7 @@ __pmdaMainPDU(pmdaInterface *dispatch)
     case PDU_RESULT:
 
 	if (pmDebugOptions.libpmda) {
-	    __pmNotifyErr(LOG_DEBUG, "Received PDU_RESULT\n");
+	    pmNotifyErr(LOG_DEBUG, "Received PDU_RESULT\n");
 	}
 
 	if ((sts = __pmDecodeResult(pb, &result)) >= 0)
@@ -378,13 +376,13 @@ __pmdaMainPDU(pmdaInterface *dispatch)
 
     case PDU_CONTROL_REQ:
 	if (pmDebugOptions.libpmda) {
-	    __pmNotifyErr(LOG_DEBUG, "Received PDU_CONTROL_REQ\n");
+	    pmNotifyErr(LOG_DEBUG, "Received PDU_CONTROL_REQ\n");
 	}
 	break;
 
     case PDU_ATTR:
 	if (pmDebugOptions.libpmda)
-	    __pmNotifyErr(LOG_DEBUG, "Received PDU_ATTR\n");
+	    pmNotifyErr(LOG_DEBUG, "Received PDU_ATTR\n");
 	if (__pmDecodeAttr(pb, &subtype, &buffer, &length) < 0) 
 	    break;
 	if (HAVE_V_SIX(dispatch->comm.pmda_interface)) {
@@ -397,7 +395,7 @@ __pmdaMainPDU(pmdaInterface *dispatch)
 
     default: {
 	char	strbuf[20];
-	__pmNotifyErr(LOG_ERR,
+	pmNotifyErr(LOG_ERR,
 		      "%s: Unrecognised pdu type: %s?\n",
 		      pmda->e_name, __pmPDUTypeStr_r(sts, strbuf, sizeof(strbuf)));
 	}
@@ -433,7 +431,7 @@ pmdaSetResultCallBack(pmdaInterface *dispatch, pmdaResultCallBack callback)
     if (HAVE_ANY(dispatch->comm.pmda_interface))
 	dispatch->version.any.ext->e_resultCallBack = callback;
     else {
-	__pmNotifyErr(LOG_CRIT, "Unable to set result callback for PMDA interface version %d.",
+	pmNotifyErr(LOG_CRIT, "Unable to set result callback for PMDA interface version %d.",
 		     dispatch->comm.pmda_interface);
 	dispatch->status = PM_ERR_GENERIC;
     }
@@ -445,7 +443,7 @@ pmdaSetEndContextCallBack(pmdaInterface *dispatch, pmdaEndContextCallBack callba
     if (HAVE_V_FIVE(dispatch->comm.pmda_interface) || callback == NULL)
 	dispatch->version.four.ext->e_endCallBack = callback;
     else {
-	__pmNotifyErr(LOG_CRIT, "Unable to set end context callback for PMDA interface version %d.",
+	pmNotifyErr(LOG_CRIT, "Unable to set end context callback for PMDA interface version %d.",
 		     dispatch->comm.pmda_interface);
 	dispatch->status = PM_ERR_GENERIC;
     }
@@ -457,7 +455,7 @@ pmdaSetFetchCallBack(pmdaInterface *dispatch, pmdaFetchCallBack callback)
     if (HAVE_ANY(dispatch->comm.pmda_interface))
 	dispatch->version.any.ext->e_fetchCallBack = callback;
     else {
-	__pmNotifyErr(LOG_CRIT, "Unable to set fetch callback for PMDA interface version %d.",
+	pmNotifyErr(LOG_CRIT, "Unable to set fetch callback for PMDA interface version %d.",
 		     dispatch->comm.pmda_interface);
 	dispatch->status = PM_ERR_GENERIC;
     }
@@ -469,7 +467,7 @@ pmdaSetCheckCallBack(pmdaInterface *dispatch, pmdaCheckCallBack callback)
     if (HAVE_ANY(dispatch->comm.pmda_interface))
 	dispatch->version.any.ext->e_checkCallBack = callback;
     else {
-	__pmNotifyErr(LOG_CRIT, "Unable to set check callback for PMDA interface version %d.",
+	pmNotifyErr(LOG_CRIT, "Unable to set check callback for PMDA interface version %d.",
 		     dispatch->comm.pmda_interface);
 	dispatch->status = PM_ERR_GENERIC;
     }
@@ -481,7 +479,7 @@ pmdaSetDoneCallBack(pmdaInterface *dispatch, pmdaDoneCallBack callback)
     if (HAVE_ANY(dispatch->comm.pmda_interface))
 	dispatch->version.any.ext->e_doneCallBack = callback;
     else {
-	__pmNotifyErr(LOG_CRIT, "Unable to set done callback for PMDA interface version %d.",
+	pmNotifyErr(LOG_CRIT, "Unable to set done callback for PMDA interface version %d.",
 		     dispatch->comm.pmda_interface);
 	dispatch->status = PM_ERR_GENERIC;
     }
@@ -493,7 +491,7 @@ pmdaSetLabelCallBack(pmdaInterface *dispatch, pmdaLabelCallBack callback)
     if (HAVE_V_SEVEN(dispatch->comm.pmda_interface))
 	dispatch->version.any.ext->e_labelCallBack = callback;
     else {
-	__pmNotifyErr(LOG_CRIT, "Unable to set label callback for PMDA interface version %d.",
+	pmNotifyErr(LOG_CRIT, "Unable to set label callback for PMDA interface version %d.",
 		     dispatch->comm.pmda_interface);
 	dispatch->status = PM_ERR_GENERIC;
     }

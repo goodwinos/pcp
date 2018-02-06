@@ -170,7 +170,7 @@ dodso_desc(pmID pmid, pmDesc *desc)
     sts = dispatch.version.any.desc(pmid, desc, dispatch.version.four.ext);
 
     if (sts >= 0  && (pmDebugOptions.pdu))
-	__pmPrintDesc(stdout, desc);
+	pmPrintDesc(stdout, desc);
 
     return sts;
 }/*dodso_desc*/
@@ -185,7 +185,7 @@ dodso(int pdu)
     pmDesc		*desc_list = NULL;
     pmResult		*result;
     pmLabelSet		*labelset = NULL;
-    __pmInResult	*inresult;
+    pmInResult	*inresult;
     int			i;
     int			j;
     char		*buffer;
@@ -197,14 +197,14 @@ dodso(int pdu)
     pmID		pmid;
 
     if (timer != 0)
-	__pmtimevalNow(&start);
+	pmtimevalNow(&start);
 
     switch (pdu) {
 
 	case PDU_DESC_REQ:
             printf("PMID: %s\n", pmIDStr(param.pmid));
             if ((sts = dodso_desc(param.pmid, &desc)) >= 0)
-		__pmPrintDesc(stdout, &desc);
+		pmPrintDesc(stdout, &desc);
             else
 	        printf("Error: DSO desc() failed: %s\n", pmErrStr(sts));
 	    break;
@@ -372,8 +372,8 @@ dodso(int pdu)
 		i = param.pmid;
 	    }
 	    else if (param.number & PM_LABEL_INSTANCES) {
-		printf("Instances of PMID: %s\n", pmIDStr(param.pmid));
-		i = param.pmid;
+		printf("Instances of pmInDom: %s\n", pmInDomStr(param.indom));
+		i = param.indom;
 	    }
 	    else /* param.number & (PM_LABEL_DOMAIN|PM_LABEL_CONTEXT) */
 		i = PM_IN_NULL;
@@ -503,7 +503,7 @@ dodso(int pdu)
     }
   
     if (sts >= 0 && timer != 0) {
-	__pmtimevalNow(&end);
-	printf("Timer: %f seconds\n", __pmtimevalSub(&end, &start));
+	pmtimevalNow(&end);
+	printf("Timer: %f seconds\n", pmtimevalSub(&end, &start));
     }
 }

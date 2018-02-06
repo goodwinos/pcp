@@ -1,7 +1,7 @@
 /*
  * Common argument parsing for all PMAPI client tools.
  *
- * Copyright (c) 2014-2016 Red Hat.
+ * Copyright (c) 2014-2018 Red Hat.
  * Copyright (C) 1987-2014 Free Software Foundation, Inc.
  *
  * This library is free software; you can redistribute it and/or modify it
@@ -16,7 +16,7 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "internal.h"
 #include <ctype.h>
 #include <dirent.h>
@@ -42,7 +42,7 @@ __pmUpdateBounds(pmOptions *opts, int index, struct timeval *begin, struct timev
 
     if ((sts = pmGetArchiveLabel(&label)) < 0) {
 	pmprintf("%s: Cannot get archive %s label record: %s\n",
-		pmProgname, opts->archives[index], pmErrStr(sts));
+		pmGetProgname(), opts->archives[index], pmErrStr(sts));
 	return sts;
     }
     if ((sts = pmGetArchiveEnd(&logend)) < 0) {
@@ -50,7 +50,7 @@ __pmUpdateBounds(pmOptions *opts, int index, struct timeval *begin, struct timev
 	logend.tv_usec = 0;
 	fflush(stdout);
 	fprintf(stderr, "%s: Cannot locate end of archive %s: %s\n",
-		pmProgname, opts->archives[index], pmErrStr(sts));
+		pmGetProgname(), opts->archives[index], pmErrStr(sts));
 	fprintf(stderr, "\nWARNING: "
     "This archive is sufficiently damaged that it may not be possible to\n");
 	fprintf(stderr,   "         "
@@ -64,9 +64,9 @@ __pmUpdateBounds(pmOptions *opts, int index, struct timeval *begin, struct timev
 	*end = logend;
     } else {
 	/* must now check if this archive pre- or post- dates others */
-	if (__pmtimevalSub(begin, &label.ll_start) > 0.0)
+	if (pmtimevalSub(begin, &label.ll_start) > 0.0)
 	    *begin = label.ll_start;
-	if (__pmtimevalSub(end, &logend) < 0.0)
+	if (pmtimevalSub(end, &logend) < 0.0)
 	    *end = logend;
     }
     return 0;
@@ -81,17 +81,14 @@ __pmUpdateBounds(pmOptions *opts, int index, struct timeval *begin, struct timev
  * Note - called with an active context via pmGetContextOptions.
  */
 static int
-__pmBoundaryOptions(
-  pmOptions *opts,
-  struct timeval *begin,
-  struct timeval *end
-) {
+__pmBoundaryOptions(pmOptions *opts, struct timeval *begin, struct timeval *end)
+{
     int	i;
     int	ctx, sts = 0;
 
     if (opts->context != PM_CONTEXT_ARCHIVE) {
 	/* live/local context, open ended - start now, never end */
-	__pmtimevalNow(begin);
+	pmtimevalNow(begin);
 	end->tv_sec = INT_MAX;
 	end->tv_usec = 0;
     } else if (opts->narchives == 1) {
@@ -104,7 +101,7 @@ __pmBoundaryOptions(
 	    sts = pmNewContext(PM_CONTEXT_ARCHIVE, opts->archives[i]);
 	    if (sts < 0) {
 		pmprintf("%s: Cannot open archive %s: %s\n",
-			pmProgname, opts->archives[i], pmErrStr(sts));
+			pmGetProgname(), opts->archives[i], pmErrStr(sts));
 		break;
 	    }
 	    ctx = sts;
@@ -137,7 +134,7 @@ pmGetContextOptions(int ctxid, pmOptions *opts)
 	pmGetContextHostName_r(ctxid, hostname, MAXHOSTNAMELEN);
 	if ((tzh = pmNewContextZone()) < 0) {
 	    pmprintf("%s: Cannot set context timezone: %s\n",
-			pmProgname, pmErrStr(tzh));
+			pmGetProgname(), pmErrStr(tzh));
 	    opts->errors++;
 	}
 	else if (opts->flags & PM_OPTFLAG_STDOUT_TZ) {
@@ -149,7 +146,7 @@ pmGetContextOptions(int ctxid, pmOptions *opts)
     else if (opts->timezone) {
 	if ((tzh = pmNewZone(opts->timezone)) < 0) {
 	    pmprintf("%s: Cannot set timezone to \"%s\": %s\n",
-			pmProgname, opts->timezone, pmErrStr(tzh));
+			pmGetProgname(), opts->timezone, pmErrStr(tzh));
 	    opts->errors++;
 	}
 	else if (opts->flags & PM_OPTFLAG_STDOUT_TZ) {
@@ -170,7 +167,7 @@ pmGetContextOptions(int ctxid, pmOptions *opts)
 			&first_boundary, &last_boundary,
 			&opts->start, &opts->finish, &opts->origin,
 			&msg) < 0) {
-	    pmprintf("%s: invalid time window.\n%s\n", pmProgname, msg);
+	    pmprintf("%s: invalid time window.\n%s\n", pmGetProgname(), msg);
 	    opts->errors++;
 	    free(msg);
 	}
@@ -210,19 +207,23 @@ __pmEndOptions(pmOptions *opts)
 	    opts->context = PM_CONTEXT_HOST;
 	else if (opts->narchives && !opts->nhosts)
 	    opts->context = PM_CONTEXT_ARCHIVE;
+	else if (opts->origin_optarg) {
+	    opts->context = PM_CONTEXT_ARCHIVE;
+	    __pmAddOptArchivePath(opts);
+	}
     }
 
     if ((opts->start_optarg || opts->align_optarg || opts->origin_optarg) &&
 	 opts->context != PM_CONTEXT_ARCHIVE) {
 	pmprintf("%s: time window options are supported for archives only\n",
-		 pmProgname);
+		 pmGetProgname());
 	opts->errors++;
     }
 
     if (opts->tzflag && opts->context != PM_CONTEXT_ARCHIVE &&
 	opts->context != PM_CONTEXT_HOST) {
 	pmprintf("%s: use of timezone from metric source requires a source\n",
-		 pmProgname);
+		 pmGetProgname());
 	opts->errors++;
     }
 
@@ -250,13 +251,19 @@ __pmSetStartTime(pmOptions *opts, char *arg)
 }
 
 static void
+__pmSetFinishTime(pmOptions *opts, char *arg)
+{
+    opts->finish_optarg = arg;
+}
+
+static void
 __pmSetDebugFlag(pmOptions *opts, char *arg)
 {
     int sts;
 
     if ((sts = pmSetDebug(arg)) < 0) {
 	pmprintf("%s: unrecognized debug options specification (%s)\n",
-		pmProgname, arg);
+		pmGetProgname(), arg);
 	opts->errors++;
     }
 }
@@ -265,7 +272,7 @@ static void
 __pmSetGuiModeFlag(pmOptions *opts)
 {
     if (opts->guiport_optarg) {
-	pmprintf("%s: at most one of -g and -p allowed\n", pmProgname);
+	pmprintf("%s: at most one of -g and -p allowed\n", pmGetProgname());
 	opts->errors++;
     } else {
 	opts->guiflag = 1;
@@ -278,7 +285,7 @@ __pmSetGuiPort(pmOptions *opts, char *arg)
     char *endnum;
 
     if (opts->guiflag) {
-	pmprintf("%s: at most one of -g and -p allowed\n", pmProgname);
+	pmprintf("%s: at most one of -g and -p allowed\n", pmGetProgname());
 	opts->errors++;
     } else {
 	opts->guiport_optarg = arg;
@@ -324,7 +331,7 @@ addArchive(pmOptions *opts, char *arg)
 	 */
 	if (archives == NULL) {
 	    /* The initial name. */
-	    size = sizeof (*archives);
+	    size = sizeof(*archives);
 	    if ((archives = malloc(size)) == NULL)
 		goto noMem;
 	    size = strlen(arg); /* for noMem below */
@@ -341,12 +348,12 @@ addArchive(pmOptions *opts, char *arg)
 		    return; /* duplicate */
 	    }
 	    /* Add a comma plus the additional name. */
-	    size = strlen (*archives) + 1 + strlen (arg) + 1;
+	    size = strlen (*archives) + 1 + strlen(arg) + 1;
 	    if ((tmp_archives = realloc(*archives, size)) == NULL)
 		goto noMem;
 	    *archives = tmp_archives;
-	    strcat (*archives, ",");
-	    strcat (*archives, arg);
+	    strcat(*archives, ",");
+	    strcat(*archives, arg);
 	}
     }
 
@@ -354,20 +361,57 @@ addArchive(pmOptions *opts, char *arg)
     return;
 
  noMem:
-    __pmNoMem("pmGetOptions(archive)", size, PM_FATAL_ERR);
+    pmNoMem("pmGetOptions(archive)", size, PM_FATAL_ERR);
     /*NOTREACHED*/
+}
+
+/*
+ * Add a path to the default archive location for localhost,
+ * as an archive argument.  Used when -O/--origin given but
+ * no explicit path to archives is passed in, automatically
+ * provides a best-effort guess.
+ */
+void
+__pmAddOptArchivePath(pmOptions *opts)
+{
+    const char	fallback[] = "/var/log/pcp";
+    const char	*paths[] = { "pmlogger", "pmmgr" };
+    const char	*logdir = pmGetOptionalConfig("PCP_LOG_DIR");
+    char	hostname[MAXHOSTNAMELEN];
+    char	sep = pmPathSeparator();
+    char	dir[MAXPATHLEN];
+    int		i, found = 0;
+
+    if (!logdir)
+	logdir = fallback;
+    if (gethostname(hostname, sizeof(hostname)) < 0)
+	pmsprintf(hostname, sizeof(hostname), "localhost");
+
+    for (i = 0; i < sizeof(paths)/sizeof(paths[0]); i++) {
+	pmsprintf(dir, sizeof(dir), "%s%c%s%c%s",
+			logdir, sep, paths[i], sep, hostname);
+	if (access(dir, F_OK) == 0) {
+	    addArchive(opts, dir);
+	    found = 1;
+	    break;
+	}
+    }
+    if (!found) {
+	pmsprintf(dir, sizeof(dir), "%s%c%s%c%s",
+			logdir, sep, paths[0], sep, hostname);
+	addArchive(opts, dir);
+    }
 }
 
 void
 __pmAddOptArchive(pmOptions *opts, char *arg)
 {
     if (opts->nhosts && !(opts->flags & PM_OPTFLAG_MIXED)) {
-	pmprintf("%s: only one host or archive allowed\n", pmProgname);
+	pmprintf("%s: only one host or archive allowed\n", pmGetProgname());
 	opts->errors++;
-	return;
+    } else {
+	addArchive(opts, arg);
     }
-
-    addArchive(opts, arg);
 }
 
 static char *
@@ -390,7 +434,7 @@ __pmAddOptArchiveList(pmOptions *opts, char *arg)
     char saveend;
 
     if (opts->nhosts && !(opts->flags & PM_OPTFLAG_MIXED)) {
-	pmprintf("%s: only one of hosts or archives allowed\n", pmProgname);
+	pmprintf("%s: only one of hosts or archives allowed\n", pmGetProgname());
 	opts->errors++;
 	return;
     }
@@ -413,7 +457,7 @@ __pmAddOptArchiveList(pmOptions *opts, char *arg)
 	start = (*end == '\0') ? end : end + 1;
     }
     if (opts->narchives > 1 && !(opts->flags & PM_OPTFLAG_MULTI)) {
-	pmprintf("%s: too many archives requested: %s\n", pmProgname, arg);
+	pmprintf("%s: too many archives requested: %s\n", pmGetProgname(), arg);
 	opts->errors++;
     }
 }
@@ -426,10 +470,10 @@ __pmAddOptHost(pmOptions *opts, char *arg)
     size_t size = sizeof(char *) * (opts->nhosts + 1);
 
     if (opts->nhosts && !(opts->flags & PM_OPTFLAG_MULTI)) {
-	pmprintf("%s: too many hosts requested: %s\n", pmProgname, arg);
+	pmprintf("%s: too many hosts requested: %s\n", pmGetProgname(), arg);
 	opts->errors++;
     } else if (opts->narchives && !(opts->flags & PM_OPTFLAG_MIXED)) {
-	pmprintf("%s: only one host or archive allowed\n", pmProgname);
+	pmprintf("%s: only one host or archive allowed\n", pmGetProgname());
 	opts->errors++;
     } else if ((tmp_hosts = realloc(hosts, size)) != NULL) {
 	hosts = tmp_hosts;
@@ -437,7 +481,7 @@ __pmAddOptHost(pmOptions *opts, char *arg)
 	opts->hosts = hosts;
 	opts->nhosts++;
     } else {
-	__pmNoMem("pmGetOptions(host)", size, PM_FATAL_ERR);
+	pmNoMem("pmGetOptions(host)", size, PM_FATAL_ERR);
 	/*NOTREACHED*/
     }
 }
@@ -468,36 +512,36 @@ __pmAddOptArchiveFolio(pmOptions *opts, char *arg)
 #define FOLIO_VERSION	"Version: 1"
 
     if (opts->nhosts && !(opts->flags & PM_OPTFLAG_MIXED)) {
-	pmprintf("%s: only one of hosts or archives allowed\n", pmProgname);
+	pmprintf("%s: only one of hosts or archives allowed\n", pmGetProgname());
 	opts->errors++;
     } else if (arg == NULL) {
-	pmprintf("%s: cannot open empty archive folio name\n", pmProgname);
+	pmprintf("%s: cannot open empty archive folio name\n", pmGetProgname());
 	opts->flags |= PM_OPTFLAG_RUNTIME_ERR;
 	opts->errors++;
     } else if ((fp = fopen(arg, "r")) == NULL) {
-	pmprintf("%s: cannot open archive folio %s: %s\n", pmProgname,
+	pmprintf("%s: cannot open archive folio %s: %s\n", pmGetProgname(),
 		arg, pmErrStr_r(-oserror(), buffer, sizeof(buffer)));
 	opts->flags |= PM_OPTFLAG_RUNTIME_ERR;
 	opts->errors++;
     } else {
 	size_t length;
 	char *p, *log, *dir;
-	int line, sep = __pmPathSeparator();
+	int line, sep = pmPathSeparator();
 
 	if (fgets(buffer, sizeof(buffer)-1, fp) == NULL) {
-	    pmprintf("%s: archive folio %s has no header\n", pmProgname, arg);
+	    pmprintf("%s: archive folio %s has no header\n", pmGetProgname(), arg);
 	    goto badfolio;
 	}
 	if (strncmp(buffer, FOLIO_MAGIC, sizeof(FOLIO_MAGIC)-1) != 0) {
-	    pmprintf("%s: archive folio %s has bad magic\n", pmProgname, arg);
+	    pmprintf("%s: archive folio %s has bad magic\n", pmGetProgname(), arg);
 	    goto badfolio;
 	}
 	if (fgets(buffer, sizeof(buffer)-1, fp) == NULL) {
-	    pmprintf("%s: archive folio %s has no version\n", pmProgname, arg);
+	    pmprintf("%s: archive folio %s has no version\n", pmGetProgname(), arg);
 	    goto badfolio;
 	}
 	if (strncmp(buffer, FOLIO_VERSION, sizeof(FOLIO_VERSION)-1) != 0) {
-	    pmprintf("%s: unknown version archive folio %s\n", pmProgname, arg);
+	    pmprintf("%s: unknown version archive folio %s\n", pmGetProgname(), arg);
 	    goto badfolio;
 	}
 
@@ -514,14 +558,14 @@ __pmAddOptArchiveFolio(pmOptions *opts, char *arg)
 	    p = skip_whitespace(p);
 	    if (*p == '\n') {
 		pmprintf("%s: missing host on archive folio line %d\n",
-			pmProgname, line);
+			pmGetProgname(), line);
 		goto badfolio;
 	    }
 	    p = skip_nonwhitespace(p);
 	    p = skip_whitespace(p);
 	    if (*p == '\n') {
 		pmprintf("%s: missing path on archive folio line %d\n",
-			pmProgname, line);
+			pmGetProgname(), line);
 		goto badfolio;
 	    }
 
@@ -531,7 +575,7 @@ __pmAddOptArchiveFolio(pmOptions *opts, char *arg)
 
 	    length = strlen(dir) + 1 + strlen(log) + 1;
 	    if ((p = (char *)malloc(length)) == NULL)
-		__pmNoMem("pmGetOptions(archive)", length, PM_FATAL_ERR);
+		pmNoMem("pmGetOptions(archive)", length, PM_FATAL_ERR);
 	    pmsprintf(p, length, "%s%c%s", dir, sep, log);
 	    __pmAddOptArchive(opts, p);
 	    free(p);
@@ -540,7 +584,7 @@ __pmAddOptArchiveFolio(pmOptions *opts, char *arg)
 	fclose(fp);
     }
     if (opts->narchives > 1 && !(opts->flags & PM_OPTFLAG_MULTI)) {
-	pmprintf("%s: too many archives requested: %s\n", pmProgname, arg);
+	pmprintf("%s: too many archives requested: %s\n", pmGetProgname(), arg);
 	opts->errors++;
     }
     return;
@@ -554,11 +598,8 @@ badfolio:
 static void
 __pmAddOptHostFile(pmOptions *opts, char *arg)
 {
-    if (!(opts->flags & PM_OPTFLAG_MULTI)) {
-	pmprintf("%s: too many hosts requested: %s\n", pmProgname, arg);
-	opts->errors++;
-    } else if (opts->narchives && !(opts->flags & PM_OPTFLAG_MIXED)) {
-	pmprintf("%s: only one of hosts or archives allowed\n", pmProgname);
+    if (opts->narchives && !(opts->flags & PM_OPTFLAG_MIXED)) {
+	pmprintf("%s: only one of hosts or archives allowed\n", pmGetProgname());
 	opts->errors++;
     } else {
 	FILE *fp = fopen(arg, "r");
@@ -577,6 +618,11 @@ __pmAddOptHostFile(pmOptions *opts, char *arg)
 		    p++;
 		if (*p == '\n' || *p == '#')
 		    continue;
+		if (opts->nhosts > 0 && !(opts->flags & PM_OPTFLAG_MULTI)) {
+		    pmprintf("%s: too many hosts requested: %s\n", pmGetProgname(), arg);
+		    opts->errors++;
+		    break;
+		}
 		host = p;
 		length = 0;
 		while (*p != '\n' && *p != '#' && !isspace((int)*p)) {
@@ -591,10 +637,10 @@ __pmAddOptHostFile(pmOptions *opts, char *arg)
 			opts->hosts = hosts;
 			opts->nhosts++;
 		    } else {
-			__pmNoMem("pmGetOptions(host)", length, PM_FATAL_ERR);
+			pmNoMem("pmGetOptions(host)", length, PM_FATAL_ERR);
 		    }
 		} else {
-		    __pmNoMem("pmGetOptions(hosts)", size, PM_FATAL_ERR);
+		    pmNoMem("pmGetOptions(hosts)", size, PM_FATAL_ERR);
 		    /*NOTREACHED*/
 		}
 	    }
@@ -603,7 +649,7 @@ __pmAddOptHostFile(pmOptions *opts, char *arg)
 	} else {
 	    char errmsg[PM_MAXERRMSGLEN];
 
-	    pmprintf("%s: cannot open hosts file %s: %s\n", pmProgname, arg,
+	    pmprintf("%s: cannot open hosts file %s: %s\n", pmGetProgname(), arg,
 		    osstrerror_r(errmsg, sizeof(errmsg)));
 	    opts->flags |= PM_OPTFLAG_RUNTIME_ERR;
 	    opts->errors++;
@@ -615,7 +661,7 @@ void
 __pmAddOptHostList(pmOptions *opts, char *arg)
 {
     if (opts->narchives && !(opts->flags & PM_OPTFLAG_MIXED)) {
-	pmprintf("%s: only one of hosts or archives allowed\n", pmProgname);
+	pmprintf("%s: only one of hosts or archives allowed\n", pmGetProgname());
 	opts->errors++;
     } else {
 	char *start = arg, *end;
@@ -637,18 +683,18 @@ __pmAddOptHostList(pmOptions *opts, char *arg)
 		    opts->hosts = hosts;
 		    opts->nhosts++;
 		} else {
-		    __pmNoMem("pmGetOptions(host)", length, PM_FATAL_ERR);
+		    pmNoMem("pmGetOptions(host)", length, PM_FATAL_ERR);
 		    /*NOTREACHED*/
 		}
 	    } else {
-		__pmNoMem("pmGetOptions(hosts)", size, PM_FATAL_ERR);
+		pmNoMem("pmGetOptions(hosts)", size, PM_FATAL_ERR);
 	    }
 	next:
 	    start = (*end == '\0') ? end : end + 1;
 	}
     }
     if (opts->nhosts > 1 && !(opts->flags & PM_OPTFLAG_MULTI)) {
-	pmprintf("%s: too many hosts requested: %s\n", pmProgname, arg);
+	pmprintf("%s: too many hosts requested: %s\n", pmGetProgname(), arg);
 	opts->errors++;
     }
 }
@@ -669,7 +715,7 @@ __pmSetDerivedMetrics(pmOptions *opts, char *arg)
     int sts;
 
     if ((sts = pmLoadDerivedConfig(arg)) < 0) {
-	pmprintf("%s: pmLoadDerivedConfig failed: %s\n", pmProgname,
+	pmprintf("%s: pmLoadDerivedConfig failed: %s\n", pmGetProgname(),
 		pmErrStr_r(sts, errmsg, sizeof(errmsg)));
 	opts->errors++;
     }
@@ -680,8 +726,8 @@ __pmSetLocalContextTable(pmOptions *opts, char *arg)
 {
     char *errmsg;
 
-    if ((errmsg = __pmSpecLocalPMDA(arg)) != NULL) {
-	pmprintf("%s: __pmSpecLocalPMDA failed: %s\n", pmProgname, errmsg);
+    if ((errmsg = pmSpecLocalPMDA(arg)) != NULL) {
+	pmprintf("%s: pmSpecLocalPMDA failed: %s\n", pmGetProgname(), errmsg);
 	opts->errors++;
     }
 }
@@ -690,7 +736,7 @@ void
 __pmSetLocalContextFlag(pmOptions *opts)
 {
     if (opts->context && !(opts->flags & PM_OPTFLAG_MULTI)) {
-	pmprintf("%s: at most one of -a, -h and -L allowed\n", pmProgname);
+	pmprintf("%s: at most one of -a, -h and -L allowed\n", pmGetProgname());
 	opts->errors++;
     } else {
 	opts->Lflag = 1;
@@ -704,7 +750,7 @@ __pmSetNameSpace(pmOptions *opts, char *arg, int dupok)
 
     if ((sts = pmLoadASCIINameSpace(arg, dupok)) < 0) {
 	pmprintf("%s: Cannot load namespace from \"%s\": %s\n",
-		pmProgname, arg, pmErrStr(sts));
+		pmGetProgname(), arg, pmErrStr(sts));
 	opts->flags |= PM_OPTFLAG_RUNTIME_ERR;
 	opts->errors++;
     } else {
@@ -717,26 +763,10 @@ __pmSetSampleCount(pmOptions *opts, char *arg)
 {
     char *endnum;
 
-    if (opts->finish_optarg) {
-	pmprintf("%s: at most one of -T and -s allowed\n", pmProgname);
+    opts->samples = (int)strtol(arg, &endnum, 10);
+    if (*endnum != '\0' || opts->samples < 0) {
+	pmprintf("%s: -s requires numeric argument\n", pmGetProgname());
 	opts->errors++;
-    } else {
-	opts->samples = (int)strtol(arg, &endnum, 10);
-	if (*endnum != '\0' || opts->samples < 0) {
-	    pmprintf("%s: -s requires numeric argument\n", pmProgname);
-	    opts->errors++;
-	}
-    }
-}
-
-static void
-__pmSetFinishTime(pmOptions *opts, char *arg)
-{
-    if (opts->samples) {
-	pmprintf("%s: at most one of -T and -s allowed\n", pmProgname);
-	opts->errors++;
-    } else {
-	opts->finish_optarg = arg;
     }
 }
 
@@ -747,7 +777,7 @@ __pmSetSampleInterval(pmOptions *opts, char *arg)
 
     if (pmParseInterval(arg, &opts->interval, &endnum) < 0) {
 	pmprintf("%s: -t argument not in pmParseInterval(3) format:\n",
-		pmProgname);
+		pmGetProgname());
 	pmprintf("%s\n", endnum);
 	opts->errors++;
 	free(endnum);
@@ -758,7 +788,7 @@ static void
 __pmSetTimeZone(pmOptions *opts, char *arg)
 {
     if (opts->tzflag) {
-	pmprintf("%s: at most one of -Z and -z allowed\n", pmProgname);
+	pmprintf("%s: at most one of -Z and -z allowed\n", pmGetProgname());
 	opts->errors++;
     } else {
 	opts->timezone = arg;
@@ -769,7 +799,7 @@ static void
 __pmSetHostZone(pmOptions *opts)
 {
     if (opts->timezone) {
-	pmprintf("%s: at most one of -Z and -z allowed\n", pmProgname);
+	pmprintf("%s: at most one of -Z and -z allowed\n", pmGetProgname());
 	opts->errors++;
     } else {
 	opts->tzflag = 1;
@@ -780,7 +810,7 @@ static void
 __pmSetVersionPCP(pmOptions *opts)
 {
     opts->flags |= PM_OPTFLAG_EXIT;
-    pmprintf("%s version %s\n", pmProgname, PCP_VERSION);
+    pmprintf("%s version %s\n", pmGetProgname(), PCP_VERSION);
 }
 
 /*
@@ -797,7 +827,18 @@ __pmStartOptions(pmOptions *opts)
     if (opts->flags & PM_OPTFLAG_INIT)
 	return;
 
+    /* need to check for PCP_DEBUG first ... */
     for (p = _environ; *p != NULL; p++) {
+	s = *p;
+	if (strncmp(s, "PCP_DEBUG=", 10) != 0)
+	    continue;
+	value = &s[10];
+	__pmSetDebugFlag(opts, value);
+	break;
+    }
+
+    for (p = _environ; *p != NULL; p++) {
+	int	found;
 	s = *p;
 	if (strncmp(s, "PCP_", 4) != 0)
 	    continue;	/* short circuit if not PCP-prefixed */
@@ -807,51 +848,95 @@ __pmStartOptions(pmOptions *opts)
 	    value++;	/* skip over the equals sign */
 	}
 
-	if (strcmp(s, "ALIGN_TIME") == 0)
+	found = 0;
+	if (strcmp(s, "ALIGN_TIME") == 0) {
 	    __pmSetAlignment(opts, value);
-	else if (strcmp(s, "ARCHIVE") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "ARCHIVE") == 0) {
 	    __pmAddOptArchive(opts, value);
-	else if (strcmp(s, "ARCHIVE_LIST") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "ARCHIVE_LIST") == 0) {
 	    __pmAddOptArchiveList(opts, value);
-	else if (strcmp(s, "DEBUG") == 0)
-	    __pmSetDebugFlag(opts, value);
-	else if (strcmp(s, "FOLIO") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "DEBUG") == 0) {
+	    /* processed above */
+	    found = 1;
+	}
+	else if (strcmp(s, "FOLIO") == 0) {
 	    __pmAddOptArchiveFolio(opts, value);
-	else if (strcmp(s, "GUIMODE") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "GUIMODE") == 0) {
 	    __pmSetGuiModeFlag(opts);
-	else if (strcmp(s, "HOST") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "HOST") == 0) {
 	    __pmAddOptHost(opts, value);
-	else if (strcmp(s, "HOST_LIST") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "HOST_LIST") == 0) {
 	    __pmAddOptHostList(opts, value);
-	else if (strcmp(s, "SPECLOCAL") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "SPECLOCAL") == 0) {
 	    __pmSetLocalContextTable(opts, value);
+	    found = 1;
+	}
 	else if (strcmp(s, "LOCALMODE") == 0 ||
-		 strcmp(s, "LOCALPMDA") == 0)
+		 strcmp(s, "LOCALPMDA") == 0) {
 	    __pmSetLocalContextFlag(opts);
-	else if (strcmp(s, "NAMESPACE") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "NAMESPACE") == 0) {
 	    __pmSetNameSpace(opts, value, 1);
-	else if (strcmp(s, "UNIQNAMES") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "UNIQNAMES") == 0) {
 	    __pmSetNameSpace(opts, value, 0);
+	    found = 1;
+	}
 	else if (strcmp(s, "ORIGIN") == 0 ||
-		 strcmp(s, "ORIGIN_TIME") == 0)
+		 strcmp(s, "ORIGIN_TIME") == 0) {
 	    __pmSetOrigin(opts, value);
-	else if (strcmp(s, "GUIPORT") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "GUIPORT") == 0) {
 	    __pmSetGuiPort(opts, value);
-	else if (strcmp(s, "START_TIME") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "START_TIME") == 0) {
 	    __pmSetStartTime(opts, value);
-	else if (strcmp(s, "SAMPLES") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "SAMPLES") == 0) {
 	    __pmSetSampleCount(opts, value);
-	else if (strcmp(s, "FINISH_TIME") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "FINISH_TIME") == 0) {
 	    __pmSetFinishTime(opts, value);
-	else if (strcmp(s, "INTERVAL") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "INTERVAL") == 0) {
 	    __pmSetSampleInterval(opts, value);
-	else if (strcmp(s, "TIMEZONE") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "TIMEZONE") == 0) {
 	    __pmSetTimeZone(opts, value);
-	else if (strcmp(s, "HOSTZONE") == 0)
+	    found = 1;
+	}
+	else if (strcmp(s, "HOSTZONE") == 0) {
 	    __pmSetHostZone(opts);
+	    found = 1;
+	}
 
 	if (value)		/* reset the environment */
 	    *(value-1) = '=';
+
+	if (found && pmDebugOptions.config)
+	    fprintf(stderr, "pmGetOptions: %s set from the environment\n", *p);
     }
 
     opts->flags |= PM_OPTFLAG_INIT;
@@ -929,7 +1014,7 @@ pmGetOptions(int argc, char *const *argv, pmOptions *opts)
     int c = EOF;
 
     if (!(opts->flags & PM_OPTFLAG_INIT)) {
-	__pmSetProgname(argv[0]);
+	pmSetProgname(argv[0]);
 	opts->__initialized = 1;
 	__pmStartOptions(opts);
     }
@@ -1044,7 +1129,7 @@ pmUsageMessage(pmOptions *opts)
 	goto flush;
 
     message = opts->short_usage ? opts->short_usage : "[options]";
-    pmprintf("Usage: %s %s\n", pmProgname, message);
+    pmprintf("Usage: %s %s\n", pmGetProgname(), message);
 
     for (option = opts->long_options; option; option++) {
 	if (!option->long_opt)	/* sentinel */
@@ -1268,7 +1353,7 @@ pmgetopt_r(int argc, char *const *argv, pmOptions *d)
 	if (d->optind == 0)
 	    d->optind = 1;	/* Don't scan ARGV[0], the program name.  */
 	if (!d->__initialized)
-	    __pmSetProgname(argv[0]);
+	    pmSetProgname(argv[0]);
 	optstring = __pmgetopt_initialize(argc, argv, d);
 	d->__initialized = 2;
     }
@@ -1430,7 +1515,7 @@ pmgetopt_r(int argc, char *const *argv, pmOptions *d)
 		ambig_list = &first;
 
 		pmprintf("%s: option '%s' is ambiguous; possibilities:",
-			pmProgname, argv[d->optind]);
+			pmGetProgname(), argv[d->optind]);
 		do {
 		    pmprintf(" '--%s'", ambig_list->p->long_opt);
 		    ambig_list = ambig_list->next;
@@ -1458,11 +1543,11 @@ pmgetopt_r(int argc, char *const *argv, pmOptions *d)
 			if (argv[d->optind - 1][1] == '-') {
 			    /* --option */
 			    pmprintf("%s: option '--%s' doesn't allow an argument\n",
-				     pmProgname, pfound->long_opt);
+				     pmGetProgname(), pfound->long_opt);
 			} else {
 			    /* +option or -option */
 			    pmprintf("%s: option '%c%s' doesn't allow an argument\n",
-				     pmProgname, argv[d->optind - 1][0],
+				     pmGetProgname(), argv[d->optind - 1][0],
 				     pfound->long_opt);
 			}
 		    }
@@ -1477,7 +1562,7 @@ pmgetopt_r(int argc, char *const *argv, pmOptions *d)
 		} else {
 		    if (print_errors) {
 			pmprintf("%s: option '--%s' requires an argument\n",
-				pmProgname, pfound->long_opt);
+				pmGetProgname(), pfound->long_opt);
 		    }
 		    d->__nextchar += strlen(d->__nextchar);
 		    d->optopt = pfound->short_opt;
@@ -1501,11 +1586,11 @@ pmgetopt_r(int argc, char *const *argv, pmOptions *d)
 		if (argv[d->optind][1] == '-') {
 		    /* --option */
 		    pmprintf("%s: unrecognized option '--%s'\n",
-			    pmProgname, d->__nextchar);
+			    pmGetProgname(), d->__nextchar);
 		} else {
 		    /* +option or -option */
 		    pmprintf("%s: unrecognized option '%c%s'\n",
-			    pmProgname, argv[d->optind][0], d->__nextchar);
+			    pmGetProgname(), argv[d->optind][0], d->__nextchar);
 		}
 	    }
 	    d->__nextchar = (char *) "";
@@ -1527,7 +1612,7 @@ pmgetopt_r(int argc, char *const *argv, pmOptions *d)
 
 	if (temp == NULL || c == ':' || c == ';') {
 	    if (print_errors) {
-		pmprintf("%s: invalid option -- '%c'\n", pmProgname, c);
+		pmprintf("%s: invalid option -- '%c'\n", pmGetProgname(), c);
 	    }
 	    d->optopt = c;
 	    return '?';
@@ -1556,7 +1641,7 @@ pmgetopt_r(int argc, char *const *argv, pmOptions *d)
 	    else if (d->optind == argc) {
 		if (print_errors) {
 		    pmprintf("%s: option requires an argument -- '%c'\n",
-			     pmProgname, c);
+			     pmGetProgname(), c);
 		}
 		d->optopt = c;
 		if (optstring[0] == ':')
@@ -1604,7 +1689,7 @@ pmgetopt_r(int argc, char *const *argv, pmOptions *d)
 	    if (ambig && !exact) {
 		if (print_errors) {
 		    pmprintf("%s: option '-W %s' is ambiguous\n",
-			     pmProgname, d->optarg);
+			     pmGetProgname(), d->optarg);
 		}
 		d->__nextchar += strlen(d->__nextchar);
 		d->optind++;
@@ -1618,7 +1703,7 @@ pmgetopt_r(int argc, char *const *argv, pmOptions *d)
 		    } else {
 			if (print_errors) {
 			    pmprintf("%s: option '-W %s' doesn't allow an argument\n",
-				     pmProgname, pfound->long_opt);
+				     pmGetProgname(), pfound->long_opt);
 			}
 			d->__nextchar += strlen(d->__nextchar);
 			return '?';
@@ -1630,7 +1715,7 @@ pmgetopt_r(int argc, char *const *argv, pmOptions *d)
 		    } else {
 			if (print_errors) {
 			    pmprintf("%s: option '-W %s' requires an argument\n",
-				     pmProgname, pfound->long_opt);
+				     pmGetProgname(), pfound->long_opt);
 			}
 			d->__nextchar += strlen(d->__nextchar);
 			return optstring[0] == ':' ? ':' : '?';
@@ -1672,7 +1757,7 @@ no_longs:
 		else if (d->optind == argc) {
 		    if (print_errors) {
 			pmprintf("%s: option requires an argument -- '%c'\n",
-				 pmProgname, c);
+				 pmGetProgname(), c);
 		    }
 		    d->optopt = c;
 		    if (optstring[0] == ':')

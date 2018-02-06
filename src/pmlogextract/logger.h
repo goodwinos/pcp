@@ -22,13 +22,14 @@
 #define _LOGGER_H
 
 #include "pmapi.h"
+#include "libpcp.h"
 
 /*
  *  list of pdu's to write out at start of time window
  */
 typedef struct _reclist_t {
     __pmPDU		*pdu;		/* PDU ptr */
-    __pmTimeval		stamp;		/* for indom records */
+    pmTimeval		stamp;		/* for indom records */
     pmDesc		desc;
     int			written;	/* written status */
     struct _reclist_t	*ptr;		/* ptr to record in another reclist */
@@ -47,6 +48,9 @@ typedef struct {
     pmResult	*_Nresult;
     int		eof[2];
     int		mark;		/* need EOL marker */
+    int		recnum;
+    int64_t	pmcd_pid;	/* from prologue/epilogue records */
+    int32_t	pmcd_seqnum;	/* from prologue/epilogue records */
 } inarch_t;
 
 extern inarch_t	*inarch;	/* input archive control(s) */
@@ -103,7 +107,7 @@ extern int	yyparse(void);
 extern void	dometric(const char *);
 
 /* log I/O helper routines */
-extern int _pmLogGet(__pmLogCtl *, int, __pmPDU **);
+extern int _pmLogGet(__pmArchCtl *, int, __pmPDU **);
 extern int _pmLogPut(__pmFILE *, __pmPDU *);
 extern pmUnits ntoh_pmUnits(pmUnits);
 #define ntoh_pmInDom(indom) ntohl(indom)

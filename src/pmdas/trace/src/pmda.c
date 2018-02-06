@@ -17,12 +17,13 @@
 
 #include <ctype.h>
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "pmda.h"
 #include "domain.h"
 #include "trace.h"
 #include "trace_dev.h"
 #include "comms.h"
+#include "data.h"
 
 #define DEFAULT_TIMESPAN	60	/* one minute  */
 #define DEFAULT_BUFSIZE		5	/* twelve second update */
@@ -32,6 +33,7 @@ struct timeval	interval;
 unsigned int	rbufsize  = DEFAULT_BUFSIZE;
 int		ctlport	  = -1;
 char		*ctlsock;
+int		somedebug;
 
 static char	mypath[MAXPATHLEN];
 static char	*username;
@@ -40,7 +42,7 @@ extern void traceInit(pmdaInterface *dispatch);
 extern void traceMain(pmdaInterface *dispatch);
 extern int  updateObserveValue(const char *);
 extern int  updateCounterValue(const char *);
-extern void debuglibrary(int);
+extern void debuglibrary(void);
 
 static void
 usage(void)
@@ -58,7 +60,7 @@ Options:\n\
   -T period   time over which samples are considered (default 60 seconds)\n\
   -U units    export observation values using the given units\n\
   -V units    export counter values using the given units\n",
-	      pmProgname);
+	      pmGetProgname());
     exit(1);
 }
 
@@ -90,7 +92,7 @@ parseAuth(char *spec)
 
     if (first) {
 	if (__pmAccAddOp(TR_OP_SEND) < 0) {
-	    __pmNotifyErr(LOG_ERR, "failed to add send auth operation");
+	    pmNotifyErr(LOG_ERR, "failed to add send auth operation");
 	    return -1;
 	}
 	first = 0;
@@ -99,7 +101,7 @@ parseAuth(char *spec)
     if (strncasecmp(spec, "disallow:", 9) == 0) {
 	p = squash(&spec[9], &offset);
 	if (p == NULL || p[0] == '\0') {
-	    fprintf(stderr, "%s: invalid disallow (%s)\n", pmProgname, spec);
+	    fprintf(stderr, "%s: invalid disallow (%s)\n", pmGetProgname(), spec);
 	    if (p)
 	    	free(p);
 	    return -1;
@@ -108,13 +110,13 @@ parseAuth(char *spec)
 	    fprintf(stderr, "deny: host '%s'\n", p);
 	denyops = TR_OP_SEND;
 	if (__pmAccAddHost(p, specops, denyops, 0) < 0)
-	    __pmNotifyErr(LOG_ERR, "failed to add authorisation (%s)", p);
+	    pmNotifyErr(LOG_ERR, "failed to add authorisation (%s)", p);
 	free(p);
     }
     else if (strncasecmp(spec, "allow:", 6) == 0) {
 	p = squash(&spec[6], &offset);
 	if (p == NULL || p[0] == '\0') {
-	    fprintf(stderr, "%s: invalid allow (%s)\n", pmProgname, spec);
+	    fprintf(stderr, "%s: invalid allow (%s)\n", pmGetProgname(), spec);
 	    if (p)
 	    	free(p);
 	    return -1;
@@ -122,7 +124,7 @@ parseAuth(char *spec)
 	offset += 7;
 	maxconn = (int)strtol(&spec[offset], &endnum, 10);
 	if (*endnum != '\0' || maxconn < 0) {
-	    fprintf(stderr, "%s: bogus max connection in '%s'\n", pmProgname,
+	    fprintf(stderr, "%s: bogus max connection in '%s'\n", pmGetProgname(),
 		    &spec[offset]);
 	    free(p);
 	    return -1;
@@ -131,11 +133,11 @@ parseAuth(char *spec)
 	    fprintf(stderr, "allow: host '%s', maxconn=%d\n", p, maxconn);
 	denyops = TR_OP_NONE;
 	if (__pmAccAddHost(p, specops, denyops, maxconn) < 0)
-	    __pmNotifyErr(LOG_ERR, "failed to add authorisation (%s)", p);
+	    pmNotifyErr(LOG_ERR, "failed to add authorisation (%s)", p);
 	free(p);
     }
     else {
-	fprintf(stderr, "%s: access spec is invalid (%s)\n", pmProgname, spec);
+	fprintf(stderr, "%s: access spec is invalid (%s)\n", pmGetProgname(), spec);
 	return -1;
     }
     return 0;
@@ -147,15 +149,16 @@ main(int argc, char **argv)
     pmdaInterface	dispatch;
     char		*endnum;
     int			err = 0;
-    int			sep = __pmPathSeparator();
+    int			sep = pmPathSeparator();
     int			c = 0;
+    int			sts;
 
-    __pmSetProgname(argv[0]);
-    __pmGetUsername(&username);
+    pmSetProgname(argv[0]);
+    pmGetUsername(&username);
 
     pmsprintf(mypath, sizeof(mypath), "%s%c" "trace" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
-    pmdaDaemon(&dispatch, PMDA_INTERFACE_2, pmProgname, TRACE,
+    pmdaDaemon(&dispatch, PMDA_INTERFACE_2, pmGetProgname(), TRACE,
 		"trace.log", mypath);
 
     /* need - port, as well as time interval and time span for averaging */
@@ -166,6 +169,15 @@ main(int argc, char **argv)
 	    if (parseAuth(optarg) < 0)
 		err++;
 	    /* add optarg to access control list */
+	    break;
+	case 'D':
+	    sts = pmSetDebug(optarg);
+	    if (sts < 0) {
+		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
+		    pmGetProgname(), optarg);
+		err++;
+	    }
+	    somedebug = 1;
 	    break;
 	case 'I':
 	    ctlport = (int)strtol(optarg, &endnum, 10);
@@ -178,14 +190,14 @@ main(int argc, char **argv)
 	case 'N':
 	    rbufsize = (int)strtol(optarg, &endnum, 10);
 	    if (*endnum != '\0' || rbufsize < 1) {
-		fprintf(stderr, "%s: -N requires a positive number.\n", pmProgname);
+		fprintf(stderr, "%s: -N requires a positive number.\n", pmGetProgname());
 		err++;
 	    }
 	    break;
 	case 'T':
 	    if (pmParseInterval(optarg, &timespan, &endnum) < 0) {
 		fprintf(stderr, "%s: -T requires a time interval: %s\n",
-			pmProgname, endnum);
+			pmGetProgname(), endnum);
 		free(endnum);
 		err++;
 	    }
@@ -210,10 +222,10 @@ main(int argc, char **argv)
     interval.tv_usec = (long)((timespan.tv_sec % rbufsize) * 1000000);
     rbufsize++;		/* reserve space for the `working' buffer */
 
-    debuglibrary(pmDebug);
+    debuglibrary();
 
     pmdaOpenLog(&dispatch);
-    __pmSetProcessIdentity(username);
+    pmSetProcessIdentity(username);
     traceInit(&dispatch);
     pmdaConnect(&dispatch);
     traceMain(&dispatch);

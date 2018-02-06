@@ -185,7 +185,7 @@ validate_metrics(void)
 
     time(&now);
     fprintf(stderr, "%s: Validating metrics after PMCD state changed at %s",
-		    pmProgname, ctime(&now));
+		    pmGetProgname(), ctime(&now));
 
     /*
      * Check each metric in each element of the task list, whether it is
@@ -206,7 +206,7 @@ validate_metrics(void)
 
 	new_pmids = malloc(tp->t_numpmid * sizeof(*tp->t_pmidlist));
 	if (new_pmids == NULL) {
-	    __pmNoMem("allocating pmID array for validating metrice",
+	    pmNoMem("allocating pmID array for validating metrice",
 		      tp->t_numpmid * sizeof(*tp->t_pmidlist), PM_FATAL_ERR);
 	}
 	if ((sts = pmLookupName(tp->t_numpmid, tp->t_namelist, new_pmids)) < 0) {

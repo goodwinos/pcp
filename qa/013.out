@@ -5,9 +5,12 @@ For PCP 2.0 -l tmparch/foo.meta is a synonym for -l src/foo, so this works ...
 === tmparch/foo.meta: exists ===
 Log Label (Log Format Version 2)
 Performance metrics from host HOST
-  commencing DATE
-  ending     DATE
+    commencing DATE
+    ending     DATE
 [filtered and sorted stderr]
+__pmFopen: index_compress -> -1
+__pmFopen: index_compress -> -1
+__pmFopen: index_compress -> -1
 __pmLogChangeVol: change to volume 0
 __pmLogOpen: inspect file "tmparch/foo.0"
 __pmLogOpen: inspect file "tmparch/foo.index"
@@ -23,5 +26,4 @@ pmdumplog: Cannot open archive "/tmp/fungus": No such file or directory
 [filtered and sorted stderr]
 __pmLogOpen: Not found: data file "bogus.0" (or similar)
 __pmLogOpen: Not found: metadata file "bogus.meta"
-__pmLogOpen: inspect file "/tmp/bogus.verylongsuffix"
 pmdumplog: Cannot open archive "/tmp/bogus": No such file or directory

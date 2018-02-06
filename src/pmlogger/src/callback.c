@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017 Red Hat.
+ * Copyright (c) 2014-2018 Red Hat.
  * Copyright (c) 1995-2001 Silicon Graphics, Inc.  All Rights Reserved.
  * 
  * This program is free software; you can redistribute it and/or modify it
@@ -17,9 +17,9 @@
 
 int	last_log_offset;
 
-#define IS_DERIVED_LOGGED(x) (pmid_domain(x) == DYNAMIC_PMID && (pmid_cluster(x) & 2048) == 2048 && pmid_item(x) != 0)
-#define SET_DERIVED_LOGGED(x) pmid_build(pmid_domain(x), 2048 | pmid_cluster(x), pmid_item(x))
-#define CLEAR_DERIVED_LOGGED(x) pmid_build(pmid_domain(x), ~2048 & pmid_cluster(x), pmid_item(x))
+#define IS_DERIVED_LOGGED(x) (pmID_domain(x) == DYNAMIC_PMID && (pmID_cluster(x) & 2048) == 2048 && pmID_item(x) != 0)
+#define SET_DERIVED_LOGGED(x) pmID_build(pmID_domain(x), 2048 | pmID_cluster(x), pmID_item(x))
+#define CLEAR_DERIVED_LOGGED(x) pmID_build(pmID_domain(x), ~2048 & pmID_cluster(x), pmID_item(x))
 
 /*
  * pro tem, we have a single context with the pmcd providing the
@@ -153,7 +153,7 @@ setavail(pmResult *resp)
 		continue;
 	    php = (pmidhist_t *)calloc(1, sizeof(pmidhist_t));
 	    if (php == (pmidhist_t *)0) {
-		__pmNoMem("setavail: new pmid hist entry calloc",
+		pmNoMem("setavail: new pmid hist entry calloc",
 			 sizeof(pmidhist_t), PM_FATAL_ERR);
 	    }
 	    php->ph_pmid = pmid;
@@ -165,7 +165,7 @@ setavail(pmResult *resp)
 	    php->ph_numinst = vsp->numval;
 	    ihp = (insthist_t *)calloc(vsp->numval, sizeof(insthist_t));
 	    if (ihp == (insthist_t *)0) {
-		__pmNoMem("setavail: inst list calloc",
+		pmNoMem("setavail: inst list calloc",
 			 vsp->numval * sizeof(insthist_t), PM_FATAL_ERR);
 	    }
 	    php->ph_instlist = ihp;
@@ -196,11 +196,14 @@ setavail(pmResult *resp)
 	    else {
 		/* allocate new instance if required */
 		int	need = (k + 1) * sizeof(insthist_t);
+		insthist_t	*tmp_instlist;
 
-		php->ph_instlist = (insthist_t *)realloc(php->ph_instlist, need);
-		if (php->ph_instlist == (insthist_t *)0) {
-		    __pmNoMem("setavail: inst list realloc", need, PM_FATAL_ERR);
+		tmp_instlist = (insthist_t *)realloc(php->ph_instlist, need);
+		if (tmp_instlist == NULL) {
+		    pmNoMem("setavail: inst list realloc", need, PM_FATAL_ERR);
+		    /* NOTREACHED */
 		}
+		php->ph_instlist = tmp_instlist;
 		ihp = &php->ph_instlist[k];
 		ihp->ih_inst = inst;
 		ihp->ih_flags = 0;
@@ -217,29 +220,49 @@ setavail(pmResult *resp)
  * Note that the tp argument is used to return the timestamp of the indom.
  * It is a merger of __pmLogGetIndom and searchindom.
  */
-int
-__localLogGetInDom(__pmLogCtl *lcp, pmInDom indom, __pmTimeval *tp, int **instlist, char ***namelist)
+static int
+__localLogGetInDom(__pmLogCtl *lcp, pmInDom indom, pmTimeval *tp, int **instlist, char ***namelist)
 {
     __pmHashNode	*hp;
     __pmLogInDom	*idp;
+    int			sts;
 
-    if (pmDebugOptions.logmeta)
-	fprintf(stderr, "__localLogGetInDom( ..., %s)\n",
+    if (pmDebugOptions.logmeta && pmDebugOptions.desperate)
+	fprintf(stderr, "__localLogGetInDom( ..., %s) -> ",
 	    pmInDomStr(indom));
 
-    if ((hp = __pmHashSearch((unsigned int)indom, &lcp->l_hashindom)) == NULL)
-	return 0;
+    if ((hp = __pmHashSearch((unsigned int)indom, &lcp->l_hashindom)) == NULL) {
+	sts = -1;
+	goto done;
+    }
 
     idp = (__pmLogInDom *)hp->data;
 
-    if (idp == NULL)
-	return PM_ERR_INDOM_LOG;
+    if (idp == NULL) {
+	sts = PM_ERR_INDOM_LOG;
+	goto done;
+    }
 
     *instlist = idp->instlist;
     *namelist = idp->namelist;
     *tp = idp->stamp;
 
-    return idp->numinst;
+    sts = idp->numinst;
+
+done:
+    if (pmDebugOptions.logmeta && pmDebugOptions.desperate) {
+	if (hp == NULL)
+	    fprintf(stderr, "%d (__pmHashSearch failed)\n", sts);
+	else if (sts >= 0) {
+	    fprintf(stderr, "%d @ ", sts);
+	    __pmPrintTimeval(stderr, tp);
+	    fputc('\n', stderr);
+	}
+	else
+	    fprintf(stderr, "%s\n", pmErrStr(sts));
+    }
+
+    return sts;
 }
 
 
@@ -292,6 +315,133 @@ check_inst(pmValueSet *vsp, int hint, pmResult *lrp)
     return 0;
 }
 
+static int
+putlabels(unsigned int type, unsigned int ident, const pmTimeval *tp)
+{
+    int		len;
+    pmLabelSet	*label;
+
+    if (type == PM_LABEL_CONTEXT)
+	len = pmGetContextLabels(&label);
+    else if (type == PM_LABEL_DOMAIN)
+	len = pmGetDomainLabels(ident, &label);
+    else if (type == PM_LABEL_CLUSTER)
+	len = pmGetClusterLabels(ident, &label);
+    else if (type == PM_LABEL_INDOM)
+	len = pmGetInDomLabels(ident, &label);
+    else if (type == PM_LABEL_ITEM)
+	len = pmGetItemLabels(ident, &label);
+    else if (type == PM_LABEL_INSTANCES)
+	len = pmGetInstancesLabels(ident, &label);
+    else
+	len = 0;
+
+    if (len > 0)
+	return __pmLogPutLabel(&archctl, type, ident, len, label, tp);
+
+    return 0;
+}
+
+static int
+manageLabels(pmDesc *desc, const pmTimeval *tp, int only_instances)
+{
+    int		i = 0;
+    int		sts = 0;
+    pmLabelSet	*label;
+    unsigned int type;
+    unsigned int ident = PM_IN_NULL;
+    unsigned int label_types[] = {
+	PM_LABEL_CONTEXT, PM_LABEL_DOMAIN, PM_LABEL_INDOM,
+	PM_LABEL_CLUSTER, PM_LABEL_ITEM, PM_LABEL_INSTANCES
+    };
+    const unsigned int	ntypes = sizeof(label_types) / sizeof(label_types[0]);
+
+    if (only_instances)
+	i = ntypes - 1;
+
+    for (; i < ntypes; i++) {
+	type = label_types[i];
+
+	if (type == PM_LABEL_INDOM || type == PM_LABEL_INSTANCES) {
+	    if (desc->indom == PM_INDOM_NULL)
+		continue;
+	    ident = desc->indom;
+	}
+	else if (type == PM_LABEL_DOMAIN)
+	    ident = pmID_domain(desc->pmid);
+	else if (type == PM_LABEL_CLUSTER)
+	    ident = pmID_build(pmID_domain(desc->pmid), pmID_cluster(desc->pmid), 0);
+	else if (type == PM_LABEL_ITEM)
+	    ident = desc->pmid;
+	else
+	    ident = PM_IN_NULL;
+
+	/* Lookup returns >= 0 when the key exists */
+	if (__pmLogLookupLabel(&archctl, type, ident, &label, tp) >= 0)
+	    continue;
+
+	if ((sts = putlabels(type, ident, tp)) < 0)
+	    break;
+    }
+    return sts;
+}
+
+static int
+manageText(pmDesc *desc)
+{
+    int		i;
+    int		j;
+    int		sts;
+    int		level;
+    int		indom;
+    unsigned int types;
+    unsigned int ident;
+    char	*text;
+    unsigned int text_types[] = { PM_TEXT_ONELINE, PM_TEXT_HELP };
+    unsigned int ident_types[] = { PM_TEXT_PMID, PM_TEXT_INDOM };
+    const unsigned int	ntypes = sizeof(text_types) / sizeof(text_types[0]);
+    const unsigned int	nidents = sizeof(ident_types) / sizeof(ident_types[0]);
+
+    for (i = 0; i < ntypes; i++) {
+	for (j = 0; j < nidents; j++) {
+	    types = text_types[i] | ident_types[j];
+	    level = text_types[i] | PM_TEXT_DIRECT;
+	    indom = ident_types[j] & PM_TEXT_INDOM;
+	    ident = indom ? desc->indom : desc->pmid;
+
+	    if (indom && desc->indom == PM_INDOM_NULL)
+		continue;
+
+	    /* Lookup returns >= 0 when the key exists */
+	    if (__pmLogLookupText(&archctl, ident, types, &text) >= 0)
+		continue;
+
+	    if (indom)
+		sts = pmLookupInDomText(ident, level, &text);
+	    else
+		sts = pmLookupText(ident, level, &text);
+
+	    /*
+	     * Only cache indoms help texts (final parameter) - there
+	     * are far fewer (less memory used), and we only need to
+	     * make sure we log them once, not PMID help text which
+	     * is guarded by the pmDesc logging-once logic.
+	     */
+	    if (sts == 0) {
+		if (text[0] == '\0')
+		    free(text);
+		else {
+		    sts = __pmLogPutText(&archctl, ident, types, text, indom);
+		    free(text);
+		    if (sts < 0)
+			break;
+		}
+	    }
+	}
+    }
+    return sts;
+}
+
 /*
  * Lookup the first cache index associated with a given PMID in a given task.
  */
@@ -320,6 +470,7 @@ lookupTaskCacheNames(pmID pmid, char ***namesptr)
     int		str_len = 0;
     char	*data;
     char	**names;
+    char	**tmp_names;
     task_t	*tp;
 
     /*
@@ -356,7 +507,12 @@ lookupTaskCacheNames(pmID pmid, char ***namesptr)
 		int	old_str_len = str_len;
 		str_len += strlen(tp->t_namelist[i]) + 1;
 		numnames++;
-		names = (char **)realloc(names, numnames * sizeof(names[0]) + str_len);
+		tmp_names = (char **)realloc(names, numnames * sizeof(names[0]) + str_len);
+		if (tmp_names == NULL) {
+		    pmNoMem("lookupTaskCacheNames: names realloc", numnames * sizeof(names[0]) + str_len, PM_FATAL_ERR);
+		    /* NOTREACHED */
+		}
+		names = tmp_names;
 		data = (char *)names + ((numnames-1) * sizeof(names[0]));
 		/* relocate strings */
 		memmove(data+sizeof(names[0]), data, old_str_len);
@@ -409,6 +565,7 @@ do_work(task_t *tp)
     AFctl_t		*acp;
     lastfetch_t		*lfp;
     lastfetch_t		*free_lfp;
+    int			changed;
     int			needindom;
     int			needti;
     static int		flushsize = 100000;
@@ -420,15 +577,15 @@ do_work(task_t *tp)
     int			numinst;
     int			*instlist;
     char		**namelist;
-    __pmTimeval		tmp;
-    __pmTimeval		resp_tval;
+    pmTimeval		tmp;
+    pmTimeval		resp_tval;
     unsigned long	peek_offset;
 
     if ((pmDebugOptions.appl2) && (pmDebugOptions.desperate)) {
 	struct timeval	now;
 
-	__pmtimevalNow(&now);
-	__pmPrintStamp(stderr, &now);
+	pmtimevalNow(&now);
+	pmPrintStamp(stderr, &now);
 	fprintf(stderr, " do_work(tp=%p): afid=%d parse_done=%d exit_samples=%d\n", tp, tp->t_afid, parse_done, exit_samples);
     }
 
@@ -444,7 +601,7 @@ do_work(task_t *tp)
     if (acp == (AFctl_t *)0) {
 	acp = (AFctl_t *)calloc(1, sizeof(AFctl_t));
 	if (acp == (AFctl_t *)0) {
-	    __pmNoMem("log_callback: new AFctl_t entry calloc",
+	    pmNoMem("log_callback: new AFctl_t entry calloc",
 		     sizeof(AFctl_t), PM_FATAL_ERR);
 	}
 	acp->ac_afid = tp->t_afid;
@@ -485,7 +642,7 @@ do_work(task_t *tp)
 	    else {
 		lfp = (lastfetch_t *)calloc(1, sizeof(lastfetch_t));
 		if (lfp == (lastfetch_t *)0) {
-		    __pmNoMem("log_callback: new lastfetch_t entry calloc",
+		    pmNoMem("log_callback: new lastfetch_t entry calloc",
 			     sizeof(lastfetch_t), PM_FATAL_ERR);
 		}
 		lfp->lf_next = acp->ac_fetch;
@@ -506,7 +663,7 @@ do_work(task_t *tp)
 
 	clearavail(fp);
 
-	if ((sts = myFetch(fp->f_numpmid, fp->f_pmidlist, &pb)) < 0) {
+	if ((sts = changed = myFetch(fp->f_numpmid, fp->f_pmidlist, &pb)) < 0) {
 	    if (sts == -EINTR) {
 		/* disconnect() already done in myFetch() */
 		return;
@@ -519,8 +676,9 @@ do_work(task_t *tp)
 	    }
 	    continue;
 	}
+
 	if (pmDebugOptions.appl2)
-	    fprintf(stderr, "callback: fetch group %p (%d metrics)\n", fp, fp->f_numpmid);
+	    fprintf(stderr, "callback: fetch group %p (%d metrics, 0x%x change)\n", fp, fp->f_numpmid, changed);
 
 	/*
 	 * hook to rewrite PDU buffer ...
@@ -543,11 +701,11 @@ do_work(task_t *tp)
 	 * Even without a -v option, we may need to switch volumes
 	 * if the data file exceeds 2^31-1 bytes
 	 */
-	peek_offset = __pmFtell(logctl.l_mfp);
+	peek_offset = __pmFtell(archctl.ac_mfp);
 	peek_offset += ((__pmPDUHdr *)pb)->len - sizeof(__pmPDUHdr) + 2*sizeof(int);
 	if (peek_offset > 0x7fffffff) {
 	    if (pmDebugOptions.appl2)
-		fprintf(stderr, "callback: new volume based on max size, currently %ld\n", __pmFtell(logctl.l_mfp));
+		fprintf(stderr, "callback: new volume based on max size, currently %ld\n", __pmFtell(archctl.ac_mfp));
 	    (void)newvolume(VOL_SW_MAX);
 	}
 
@@ -560,14 +718,14 @@ do_work(task_t *tp)
 	 * is decoded ... so we have 2 "write" paths for the PDU buffer
 	 * ... more sighing
 	 */
-	last_log_offset = __pmFtell(logctl.l_mfp);
+	last_log_offset = __pmFtell(archctl.ac_mfp);
 	assert(last_log_offset >= 0);
 	if (tp->t_dm == 0) {
-	    if ((sts = __pmLogPutResult2(&logctl, pb)) < 0) {
+	    if ((sts = __pmLogPutResult2(&archctl, pb)) < 0) {
 		fprintf(stderr, "__pmLogPutResult2: %s\n", pmErrStr(sts));
 		exit(1);
 	    }
-	    __pmOverrideLastFd(__pmFileno(logctl.l_mfp));
+	    __pmOverrideLastFd(__pmFileno(archctl.ac_mfp));
 	}
 	resp = NULL; /* silence coverity */
 	if ((sts = __pmDecodeResult(pb, &resp)) < 0) {
@@ -577,6 +735,13 @@ do_work(task_t *tp)
 	setavail(resp);
 	resp_tval.tv_sec = resp->timestamp.tv_sec;
 	resp_tval.tv_usec = resp->timestamp.tv_usec;
+
+	if (changed & PMCD_LABEL_CHANGE) {
+	    /*
+	     * Change to the context labels associated with logged host
+	     */
+	    putlabels(PM_LABEL_CONTEXT, PM_IN_NULL, &resp_tval);
+	}
 
 	if (tp->t_dm != 0) {
 	    /*
@@ -594,16 +759,16 @@ do_work(task_t *tp)
 		if (IS_DERIVED(vsp->pmid))
 		    vsp->pmid = SET_DERIVED_LOGGED(vsp->pmid);
 	    }
-	    if ((sts = __pmEncodeResult(__pmFileno(logctl.l_mfp), resp, &pdubuf)) < 0) {
+	    if ((sts = __pmEncodeResult(__pmFileno(archctl.ac_mfp), resp, &pdubuf)) < 0) {
 		fprintf(stderr, "__pmEncodeResult: %s\n", pmErrStr(sts));
 		exit(1);
 	    }
-	    if ((sts = __pmLogPutResult2(&logctl, pdubuf)) < 0) {
+	    if ((sts = __pmLogPutResult2(&archctl, pdubuf)) < 0) {
 		fprintf(stderr, "__pmLogPutResult2: %s\n", pmErrStr(sts));
 		exit(1);
 	    }
 	    __pmUnpinPDUBuf(pdubuf);
-	    __pmOverrideLastFd(__pmFileno(logctl.l_mfp));
+	    __pmOverrideLastFd(__pmFileno(archctl.ac_mfp));
 	    for (i = 0; i < resp->numpmid; i++) {
 		pmValueSet	*vsp = resp->vset[i];
 		if (IS_DERIVED_LOGGED(vsp->pmid))
@@ -614,13 +779,14 @@ do_work(task_t *tp)
 	needti = 0;
 	old_meta_offset = __pmFtell(logctl.l_mdfp);
 	assert(old_meta_offset >= 0);
+
 	for (i = 0; i < resp->numpmid; i++) {
 	    pmValueSet	*vsp = resp->vset[i];
 	    pmDesc	desc;
 	    char	**names = NULL;
 	    int		numnames = 0;
 
-	    sts = __pmLogLookupDesc(&logctl, vsp->pmid, &desc);
+	    sts = __pmLogLookupDesc(&archctl, vsp->pmid, &desc);
 	    if (sts < 0) {
 		/* lookup name and descriptor in task cache */
 		int taskindex = lookupTaskCacheIndex(tp, vsp->pmid);
@@ -638,10 +804,12 @@ do_work(task_t *tp)
 		if (IS_DERIVED(desc.pmid))
 		    /* derived metric, rewrite cluster field ... */
 		    desc.pmid = SET_DERIVED_LOGGED(desc.pmid);
-		if ((sts = __pmLogPutDesc(&logctl, &desc, numnames, names)) < 0) {
+		if ((sts = __pmLogPutDesc(&archctl, &desc, numnames, names)) < 0) {
 		    fprintf(stderr, "__pmLogPutDesc: %s\n", pmErrStr(sts));
 		    exit(1);
 		}
+		manageLabels(&desc, &resp_tval, 0);
+		manageText(&desc);
 		if (IS_DERIVED_LOGGED(desc.pmid))
 		    /* derived metric, restore cluster field ... */
 		    desc.pmid = CLEAR_DERIVED_LOGGED(desc.pmid);
@@ -660,18 +828,34 @@ do_work(task_t *tp)
 	    }
 	    if (desc.indom != PM_INDOM_NULL && vsp->numval > 0) {
 		/*
-		 * __pmLogGetInDom has been replaced by __localLogGetInDom so that
-		 * the timestamp of the retrieved indom is also returned. The timestamp
-		 * is then used to decide if the indom needs to be refreshed.
+		 * __pmLogGetInDom has been replaced by __localLogGetInDom
+		 * so that the timestamp of the retrieved indom is also
+		 * returned. The timestamp is then used to decide if
+		 * the indom needs to be refreshed.
 		 */
-		__pmTimeval indom_tval;
+		pmTimeval indom_tval;
 		numinst = __localLogGetInDom(&logctl, desc.indom, &indom_tval, &instlist, &namelist);
-		if (numinst < 0)
+		if (numinst > 0 && __pmTimevalSub(&resp_tval, &indom_tval) <= 0) {
+		    /*
+		     * Already have indom with the same (or later, in the
+		     * case of some time warp) timestamp compared to the
+		     * timestamp for this pmResult (from a previous metric
+		     * in the pmResult with the same indom).
+		     * Avoid doing it again:
+		     * (a) duplicate indoms with same timestamp in the
+		     *     metadata file is not a good idea
+		     * (b) (worse) pmGetInDom may return different instances
+		     *     if the indom is dynamic, like proc metrics
+		     */
+		    needindom = 0;
+		}
+		else if (numinst < 0) {
 		    needindom = 1;
+		}
 		else {
 		    needindom = 0;
 		    /* Need to see if result's insts all exist
-		     * somewhere in the hashed/cached insts.
+		     * somewhere in the most recent hashed/cached indom.
 		     * Thus a potential numval^2 search.
                      */
 		    for (j = 0; j < vsp->numval; j++) {
@@ -684,16 +868,15 @@ do_work(task_t *tp)
 			    break;
 			}
 		    }
+		    /* 
+		     * Check that instances have not diminished between
+		     * consecutive pmFetch's ... this would pass all the
+		     * tests above, but still the indom still needs to
+		     * be refeshed.
+		     */
+		    if (needindom == 0 && lfp->lf_resp != NULL)
+			needindom = check_inst(vsp, i, lfp->lf_resp);
 		}
-		/* 
-		 * Check here that the instance domain has not been changed
-		 * by a previous iteration of this loop.
-		 * So, the timestamp of resp must be after the update timestamp
-		 * of the target instance domain.
-		 */
-		if (needindom == 0 && lfp->lf_resp != (pmResult *)0 &&
-		    __pmTimevalSub(&resp_tval, &indom_tval) < 0 )
-		    needindom = check_inst(vsp, i, lfp->lf_resp);
 
 		if (needindom) {
 		    /*
@@ -707,7 +890,7 @@ do_work(task_t *tp)
 		    }
 		    tmp.tv_sec = (__int32_t)resp->timestamp.tv_sec;
 		    tmp.tv_usec = (__int32_t)resp->timestamp.tv_usec;
-		    if ((sts = __pmLogPutInDom(&logctl, desc.indom, &tmp, numinst, instlist, namelist)) < 0) {
+		    if ((sts = __pmLogPutInDom(&archctl, desc.indom, &tmp, numinst, instlist, namelist)) < 0) {
 			fprintf(stderr, "__pmLogPutInDom: %s\n", pmErrStr(sts));
 			exit(1);
 		    }
@@ -715,6 +898,7 @@ do_work(task_t *tp)
 			free(instlist);
 			free(namelist);
 		    }
+		    manageLabels(&desc, &tmp, 1);
 		    needti = 1;
 		    if (pmDebugOptions.appl2)
 			fprintf(stderr, "callback: indom (%s) changed\n", pmInDomStr(desc.indom));
@@ -722,10 +906,10 @@ do_work(task_t *tp)
 	    }
 	}
 
-	if (__pmFtell(logctl.l_mfp) > flushsize) {
+	if (__pmFtell(archctl.ac_mfp) > flushsize) {
 	    needti = 1;
 	    if (pmDebugOptions.appl2)
-		fprintf(stderr, "callback: file size (%d) reached flushsize (%d)\n", (int)__pmFtell(logctl.l_mfp), flushsize);
+		fprintf(stderr, "callback: file size (%d) reached flushsize (%d)\n", (int)__pmFtell(archctl.ac_mfp), flushsize);
 	}
 
 	if (last_log_offset == 0 || last_log_offset == sizeof(__pmLogLabel)+2*sizeof(int)) {
@@ -741,21 +925,21 @@ do_work(task_t *tp)
 	     * result (but if this is the first one, skip the label
 	     * record, what a crock), ... ditto for the meta data
 	     */
-	    new_offset = __pmFtell(logctl.l_mfp);
+	    new_offset = __pmFtell(archctl.ac_mfp);
 	    assert(new_offset >= 0);
 	    new_meta_offset = __pmFtell(logctl.l_mdfp);
 	    assert(new_meta_offset >= 0);
-	    __pmFseek(logctl.l_mfp, last_log_offset, SEEK_SET);
+	    __pmFseek(archctl.ac_mfp, last_log_offset, SEEK_SET);
 	    __pmFseek(logctl.l_mdfp, old_meta_offset, SEEK_SET);
 	    tmp.tv_sec = (__int32_t)resp->timestamp.tv_sec;
 	    tmp.tv_usec = (__int32_t)resp->timestamp.tv_usec;
-	    __pmLogPutIndex(&logctl, &tmp);
+	    __pmLogPutIndex(&archctl, &tmp);
 	    /*
 	     * ... and put them back
 	     */
-	    __pmFseek(logctl.l_mfp, new_offset, SEEK_SET);
+	    __pmFseek(archctl.ac_mfp, new_offset, SEEK_SET);
 	    __pmFseek(logctl.l_mdfp, new_meta_offset, SEEK_SET);
-	    flushsize = __pmFtell(logctl.l_mfp) + 100000;
+	    flushsize = __pmFtell(archctl.ac_mfp) + 100000;
 	}
 
 	last_stamp = resp->timestamp;	/* struct assignment */
@@ -814,10 +998,10 @@ do_work(task_t *tp)
 	    }
 	    else
 		fprintf(stderr, "every %.3f sec: %d bytes ",
-		    __pmtimevalToReal(&tp->t_delta), pdu_bytes);
+		    pmtimevalToReal(&tp->t_delta), pdu_bytes);
 	    fprintf(stderr, "or %.2f Mbytes/day\n",
 		((double)pdu_bytes * 24 * 60 * 60) /
-		(1024 * 1024 * __pmtimevalToReal(&tp->t_delta)));
+		(1024 * 1024 * pmtimevalToReal(&tp->t_delta)));
 	}
     }
 
@@ -829,7 +1013,7 @@ do_work(task_t *tp)
 	run_done(0, "Sample limit reached");
 
     if (exit_bytes != -1 && 
-        (vol_bytes + __pmFtell(logctl.l_mfp) >= exit_bytes)) 
+        (vol_bytes + __pmFtell(archctl.ac_mfp) >= exit_bytes)) 
         /* reached exit_bytes limit, so stop logging */
         run_done(0, "Byte limit reached");
 
@@ -841,10 +1025,10 @@ do_work(task_t *tp)
     }
 
     if (vol_switch_bytes > 0 &&
-        (__pmFtell(logctl.l_mfp) >= vol_switch_bytes)) {
+        (__pmFtell(archctl.ac_mfp) >= vol_switch_bytes)) {
         (void)newvolume(VOL_SW_BYTES);
 	if (pmDebugOptions.appl2)
-	    fprintf(stderr, "callback: new volume based on size (%d)\n", (int)__pmFtell(logctl.l_mfp));
+	    fprintf(stderr, "callback: new volume based on size (%d)\n", (int)__pmFtell(archctl.ac_mfp));
     }
 
 }
@@ -854,7 +1038,7 @@ putmark(void)
 {
     struct {
 	__pmPDU		hdr;
-	__pmTimeval	timestamp;	/* when returned */
+	pmTimeval	timestamp;	/* when returned */
 	int		numpmid;	/* zero PMIDs to follow */
 	__pmPDU		tail;
     } mark;
@@ -875,7 +1059,7 @@ putmark(void)
     mark.timestamp.tv_usec = htonl(mark.timestamp.tv_usec);
     mark.numpmid = htonl(0);
 
-    if (__pmFwrite(&mark, 1, sizeof(mark), logctl.l_mfp) != sizeof(mark))
+    if (__pmFwrite(&mark, 1, sizeof(mark), archctl.ac_mfp) != sizeof(mark))
 	return -oserror();
     else
 	return 0;

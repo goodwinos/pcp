@@ -13,7 +13,7 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "pmda.h"
 #include "internal.h"
 #include "fault.h"
@@ -95,7 +95,7 @@ pmLookupDesc_ctx(__pmContext *ctxp, pmID pmid, pmDesc *desc)
     }
     else {
 	/* assume PM_CONTEXT_ARCHIVE */
-	sts = __pmLogLookupDesc(ctxp->c_archctl->ac_log, pmid, desc);
+	sts = __pmLogLookupDesc(ctxp->c_archctl, pmid, desc);
     }
 
     if (sts == PM_ERR_PMID || sts == PM_ERR_PMID_LOG || sts == PM_ERR_NOAGENT) {

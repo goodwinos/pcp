@@ -29,7 +29,7 @@
 
 %{
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "logger.h"
 
 int		mystate = GLOBAL;	/* config file parser state */
@@ -322,7 +322,7 @@ host		: hostspec
 
                     hlp = (hostlist_t *)malloc(sz);
                     if (hlp == NULL) {
-                        __pmNoMem("adding new host", sz, PM_FATAL_ERR);
+                        pmNoMem("adding new host", sz, PM_FATAL_ERR);
                     }
                     if (hl_last != NULL) {
                         hl_last->hl_next = hlp;

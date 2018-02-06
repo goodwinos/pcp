@@ -23,7 +23,7 @@
 
 #include <pcp/pmapi.h>
 #include <pcp/pmafm.h>
-#include <pcp/impl.h>
+#include <pcp/libpcp.h>
 #include <stdarg.h>
 #include <ctype.h>
 #include <math.h>
@@ -57,7 +57,7 @@ setup_options(pmOptions *opts, char **argv, char *short_options)
 		PMAPI_OPTIONS_END
 	};
 
-	__pmSetProgname(argv[0]);
+	pmSetProgname(argv[0]);
 
 	memset(opts, 0, sizeof *opts);
 	opts->flags = PM_OPTFLAG_BOUNDARIES;
@@ -576,7 +576,7 @@ setup_origin(pmOptions *opts)
 		if ((sts = pmSetMode(fetchmode, &curtime, fetchstep)) < 0)
 		{
 			pmprintf(
-		"%s: pmSetMode failure: %s\n", pmProgname, pmErrStr(sts));
+		"%s: pmSetMode failure: %s\n", pmGetProgname(), pmErrStr(sts));
 			opts->flags |= PM_OPTFLAG_RUNTIME_ERR;
 			opts->errors++;
 		}
@@ -597,7 +597,7 @@ abstime(char *str)
 
 	/* length includes @-prefix and a null terminator */
 	if ((arg = malloc(length)) == NULL)
-		__pmNoMem("abstime", length, PM_FATAL_ERR);
+		pmNoMem("abstime", length, PM_FATAL_ERR);
 	pmsprintf(arg, length, "@%s", str);
 	arg[length-1] = '\0';
 	return arg;
@@ -629,15 +629,15 @@ setup_context(pmOptions *opts)
 		if (opts->context == PM_CONTEXT_HOST)
 			pmprintf(
 		"%s: Cannot connect to pmcd on host \"%s\": %s\n",
-				pmProgname, source, pmErrStr(sts));
+				pmGetProgname(), source, pmErrStr(sts));
 		else if (opts->context == PM_CONTEXT_LOCAL)
 			pmprintf(
 		"%s: Cannot make standalone connection on localhost: %s\n",
-				pmProgname, pmErrStr(sts));
+				pmGetProgname(), pmErrStr(sts));
 		else
 			pmprintf(
 		"%s: Cannot open archive \"%s\": %s\n",
-				pmProgname, source, pmErrStr(sts));
+				pmGetProgname(), source, pmErrStr(sts));
 	}
 	else if ((sts = pmGetContextOptions(ctx, opts)) == 0)
 		sts = setup_origin(opts);
@@ -666,12 +666,14 @@ setup_globals(pmOptions *opts)
 	{
 		fprintf(stderr,
 			"%s: pmFetch failed to fetch initial metric value(s)\n",
-			pmProgname);
+			pmGetProgname());
 		cleanstop(1);
 	}
 
 	if ((hertz = extract_integer(result, descs, HOST_HERTZ)) <= 0)
 		hertz = sysconf(_SC_CLK_TCK);
+	if ((pidmax = extract_integer(result, descs, HOST_PID_MAX)) <= 0)
+		pidmax = (1 << 15);
 	if ((pagesize = extract_integer(result, descs, HOST_PAGESIZE)) <= 0)
 		pagesize = getpagesize();
 	extract_string(result, descs, HOST_RELEASE, sysname.release, sizeof(sysname.release));
@@ -852,7 +854,7 @@ setup_metrics(char **metrics, pmID *pmidlist, pmDesc *desclist, int nmetrics)
 	if ((sts = pmLookupName(nmetrics, metrics, pmidlist)) < 0)
 	{
 		fprintf(stderr, "%s: pmLookupName: %s\n",
-			pmProgname, pmErrStr(sts));
+			pmGetProgname(), pmErrStr(sts));
 		cleanstop(1);
 	}
 	if (nmetrics != sts)
@@ -864,7 +866,7 @@ setup_metrics(char **metrics, pmID *pmidlist, pmDesc *desclist, int nmetrics)
 			if (pmDebugOptions.appl0)
 				fprintf(stderr,
 					"%s: pmLookupName failed for %s\n",
-					pmProgname, metrics[i]);
+					pmGetProgname(), metrics[i]);
 		}
 	}
 
@@ -880,7 +882,7 @@ setup_metrics(char **metrics, pmID *pmidlist, pmDesc *desclist, int nmetrics)
 			if (pmDebugOptions.appl0)
 				fprintf(stderr,
 					"%s: pmLookupDesc failed for %s: %s\n",
-					pmProgname, metrics[i], pmErrStr(sts));
+					pmGetProgname(), metrics[i], pmErrStr(sts));
 			pmidlist[i] = desclist[i].pmid = PM_ID_NULL;
 		}
 	}
@@ -896,7 +898,7 @@ fetch_metrics(const char *purpose, int nmetrics, pmID *pmids, pmResult **result)
 	{
 		if (sts != PM_ERR_EOL)
 			fprintf(stderr, "%s: %s query: %s\n",
-				pmProgname, purpose, pmErrStr(sts));
+				pmGetProgname(), purpose, pmErrStr(sts));
 		cleanstop(1);
 	}
 	if (pmDebugOptions.appl1)
@@ -909,7 +911,7 @@ fetch_metrics(const char *purpose, int nmetrics, pmID *pmids, pmResult **result)
 		pmLocaltime(&sec, &tmp);
 
 		fprintf(stderr, "%s: got %d %s metrics @%02d:%02d:%02d.%03d\n",
-				pmProgname, rp->numpmid, purpose,
+				pmGetProgname(), rp->numpmid, purpose,
 				tmp.tm_hour, tmp.tm_min, tmp.tm_sec,
 				(int)(rp->timestamp.tv_usec / 1000));
 	}
@@ -941,13 +943,13 @@ get_instances(const char *purpose, int value, pmDesc *descs, int **ids, char ***
 	if (sts < 0)
 	{
 		fprintf(stderr, "%s: %s instances: %s\n",
-			pmProgname, purpose, pmErrStr(sts));
+			pmGetProgname(), purpose, pmErrStr(sts));
 		cleanstop(1);
 	}
 	if (pmDebugOptions.appl1)
 	{
 		fprintf(stderr, "%s: got %d %s instances:\n",
-			pmProgname, sts, purpose);
+			pmGetProgname(), sts, purpose);
 		for (i=0; i < sts; i++)
 			fprintf(stderr, "    [%d]  %s\n", (*ids)[i], (*insts)[i]);
 	}
@@ -966,7 +968,7 @@ rawlocalhost(pmOptions *opts)
 	if ((ctxt = pmNewContext(PM_CONTEXT_LOCAL, NULL)) < 0)
 	{
 		fprintf(stderr, "%s: cannot create local context: %s\n",
-			pmProgname, pmErrStr(ctxt));
+			pmGetProgname(), pmErrStr(ctxt));
 		cleanstop(1);
 	}
 	host = (char *)pmGetContextHostName(ctxt);
@@ -974,39 +976,10 @@ rawlocalhost(pmOptions *opts)
 
 	if (host[0] == '\0')
 	{
-		fprintf(stderr, "%s: cannot find local hostname\n", pmProgname);
+		fprintf(stderr, "%s: cannot find local hostname\n", pmGetProgname());
 		cleanstop(1);
 	}
 	return host;
-}
-
-/*
-** Extract active PCP archive file from latest archive folio,
-** use pmcd.hostname by default, unless directed elsewhere.
-*/
-void
-rawfolio(pmOptions *opts)
-{
-	int		sep = __pmPathSeparator();
-	char		path[MAXPATHLEN];
-	char		*logdir;
-
-	if ((logdir = pmGetOptionalConfig("PCP_LOG_DIR")) == NULL)
-	{
-		fprintf(stderr, "%s: cannot find PCP_LOG_DIR\n", pmProgname);
-		cleanstop(1);
-	}
-
-	pmsprintf(path, sizeof(path), "%s%c%s%c%s%c",
-		logdir, sep, "pmlogger", sep, rawlocalhost(opts), sep);
-
-	if (chdir(path) < 0)
-	{
-		fprintf(stderr, "%s: cannot change to %s: %s\n",
-			pmProgname, path, pmErrStr(-oserror()));
-		cleanstop(1);
-	}
-	__pmAddOptArchiveFolio(opts, "Latest");
 }
 
 static int
@@ -1038,11 +1011,13 @@ rawarchive(pmOptions *opts, const char *name)
 	char		tmp[MAXPATHLEN];
 	char		path[MAXPATHLEN];
 	char		*logdir, *py, *host;
-	int		sep = __pmPathSeparator();
+	int		sep = pmPathSeparator();
 	int		sts, len = (name? strlen(name) : 0);
 
-	if (len == 0)
-		return rawfolio(opts);
+	if (len == 0) {
+		__pmAddOptArchivePath(opts);
+		return;
+	}
 
 	/* see if a valid archive exists as specified */
 	if ((sts = pmNewContext(PM_CONTEXT_ARCHIVE, name)) >= 0)
@@ -1071,7 +1046,7 @@ rawarchive(pmOptions *opts, const char *name)
 	/* else go hunting in the system locations... */
 	if ((logdir = pmGetOptionalConfig("PCP_LOG_DIR")) == NULL)
 	{
-		fprintf(stderr, "%s: cannot find PCP_LOG_DIR\n", pmProgname);
+		fprintf(stderr, "%s: cannot find PCP_LOG_DIR\n", pmGetProgname());
 		cleanstop(1);
 	}
 
@@ -1118,7 +1093,7 @@ rawarchive(pmOptions *opts, const char *name)
 		else
 		{
 			fprintf(stderr, "%s: cannot find archive from \"%s\"\n",
-				pmProgname, name);
+				pmGetProgname(), name);
 			cleanstop(1);
 		}
 
@@ -1168,7 +1143,7 @@ rawwrite(pmOptions *opts, const char *name,
 	int		sts;
 
 	host = (opts->nhosts > 0) ? opts->hosts[0] : "local:";
-	interval = __pmtimevalToReal(delta);
+	interval = pmtimevalToReal(delta);
 	duration = interval * nsamples;
 
 	if (midnightflag)
@@ -1192,19 +1167,19 @@ rawwrite(pmOptions *opts, const char *name,
 	if (pmDebugOptions.appl1)
 	{
 		fprintf(stderr, "%s: start recording, %.2fsec duration [%s].\n",
-			pmProgname, duration, name);
+			pmGetProgname(), duration, name);
 	}
 
 	if (__pmMakePath(name, S_IRWXU|S_IRWXG|S_IROTH|S_IXOTH) < 0)
 	{
 		fprintf(stderr, "%s: making folio path %s for recording: %s\n",
-			pmProgname, name, osstrerror());
+			pmGetProgname(), name, osstrerror());
 		cleanstop(1);
 	}
 	if (chdir(name) < 0)
 	{
 		fprintf(stderr, "%s: entering folio %s for recording: %s\n",
-			pmProgname, name, strerror(oserror()));
+			pmGetProgname(), name, strerror(oserror()));
 		cleanstop(1);
 	}
 
@@ -1216,16 +1191,16 @@ rawwrite(pmOptions *opts, const char *name,
 
 	pmsprintf(args, sizeof(args), "%s.folio", basename((char *)name));
 	args[sizeof(args)-1] = '\0';
-	if (pmRecordSetup(args, pmProgname, 1) == NULL)
+	if (pmRecordSetup(args, pmGetProgname(), 1) == NULL)
 	{
 		fprintf(stderr, "%s: cannot setup recording to %s: %s\n",
-			pmProgname, name, osstrerror());
+			pmGetProgname(), name, osstrerror());
 		cleanstop(1);
 	}
 	if ((sts = pmRecordAddHost(host, 1, &record)) < 0)
 	{
 		fprintf(stderr, "%s: adding host %s to recording: %s\n",
-			pmProgname, host, pmErrStr(sts));
+			pmGetProgname(), host, pmErrStr(sts));
 		cleanstop(1);
 	}
 
@@ -1240,31 +1215,31 @@ rawwrite(pmOptions *opts, const char *name,
 	    if ((sts = pmRecordControl(record, PM_REC_SETARG, args)) < 0)
 		{
 		    fprintf(stderr, "%s: setting loggers arguments: %s\n",
-			    pmProgname, pmErrStr(sts));
+			    pmGetProgname(), pmErrStr(sts));
 		    cleanstop(1);
 		}
 	}
 	if ((sts = pmRecordControl(NULL, PM_REC_ON, "")) < 0)
 	{
 		fprintf(stderr, "%s: failed to start recording: %s\n",
-			pmProgname, pmErrStr(sts));
+			pmGetProgname(), pmErrStr(sts));
 		cleanstop(1);
 	}
 
-	__pmtimevalFromReal(duration, &elapsed);
+	pmtimevalFromReal(duration, &elapsed);
 	__pmtimevalSleep(elapsed);
 
 	if ((sts = pmRecordControl(NULL, PM_REC_OFF, "")) < 0)
 	{
 		fprintf(stderr, "%s: failed to stop recording: %s\n",
-			pmProgname, pmErrStr(sts));
+			pmGetProgname(), pmErrStr(sts));
 		cleanstop(1);
 	}
 
 	if (pmDebugOptions.appl1)
 	{
 		fprintf(stderr, "%s: cleanly stopped recording.\n",
-			pmProgname);
+			pmGetProgname());
 	}
 }
 

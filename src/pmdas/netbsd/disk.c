@@ -25,7 +25,6 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
 #include "pmda.h"
 #include "netbsd.h"
 #include <sys/param.h>
@@ -71,7 +70,7 @@ refresh_disk_metrics(void)
 	    free(stats);
 	stats = (struct io_sysctl *)malloc(buflen);
 	if (stats == NULL) {
-	    __pmNoMem("refresh_disk_metrics: stats", buflen, PM_FATAL_ERR);
+	    pmNoMem("refresh_disk_metrics: stats", buflen, PM_FATAL_ERR);
 	    /* NOTREACHED */
 	}
 	/* fetch all the available data */
@@ -122,7 +121,7 @@ do_disk_metrics(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 	if (sts == PMDA_CACHE_ACTIVE) {
 	    sts = 1;
 	    /* cluster and domain already checked, just need item ... */
-	    switch (pmid_item(mdesc->m_desc.pmid)) {
+	    switch (pmID_item(mdesc->m_desc.pmid)) {
 		case 0:		/* disk.dev.read */
 		    atom->ull = sp->rxfer;
 		    break;
@@ -167,7 +166,7 @@ do_disk_metrics(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 	    if (!pmdaCacheLookup(indomtab[DISK_INDOM].it_indom, l_inst, NULL, (void **)&sp))
 		continue;
 	    /* cluster and domain already checked, just need item ... */
-	    switch (pmid_item(mdesc->m_desc.pmid)) {
+	    switch (pmID_item(mdesc->m_desc.pmid)) {
 		case 6:		/* disk.all.read */
 		    atom->ull += sp->rxfer;
 		    break;

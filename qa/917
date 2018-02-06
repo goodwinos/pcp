@@ -34,6 +34,13 @@ cap_userns_ptrace=`seinfo --class=cap_userns -x 2>&1 | grep "sys_ptrace$"`
 unreserved_port_t=`seinfo -t | grep "unreserved_port_t$"`
 tracefs_t=`seinfo -t | grep "tracefs_t$"`
 class_status=`seinfo -x --class=system | grep "status$"`
+sock_file_getattr=`seinfo -x --class=sock_file | grep "getattr$"`
+hostname_exec_map_a=`seinfo -x --class=file | grep "map$"`
+hostname_exec_map_b=`seinfo -x --common=file 2>/dev/null | grep "map$"`
+#container_runtime_tmpfs_t=`seinfo -t | grep "container_runtime_tmpfs_t$"`
+container_runtime_tmpfs_t=""
+unconfined_service=`seinfo -t | grep "unconfined_service_t$"`
+mock_var_lib=`seinfo -t | grep "mock_var_lib_t$"`
 
 _filter_semodule()
 {
@@ -51,6 +58,7 @@ _filter_sedismod1()
 _filter_outfile()
 {
     awk -v container_t="$container_runtime_t" \
+	-v container_tmpfs_t="$container_runtime_tmpfs_t" \
 	-v nsfs_t="$nsfs_t" \
 	-v docker_var_lib_t="$docker_var_lib_t" \
 	-v svirt_lxc_net_t="$svirt_lxc_net_t" \
@@ -63,9 +71,16 @@ _filter_outfile()
 	-v cap_userns_ptrace="$cap_userns_ptrace" \
 	-v unreserved_port_t="$unreserved_port_t" \
 	-v tracefs_t="$tracefs_t" \
+	-v sock_file_getattr="$sock_file_getattr" \
+	-v hostname_exec_map_a="$hostname_exec_map_a" \
+	-v hostname_exec_map_b="$hostname_exec_map_b" \
+	-v unconfined_service="$unconfined_service" \
+	-v mock_var_lib="$mock_var_lib" \
     '{
-    	if (container_t == "" && /container_runtime_t/)
-	   !/container_runtime_t/ ;
+    	if (container_t == "" && /container_runtime_t /)
+	   !/container_runtime_t / ;
+	else if (container_tmpfs_t == "" && /container_runtime_tmpfs_t/)
+	   !/container_runtime_tmpfs_t/ ;
 	else if (nsfs_t == "" && /nsfs_t/)
 	   !/nsfs_t/ ;
     	else if (docker_var_lib_t == "" && /docker_var_lib_t/)
@@ -90,6 +105,17 @@ _filter_outfile()
 	   !/tracefs_t/ ;
         else if (class_status == "" && /system.*status/)
            !/system.*status/ ;
+	else if (sock_file_getattr == "" && /gpmctl_t/)
+	   !/gpmctl_t/ ;
+	else if (unconfined_service == "" && /unconfined_service_t/)
+	   !/unconfined_service_t/ ;
+	else if (mock_var_lib == "" && /mock_var_lib_t/)
+	   !/mock_var_lib_t/ ;
+        else if (hostname_exec_map_a == "" && hostname_exec_map_b == "" && /ldconfig_exec_t/ && /map/)
+           !/ldconfig_exec_t/ ;
+	else if (hostname_exec_map_a == "" && hostname_exec_map_b == "" && /hostname_exec_t/ && /pcp_pmie_t/) {
+	     printf("  allow [pcp_pmie_t] [hostname_exec_t] : [file] { execute execute_no_trans getattr open read };\n")
+	   }
 	else
 	   print;
     }'

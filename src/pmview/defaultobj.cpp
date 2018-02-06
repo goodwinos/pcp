@@ -16,9 +16,6 @@
 #include "colorlist.h"
 #include <QSettings>
 
-#include <iostream>
-using namespace std;
-
 DefaultObj	*DefaultObj::theDefaultObj;
 
 DefaultObj::DefaultObj()
@@ -136,7 +133,7 @@ getColorResource(const char *name, QString label, float &r, float &g, float &b)
 	if (ColorList::findColor(str, r, g, b) == false) {
 	    pmprintf("%s: Unable to map color resource \"%s\" to \"%s\", "
 		     "using default color rgbi:%f/%f/%f\n",
-		     pmProgname, name, str, r, g, b);
+		     pmGetProgname(), name, str, r, g, b);
 	}
     }
 }
@@ -146,7 +143,7 @@ DefaultObj::getResources()
 {
     QString color;
     QSettings resources;
-    resources.beginGroup(pmProgname);
+    resources.beginGroup(pmGetProgname());
     
     _baseBorderX = resources.value("baseBorderWidth", 8).toInt();
     _baseBorderZ = resources.value("baseBorderDepth", 8).toInt();
@@ -168,8 +165,6 @@ DefaultObj::getResources()
 
     resources.endGroup();
 
-#ifdef PCP_DEBUG
-    if (pmDebug & DBG_TRACE_APPL0)
+    if (pmDebugOptions.appl0)
 	cerr << "DefaultObj::getResources: " << *this << endl;
-#endif
 }

@@ -2,7 +2,7 @@
  * Crashes pmcd on IRIX. Linux seems to be OK. PV 935490.
  */
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include "libpcp.h"
 
 static __pmPDUHdr hdr;
 static char *target;
@@ -59,7 +59,7 @@ main(int argc, char *argv[])
     int j;
     int k;
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     target = argc == 2 ? argv[1] : "localhost";
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 Red Hat.
+ * Copyright (c) 2013-2018 Red Hat.
  * Copyright (c) 1995,2005 Silicon Graphics, Inc.  All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or modify it
@@ -39,14 +39,11 @@ extern "C" {
 typedef enum {pmdaPipe, pmdaInet, pmdaUnix, pmdaUnknown, pmdaIPv6} pmdaIoType;
 
 /*
- * Forward declarations of structures so that inclusion of (internal) impl.h
- * header file is not mandated if this header file is included.
+ * Forward declarations of structures so that inclusion of (internal) libpcp.h
+ * header file is not required if this header file is included.
  */
 typedef struct __pmnsTree  pmdaNameSpace;
 typedef struct __pmHashCtl pmdaHashTable;
-typedef struct __pmProfile pmdaInProfile;
-typedef struct __pmInResult pmdaInResult;
-typedef struct __pmnsNode pmnsNode;
 
 /*
  * Instance description: index and name
@@ -143,7 +140,7 @@ typedef struct pmdaExt {
     int		e_nmetrics;	/* number of metrics */
     int		e_nindoms;	/* number of instance domains */
     int		e_help;		/* help text comes via this handle */
-    pmdaInProfile *e_prof;	/* last received profile */
+    pmProfile   *e_prof;	/* last received profile */
     pmdaIoType	e_io;		/* connection type to pmcd */
     pmdaIndom	*e_indoms;	/* instance domain table */
     pmdaIndom	*e_idp;		/* used in instance domain expansion */
@@ -162,11 +159,13 @@ typedef struct pmdaExt {
     pmdaLabelCallBack	e_labelCallBack; /* callback to lookup metric instance labels */
 } pmdaExt;
 
-#define PMDA_EXT_FLAG_DIRECT	0x01	/* direct mapped PMID metric table */
-#define PMDA_EXT_FLAG_HASHED	0x02	/* hashed PMID metric table lookup */
-#define PMDA_EXT_SETUPDONE	0x04	/* __pmdaSetup() has been called */
-#define PMDA_EXT_CONNECTED	0x08	/* pmdaConnect() done */
-#define PMDA_EXT_NOTREADY	0x10	/* pmcd connection marked NOTREADY */
+#define PMDA_EXT_FLAG_DIRECT	(1<<0)	/* direct mapped PMID metric table */
+#define PMDA_EXT_FLAG_HASHED	(1<<1)	/* hashed PMID metric table lookup */
+#define PMDA_EXT_SETUPDONE	(1<<2)	/*  __pmdaSetup() has been called */
+#define PMDA_EXT_CONNECTED	(1<<3)	/* pmdaConnect() done */
+#define PMDA_EXT_NOTREADY	(1<<4)	/* pmcd connection marked NOTREADY */
+#define PMDA_EXT_LABEL_CHANGE	(1<<5)	/* new label metadata notification */
+#define PMDA_EXT_NAMES_CHANGE	(1<<6)	/* metric name change notification */
 
 /*
  * Optionally restrict symbol visibility for DSO PMDAs
@@ -221,10 +220,10 @@ typedef struct pmdaInterface {
 
 	struct {
 	    pmdaExt *ext;
-	    int	    (*profile)(pmdaInProfile *, pmdaExt *);
+	    int	    (*profile)(pmProfile *, pmdaExt *);
 	    int	    (*fetch)(int, pmID *, pmResult **, pmdaExt *);
 	    int	    (*desc)(pmID, pmDesc *, pmdaExt *);
-	    int	    (*instance)(pmInDom, int, char *, pmdaInResult **, pmdaExt *);
+	    int	    (*instance)(pmInDom, int, char *, pmInResult **, pmdaExt *);
 	    int	    (*text)(int, int, char **, pmdaExt *);
 	    int	    (*store)(pmResult *, pmdaExt *);
 	} any, two, three;
@@ -237,10 +236,10 @@ typedef struct pmdaInterface {
 
 	struct {
 	    pmdaExt *ext;
-	    int	    (*profile)(pmdaInProfile *, pmdaExt *);
+	    int	    (*profile)(pmProfile *, pmdaExt *);
 	    int	    (*fetch)(int, pmID *, pmResult **, pmdaExt *);
 	    int	    (*desc)(pmID, pmDesc *, pmdaExt *);
-	    int	    (*instance)(pmInDom, int, char *, pmdaInResult **, pmdaExt *);
+	    int	    (*instance)(pmInDom, int, char *, pmInResult **, pmdaExt *);
 	    int	    (*text)(int, int, char **, pmdaExt *);
 	    int	    (*store)(pmResult *, pmdaExt *);
 	    int     (*pmid)(const char *, pmID *, pmdaExt *);
@@ -254,10 +253,10 @@ typedef struct pmdaInterface {
  */
 	struct {
 	    pmdaExt *ext;
-	    int	    (*profile)(pmdaInProfile *, pmdaExt *);
+	    int	    (*profile)(pmProfile *, pmdaExt *);
 	    int	    (*fetch)(int, pmID *, pmResult **, pmdaExt *);
 	    int	    (*desc)(pmID, pmDesc *, pmdaExt *);
-	    int	    (*instance)(pmInDom, int, char *, pmdaInResult **, pmdaExt *);
+	    int	    (*instance)(pmInDom, int, char *, pmInResult **, pmdaExt *);
 	    int	    (*text)(int, int, char **, pmdaExt *);
 	    int	    (*store)(pmResult *, pmdaExt *);
 	    int     (*pmid)(const char *, pmID *, pmdaExt *);
@@ -272,10 +271,10 @@ typedef struct pmdaInterface {
  */
 	struct {
 	    pmdaExt *ext;
-	    int	    (*profile)(pmdaInProfile *, pmdaExt *);
+	    int	    (*profile)(pmProfile *, pmdaExt *);
 	    int	    (*fetch)(int, pmID *, pmResult **, pmdaExt *);
 	    int	    (*desc)(pmID, pmDesc *, pmdaExt *);
-	    int	    (*instance)(pmInDom, int, char *, pmdaInResult **, pmdaExt *);
+	    int	    (*instance)(pmInDom, int, char *, pmInResult **, pmdaExt *);
 	    int	    (*text)(int, int, char **, pmdaExt *);
 	    int	    (*store)(pmResult *, pmdaExt *);
 	    int     (*pmid)(const char *, pmID *, pmdaExt *);
@@ -402,12 +401,14 @@ typedef struct pmdaOptions {
  * pmdaOpenLog
  *	Redirects stderr to the logfile.
  *
- * pmdaSetFlags
+ * pmdaSetFlags / pmdaExtSetFlags
  *      Allow behaviour flags to be set to enable features, such as to request
  *      libpcp_pmda internally use direct or hashed PMID metric table mapping.
  *      Can be called multiple times - effects are cumulative - no flag can be
  *      cleared, although libpcp_pmda may disable a flag later on if it cannot
- *      enact the requested behaviour. Must be called before pmdaInit.
+ *      enact the requested behaviour.  Must be called before pmdaInit for any
+ *      flags involving early setup (such as metric table hashing), otherwise
+ *      can be called at any time (such as for namespace change notification).
  *
  * pmdaInit
  *      Further initialises the pmdaExt structure with the instance domain and
@@ -461,6 +462,7 @@ PMDA_CALL extern void pmdaUsageMessage(pmdaOptions *);
 PMDA_CALL extern void pmdaDaemon(pmdaInterface *, int, const char *, int , const char *, const char *);
 PMDA_CALL extern void pmdaDSO(pmdaInterface *, int, char *, char *);
 PMDA_CALL extern void pmdaOpenLog(pmdaInterface *);
+PMDA_CALL extern void pmdaExtSetFlags(pmdaExt *, int);
 PMDA_CALL extern void pmdaSetFlags(pmdaInterface *, int);
 PMDA_CALL extern void pmdaInit(pmdaInterface *, pmdaIndom *, int, pmdaMetric *, int);
 PMDA_CALL extern void pmdaConnect(pmdaInterface *);
@@ -525,9 +527,9 @@ PMDA_CALL extern void pmdaSetLabelCallBack(pmdaInterface *, pmdaLabelCallBack);
  *      fills in labelsets, returns a count thereof or negative error code.
  */
 
-PMDA_CALL extern int pmdaProfile(pmdaInProfile *, pmdaExt *);
+PMDA_CALL extern int pmdaProfile(pmProfile *, pmdaExt *);
 PMDA_CALL extern int pmdaFetch(int, pmID *, pmResult **, pmdaExt *);
-PMDA_CALL extern int pmdaInstance(pmInDom, int, char *, pmdaInResult **, pmdaExt *);
+PMDA_CALL extern int pmdaInstance(pmInDom, int, char *, pmInResult **, pmdaExt *);
 PMDA_CALL extern int pmdaDesc(pmID, pmDesc *, pmdaExt *);
 PMDA_CALL extern int pmdaText(int, int, char **, pmdaExt *);
 PMDA_CALL extern int pmdaStore(pmResult *, pmdaExt *);
@@ -555,10 +557,12 @@ PMDA_CALL extern int pmdaAddLabelFlags(pmLabelSet *, int);
 /*
  * Dynamic metric table manipulation
  *
- * pmdaDynamicPMNS
+ * pmdaExtDynamicPMNS / pmdaDynamicPMNS
  *	Register a new dynamic namespace sub-tree associated with one or more
  *	PMID clusters.  Callbacks are passed in to deal with PMDA-specific
  *	components (names, help text, metric duplication, and table sizing).
+ *	pmdaExtDynamicPMNS is preferred as it works in both DSO/daemon modes;
+ *	however pmdaDynamicPMNS is maintained for backward compatibility.
  *
  * pmdaDynamicLookupName
  *	Perform PMDA name lookup operations for the name callback, for dynamic
@@ -586,6 +590,10 @@ typedef int  (*pmdaUpdatePMNS)(pmdaExt *, pmdaNameSpace **);
 typedef int  (*pmdaUpdateText)(pmdaExt *, pmID, int, char **);
 typedef void (*pmdaUpdateMetric)(pmdaMetric *, pmdaMetric *, int);
 typedef void (*pmdaCountMetrics)(int *, int *);
+PMDA_CALL extern void pmdaExtDynamicPMNS(const char *, int *, int,
+                                     pmdaUpdatePMNS, pmdaUpdateText,
+                                     pmdaUpdateMetric, pmdaCountMetrics,
+                                     pmdaMetric *, int, pmdaExt *);
 PMDA_CALL extern void pmdaDynamicPMNS(const char *, int *, int,
                                      pmdaUpdatePMNS, pmdaUpdateText,
                                      pmdaUpdateMetric, pmdaCountMetrics,
@@ -625,7 +633,6 @@ PMDA_CALL extern int pmdaTreeName(pmdaNameSpace *, pmID, char ***);
 PMDA_CALL extern int pmdaTreeChildren(pmdaNameSpace *, const char *, int, char ***, int **);
 PMDA_CALL extern void pmdaTreeRebuildHash(pmdaNameSpace *, int);
 PMDA_CALL extern int pmdaTreeSize(pmdaNameSpace *);
-PMDA_CALL extern pmnsNode * pmdaNodeLookup(pmnsNode *, const char *);
 
 /*
  * PMDA instance domain cache support

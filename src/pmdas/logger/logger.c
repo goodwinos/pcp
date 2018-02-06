@@ -148,7 +148,7 @@ static pmdaMetric static_metrictab[] = {
 static pmdaMetric *metrictab;
 
 static int
-logger_profile(__pmProfile *prof, pmdaExt *pmda)
+logger_profile(pmProfile *prof, pmdaExt *pmda)
 {
     pmdaEventNewClient(pmda->e_context);
     return 0;
@@ -172,15 +172,16 @@ valid_pmid(unsigned int cluster, unsigned int item)
 static int
 logger_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 {
-    __pmID_int *idp = (__pmID_int *)&(mdesc->m_desc.pmid);
+    unsigned int	cluster = pmID_cluster(mdesc->m_desc.pmid);
+    unsigned int	item = pmID_item(mdesc->m_desc.pmid);
     int		sts;
 
-    if ((sts = valid_pmid(idp->cluster, idp->item)) < 0)
+    if ((sts = valid_pmid(cluster, item)) < 0)
 	return sts;
 
     sts = PMDA_FETCH_STATIC;
-    if (idp->item < 4) {
-	switch (idp->item) {
+    if (item < 4) {
+	switch (item) {
 	    case 0:			/* logger.numclients */
 		sts = pmdaEventClients(atom);
 		break;
@@ -244,12 +245,11 @@ logger_store(pmResult *result, pmdaExt *pmda)
 
     for (i = 0; i < result->numpmid; i++) {
 	pmValueSet		*vsp = result->vset[i];
-	__pmID_int		*idp = (__pmID_int *)&vsp->pmid;
 	dynamic_metric_info_t	*pinfo = NULL;
 	void			*filter;
 	int			queueid;
 
-	if ((sts = valid_pmid(idp->cluster, idp->item)) < 0)
+	if ((sts = valid_pmid(pmID_cluster(vsp->pmid), pmID_item(vsp->pmid))) < 0)
 	    return sts;
 	for (j = 0; j < pmda->e_nmetrics; j++) {
 	    if (vsp->pmid == pmda->e_metrics[j].m_desc.pmid) {
@@ -317,7 +317,7 @@ logger_text(int ident, int type, char **buffer, pmdaExt *pmda)
 
     if ((type & PM_TEXT_PMID) == PM_TEXT_PMID) {
 	/* Lookup pmid in the metric table. */
-	int item = pmid_item(ident);
+	int item = pmID_item(ident);
 
 	/* If the PMID item was for a dynamic metric... */
 	if (item >= numstatics && item < nummetrics
@@ -346,7 +346,7 @@ logger_init(pmdaInterface *dp, const char *configfile)
     char name[MAXPATHLEN * 2];
     dynamic_metric_info_t *pinfo;
 
-    __pmSetProcessIdentity(username);
+    pmSetProcessIdentity(username);
 
     /* Read and parse config file. */
     if ((numloggers = event_config(configfile)) < 0)
@@ -355,7 +355,7 @@ logger_init(pmdaInterface *dp, const char *configfile)
     /* Create the dynamic metric info table based on the logfile table */
     size = sizeof(struct dynamic_metric_info) * numdynamics * numloggers;
     if ((dynamic_metric_infotab = malloc(size)) == NULL) {
-	__pmNoMem("logger_init(dynamic)", size, PM_FATAL_ERR);
+	pmNoMem("logger_init(dynamic)", size, PM_FATAL_ERR);
 	return;
     }
     pinfo = dynamic_metric_infotab;
@@ -373,7 +373,7 @@ logger_init(pmdaInterface *dp, const char *configfile)
     size = sizeof(pmdaMetric) * nummetrics;
     if ((metrictab = malloc(size)) == NULL) {
 	free(dynamic_metric_infotab);
-	__pmNoMem("logger_init(static)", size, PM_FATAL_ERR);
+	pmNoMem("logger_init(static)", size, PM_FATAL_ERR);
 	return;
     }
     memcpy(metrictab, static_metrictab, sizeof(static_metrictab));
@@ -407,8 +407,8 @@ logger_init(pmdaInterface *dp, const char *configfile)
 
     /* Create the dynamic PMNS tree and populate it. */
     if ((sts = __pmNewPMNS(&pmns)) < 0) {
-	__pmNotifyErr(LOG_ERR, "%s: failed to create new pmns: %s\n",
-			pmProgname, pmErrStr(sts));
+	pmNotifyErr(LOG_ERR, "%s: failed to create new pmns: %s\n",
+			pmGetProgname(), pmErrStr(sts));
 	pmns = NULL;
 	return;
     }
@@ -450,7 +450,7 @@ loggerMain(pmdaInterface *dispatch)
 
     /* arm interval timer */
     if (__pmAFregister(&interval, NULL, logger_timer) < 0) {
-	__pmNotifyErr(LOG_ERR, "registering event interval handler");
+	pmNotifyErr(LOG_ERR, "registering event interval handler");
 	exit(1);
     }
 
@@ -458,11 +458,11 @@ loggerMain(pmdaInterface *dispatch)
 	memcpy(&readyfds, &fds, sizeof(readyfds));
 	nready = select(maxfd+1, &readyfds, NULL, NULL, NULL);
 	if (pmDebugOptions.appl2)
-	    __pmNotifyErr(LOG_DEBUG, "select: nready=%d interval=%d",
+	    pmNotifyErr(LOG_DEBUG, "select: nready=%d interval=%d",
 			  nready, interval_expired);
 	if (nready < 0) {
 	    if (neterror() != EINTR) {
-		__pmNotifyErr(LOG_ERR, "select failure: %s", netstrerror());
+		pmNotifyErr(LOG_ERR, "select failure: %s", netstrerror());
 		exit(1);
 	    } else if (!interval_expired) {
 		continue;
@@ -472,13 +472,13 @@ loggerMain(pmdaInterface *dispatch)
 	__pmAFblock();
 	if (nready > 0 && FD_ISSET(pmcdfd, &readyfds)) {
 	    if (pmDebugOptions.appl0)
-		__pmNotifyErr(LOG_DEBUG, "processing pmcd PDU [fd=%d]", pmcdfd);
+		pmNotifyErr(LOG_DEBUG, "processing pmcd PDU [fd=%d]", pmcdfd);
 	    if (__pmdaMainPDU(dispatch) < 0) {
 		__pmAFunblock();
 		exit(1);	/* fatal if we lose pmcd */
 	    }
 	    if (pmDebugOptions.appl0)
-		__pmNotifyErr(LOG_DEBUG, "completed pmcd PDU [fd=%d]", pmcdfd);
+		pmNotifyErr(LOG_DEBUG, "completed pmcd PDU [fd=%d]", pmcdfd);
 	}
 	if (interval_expired) {
 	    interval_expired = 0;
@@ -522,7 +522,7 @@ usage(void)
 	"  -m memory    maximum memory used per logfile (default %ld bytes)\n"
 	"  -s interval  default delay between iterations (default %d sec)\n"
 	"  -U username  user account to run under (default \"pcp\")\n",
-		pmProgname, maxmem, (int)interval.tv_sec);
+		pmGetProgname(), maxmem, (int)interval.tv_sec);
     exit(1);
 }
 
@@ -533,16 +533,16 @@ main(int argc, char **argv)
     char		*endnum;
     pmdaInterface	desc;
     long		minmem;
-    int			c, err = 0, sep = __pmPathSeparator();
+    int			c, err = 0, sep = pmPathSeparator();
 
-    __pmSetProgname(argv[0]);
-    __pmGetUsername(&username);
+    pmSetProgname(argv[0]);
+    pmGetUsername(&username);
 
     minmem = getpagesize();
     maxmem = (minmem > DEFAULT_MAXMEM) ? minmem : DEFAULT_MAXMEM;
     pmsprintf(helppath, sizeof(helppath), "%s%c" "logger" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
-    pmdaDaemon(&desc, PMDA_INTERFACE_5, pmProgname, LOGGER,
+    pmdaDaemon(&desc, PMDA_INTERFACE_5, pmGetProgname(), LOGGER,
 		"logger.log", helppath);
 
     while ((c = pmdaGetOpt(argc, argv, "D:d:l:m:s:U:?", &desc, &err)) != EOF) {
@@ -553,7 +553,7 @@ main(int argc, char **argv)
 		    convertUnits(&endnum, &maxmem);
 		if (*endnum != '\0' || maxmem < minmem) {
 		    fprintf(stderr, "%s: invalid max memory '%s' (min=%ld)\n",
-			    pmProgname, optarg, minmem);
+			    pmGetProgname(), optarg, minmem);
 		    err++;
 		}
 		break;
@@ -561,7 +561,7 @@ main(int argc, char **argv)
 	    case 's':
 		if (pmParseInterval(optarg, &interval, &endnum) < 0) {
 		    fprintf(stderr, "%s: -s requires a time interval: %s\n",
-			    pmProgname, endnum);
+			    pmGetProgname(), endnum);
 		    free(endnum);
 		    err++;
 		}

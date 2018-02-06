@@ -17,7 +17,7 @@ main(int argc, char* argv[])
     char	buf[MAXHOSTNAMELEN];
     QString	source;
 
-    pmProgname = basename(argv[0]);
+    pmSetProgname(argv[0]);
 
     while ((c = getopt(argc, argv, "D:?")) != EOF) {
 	switch (c) {
@@ -25,7 +25,7 @@ main(int argc, char* argv[])
 	    sts = pmSetDebug(optarg);
             if (sts < 0) {
 		pmprintf("%s: unrecognized debug options specification (%s)\n",
-			 pmProgname, optarg);
+			 pmGetProgname(), optarg);
                 sts = 1;
             }
             break;
@@ -37,7 +37,7 @@ main(int argc, char* argv[])
     }
 
     if (sts) {
-	pmprintf("Usage: %s\n", pmProgname);
+	pmprintf("Usage: %s\n", pmGetProgname());
 	pmflush();
 	exit(1);
         /*NOTREACHED*/
@@ -52,29 +52,29 @@ main(int argc, char* argv[])
 
     if (src->status() < 0) {
 	pmprintf("%s: Error: Unable to create context to \"%s\": %s\n",
-		 pmProgname, buf, pmErrStr(src->status()));
+		 pmGetProgname(), buf, pmErrStr(src->status()));
 	pmflush();
 	return 1;
     }
 
     /* Linux hinv.ncpu PMID: 60.0.32 */
-    pmID hinv_ncpu = pmid_build(60, 0, 32);
+    pmID hinv_ncpu = pmID_build(60, 0, 32);
     QmcDesc hinv_ncpu_pmc(hinv_ncpu);
     pmDesc hinv_ncpu_desc = hinv_ncpu_pmc.desc();
 
     if (hinv_ncpu_pmc.status() < 0) {
 	pmprintf("\n%s: Error: hinv.ncpu: %s\n",
-		 pmProgname, pmErrStr(hinv_ncpu_pmc.status()));
+		 pmGetProgname(), pmErrStr(hinv_ncpu_pmc.status()));
 	pmflush();
 	sts = 1;
     }
 
     printf("hinv.ncpu\n");
-    __pmPrintDesc(stdout, &hinv_ncpu_desc);
+    pmPrintDesc(stdout, &hinv_ncpu_desc);
     fflush(stdout);
     fflush(stderr);
     if (system("pminfo -d hinv.ncpu") < 0) {
-	pmprintf("%s: Error: Unable to run pminfo\n", pmProgname);
+	pmprintf("%s: Error: Unable to run pminfo\n", pmGetProgname());
 	pmflush();
 	sts = 1;
     }
@@ -82,12 +82,12 @@ main(int argc, char* argv[])
     fflush(stderr);
 
     fprintf(stderr, "\n*** Fetch a bad descriptor ***\n");
-    pmID bad = pmid_build(42,42,42);
+    pmID bad = pmID_build(42,42,42);
     QmcDesc bad_pmc(bad);
     
     if (bad_pmc.status() < 0) {
 	pmprintf("%s: Error: Bogus metric: %s\n",
-		 pmProgname, pmErrStr(bad_pmc.status()));
+		 pmGetProgname(), pmErrStr(bad_pmc.status()));
 	pmflush();
     }
     else

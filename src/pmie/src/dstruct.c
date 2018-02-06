@@ -16,7 +16,6 @@
  * for more details.
  */
 #include "pmapi.h"
-#include "impl.h"
 #include <math.h>
 #include <ctype.h>
 #include <limits.h>
@@ -124,8 +123,8 @@ getReal(void)
 {
     struct timeval t;
 
-    __pmtimevalNow(&t);
-    return __pmtimevalToReal(&t);
+    pmtimevalNow(&t);
+    return pmtimevalToReal(&t);
 }
 
 
@@ -218,7 +217,7 @@ sleepTight(Task *t)
 	delay = sched - cur;
 	if (delay < 0) {
 	    int		show_detail = 0;
-	    if (delay <= -1) {
+	    if (delay <= -1 && !quiet) {
 		fprintf(stderr, "sleepTight: negative delay (%f). sched=%f, cur=%f\n",
 			    delay, sched, cur);
 		show_detail = 1;
@@ -360,7 +359,7 @@ alloc(size_t size)
     void *p;
 
     if ((p = malloc(size)) == NULL) {
-	__pmNoMem("pmie.alloc", size, PM_FATAL_ERR);
+	pmNoMem("pmie.alloc", size, PM_FATAL_ERR);
     }
     return p;
 }
@@ -372,7 +371,7 @@ zalloc(size_t size)
     void *p;
 
     if ((p = calloc(1, size)) == NULL) {
-	__pmNoMem("pmie.zalloc", size, PM_FATAL_ERR);
+	pmNoMem("pmie.zalloc", size, PM_FATAL_ERR);
     }
     return p;
 }
@@ -395,7 +394,7 @@ aalloc(size_t align, size_t size)
 #endif
 #endif
     if (sts != 0) {
-	__pmNoMem("pmie.aalloc", size, PM_FATAL_ERR);
+	pmNoMem("pmie.aalloc", size, PM_FATAL_ERR);
     }
     return p;
 }
@@ -407,7 +406,7 @@ ralloc(void *p, size_t size)
     void *q;
 
     if ((q = realloc(p, size)) == NULL) {
-	__pmNoMem("pmie.ralloc", size, PM_FATAL_ERR);
+	pmNoMem("pmie.ralloc", size, PM_FATAL_ERR);
     }
     return q;
 }
@@ -418,7 +417,7 @@ sdup(const char *p)
     char *q;
 
     if ((q = strdup(p)) == NULL) {
-	__pmNoMem("pmie.sdup", strlen(p), PM_FATAL_ERR);
+	pmNoMem("pmie.sdup", strlen(p), PM_FATAL_ERR);
     }
     return q;
 }
@@ -513,7 +512,7 @@ agentId(char *name)
 
     if ((sts = pmLookupName(1, &name, &pmid)) < 0) {
 	fprintf(stderr, "%s: agentId: metric %s not found in namespace: %s\n",
-		pmProgname, name, pmErrStr(sts));
+		pmGetProgname(), name, pmErrStr(sts));
 	exit(1);
     }
     return pmid;
@@ -983,7 +982,7 @@ agentInit(void)
     /* Only load PMNS if it's default and hence not already loaded */
     if (pmnsfile == PM_NS_DEFAULT && (sts = pmLoadNameSpace(pmnsfile)) < 0) {
 	fprintf(stderr, "%s: agentInit: cannot load metric namespace: %s\n",
-		pmProgname, pmErrStr(sts));
+		pmGetProgname(), pmErrStr(sts));
 	exit(1);
     }
 

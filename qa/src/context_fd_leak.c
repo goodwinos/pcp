@@ -10,7 +10,6 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include <sys/wait.h>
 
 void
@@ -40,12 +39,12 @@ main(int argc, char* argv[])
     char	*endp;
     int		fd;
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     if (argc != 2) {
 	fprintf(stderr,
 		"Usage: %s count\nwhere count is the number of runs required\n",
-		pmProgname);
+		pmGetProgname());
 	exit(1);
     }
     run = strtol(argv[1], &endp, 0);

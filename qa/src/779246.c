@@ -9,7 +9,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include "libpcp.h"
 #ifdef HAVE_SYS_SYSINFO_H
 #include <sys/sysinfo.h>
 #endif
@@ -37,7 +37,7 @@ dometric(void)
 	printf("pmLookupDesc: %s\n", pmErrStr(n));
 	return 1;
     }
-    __pmPrintDesc(stdout, &desc);
+    pmPrintDesc(stdout, &desc);
 
     if ((n = pmFetch(1, &pmid, &result)) < 0)
 	printf("pmFetch: %s\n", pmErrStr(n));
@@ -78,7 +78,7 @@ main(int argc, char *argv[])
     char	*namespace = PM_NS_DEFAULT;
     static char	*usage = "[-D debugspec] [-h hostname]";
 
-    __pmSetProgname(pmProgname);
+    pmSetProgname(pmGetProgname());
 
     while ((c = getopt(argc, argv, "D:h:")) != EOF) {
 	switch (c) {
@@ -86,7 +86,7 @@ main(int argc, char *argv[])
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
@@ -103,17 +103,17 @@ main(int argc, char *argv[])
     }
 
     if (errflag || optind != argc) {
-	fprintf(stderr, "Usage: %s %s\n", pmProgname, usage);
+	fprintf(stderr, "Usage: %s %s\n", pmGetProgname(), usage);
 	exit(1);
     }
 
     if (namespace != PM_NS_DEFAULT && (sts = pmLoadASCIINameSpace(namespace, 1)) < 0) {
-	printf("%s: Cannot load namespace from \"%s\": %s\n", pmProgname, namespace, pmErrStr(sts));
+	printf("%s: Cannot load namespace from \"%s\": %s\n", pmGetProgname(), namespace, pmErrStr(sts));
 	exit(1);
     }
 
     if ((sts = pmNewContext(PM_CONTEXT_HOST, host)) < 0) {
-	printf("%s: Cannot connect to PMCD on host \"%s\": %s\n", pmProgname, host, pmErrStr(sts));
+	printf("%s: Cannot connect to PMCD on host \"%s\": %s\n", pmGetProgname(), host, pmErrStr(sts));
 	exit(1);
     }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Red Hat.
+ * Copyright (c) 2014-2017, Red Hat.
  * Copyright (c) 2006-2007, Aconex.  All Rights Reserved.
  * 
  * This program is free software; you can redistribute it and/or modify it
@@ -25,9 +25,9 @@ TimeControl::TimeControl() : QProcess(NULL)
     my.tzData = NULL;
     my.bufferLength = sizeof(QmcTime::Packet);
 
-    my.buffer = (char *)malloc(my.bufferLength);
-    my.livePacket = (QmcTime::Packet *)malloc(sizeof(QmcTime::Packet));
-    my.archivePacket = (QmcTime::Packet *)malloc(sizeof(QmcTime::Packet));
+    my.buffer = (char *)calloc(1, my.bufferLength);
+    my.livePacket = (QmcTime::Packet *)calloc(1, sizeof(QmcTime::Packet));
+    my.archivePacket = (QmcTime::Packet *)calloc(1, sizeof(QmcTime::Packet));
     if (!my.buffer || !my.livePacket || !my.archivePacket)
 	nomem();
     my.livePacket->magic = QmcTime::Magic;
@@ -99,7 +99,7 @@ void TimeControl::init(int port, bool live,
 	memset(&my.archivePacket->start, 0, sizeof(struct timeval));
 	memset(&my.archivePacket->end, 0, sizeof(struct timeval));
     } else {
-	__pmtimevalNow(&now);
+	pmtimevalNow(&now);
 	my.archivePacket->position = *position;
 	my.archivePacket->start = *starttime;
 	my.archivePacket->end = *endtime;
@@ -133,7 +133,7 @@ void TimeControl::addArchive(
 	my.archivePacket->end = endtime;
     }
 
-    if ((message = (QmcTime::Packet *)malloc(sz)) == NULL)
+    if ((message = (QmcTime::Packet *)calloc(1, sz)) == NULL)
 	nomem();
     *message = *my.archivePacket;
     message->command = QmcTime::Bounds;
@@ -372,7 +372,7 @@ void TimeControl::protocolMessage(bool live,
 #if DESPERATE
     console->post(PmChart::DebugProtocol,
 		  "TimeControl::protocolMessage: recv pos=%s state=%d",
-		  timeString(__pmtimevalToReal(&packet->position)), *state);
+		  timeString(pmtimevalToReal(&packet->position)), *state);
 #endif
 
     switch (*state) {

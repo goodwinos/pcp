@@ -13,7 +13,6 @@
 */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include <ctype.h>
 
 #include "atop.h"
@@ -37,6 +36,12 @@ update_task(struct tstat *task, int pid, char *name, pmResult *rp, pmDesc *dp)
 
 	/* accumulate Pss from smaps (optional, relatively expensive) */
 	task->mem.pmem = (unsigned long long)-1LL;
+
+	/* /proc/pid/cgroup */
+	extract_string_inst(rp, dp, TASK_GEN_CONTAINER, &task->gen.container[0],
+				sizeof(task->gen.container), pid);
+        if (task->gen.container[0] != '\0')
+		supportflags |= DOCKSTAT;
 
 	/* /proc/pid/stat */
 	extract_string_inst(rp, dp, TASK_GEN_NAME, &task->gen.name[0],
@@ -153,15 +158,17 @@ photoproc(struct tstat **tasks, int *taskslen)
 		*taskslen = ents;
 	}
 
+	supportflags &= ~DOCKSTAT;
+
 	for (i=0; i < count; i++)
 	{
 		if (pmDebugOptions.appl0)
 			fprintf(stderr, "%s: updating process %d: %s\n",
-				pmProgname, pids[i], insts[i]);
+				pmGetProgname(), pids[i], insts[i]);
 		update_task(&(*tasks)[i], pids[i], insts[i], result, descs);
 	}
 	if (pmDebugOptions.appl0)
-		fprintf(stderr, "%s: done %d processes\n", pmProgname, count);
+		fprintf(stderr, "%s: done %d processes\n", pmGetProgname(), count);
 
 	pmFreeResult(result);
 	free(insts);

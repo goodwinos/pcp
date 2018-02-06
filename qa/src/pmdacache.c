@@ -1,5 +1,4 @@
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include <pcp/pmda.h>
 
 int
@@ -10,7 +9,7 @@ main(int argc, char **argv)
     int	sts;
     int c;
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     while ((c = getopt(argc, argv, "Cc:D:dh:LSs:")) != EOF) {
 	switch (c) {
@@ -33,7 +32,7 @@ main(int argc, char **argv)
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
@@ -82,7 +81,7 @@ main(int argc, char **argv)
     }
 
     if (errflag) {
-	fprintf(stderr, "Usage: %s ...\n", pmProgname);
+	fprintf(stderr, "Usage: %s ...\n", pmGetProgname());
 	fprintf(stderr, "options:\n");
 	fprintf(stderr, "-C             cull all\n");
 	fprintf(stderr, "-c inst        cull one\n");

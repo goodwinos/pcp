@@ -27,6 +27,10 @@ HH:MM:SS        1
 20:36:49       1.00         1000.03
 20:36:51       1.00         1000.00
 20:36:53       1.00         1000.02
+== basic archive indom handling
+Invalid metric tape.dev.io_ns (PM_ERR_INDOM_LOG Instance domain identifier not defined in the PCP archive log).
+  m.u.used
+     Kbyte
 == basic configuration file handling
   s.seconds  s.milliseconds
         s/s            ms/s
@@ -51,13 +55,13 @@ HH:MM:SS        1
 
   archive: QAPATH/archives/sample-secs
      host: rattle
- timezone: ...-11
+ timezone: UTC+10
     start: Mon May  1 20:36:45 2000
       end: Mon May  1 20:37:45 2000
-  metrics: 2
+  metrics: 2 (2 instances)
   samples: 5
  interval: 2.0 sec
- duration: 8 sec
+ duration: 00:00:08
 
   s.seconds  s.milliseconds
         s/s            ms/s
@@ -65,13 +69,13 @@ HH:MM:SS        1
 
   archive: QAPATH/archives/sample-secs
      host: rattle
- timezone: ...-11
+ timezone: UTC+10
     start: Mon May  1 20:36:45 2000
       end: Mon May  1 20:37:45 2000
-  metrics: 2
+  metrics: 2 (2 instances)
   samples: 3
  interval: 3.0 sec
- duration: 7 sec
+ duration: 00:00:07
 
           s.seconds  s.milliseconds
                 s/s            ms/s
@@ -86,139 +90,316 @@ HH:MM:SS        1
       1.000        1000.016
         |        |d.d.read|d.d.write|d.d.total|n.i.mtu|m.u.free|k.a.load|m.u.used
         |        | count/s|  count/s|  count/s|   byte|   Kbyte|        |   Kbyte
-00:47:01|sda     |     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
-00:47:01|sdb     |     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
-00:47:01|sdc     |     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
-00:47:01|hdc     |     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
-00:47:01|sdd     |     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
-00:47:01|sde     |     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
-00:47:01|lo      |       ~|        ~|        ~|  16436|       ~|       ~|       ~
-00:47:01|eth0    |       ~|        ~|        ~|   1500|       ~|       ~|       ~
-00:47:01|None    |       ~|        ~|        ~|      ~|   38220|       ~| 6068648
+00:47:01|     sda|     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
+00:47:01|     sdb|     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
+00:47:01|     sdc|     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
+00:47:01|     hdc|     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
+00:47:01|     sdd|     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
+00:47:01|     sde|     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
+00:47:01|      lo|       ~|        ~|        ~|  16436|       ~|       ~|       ~
+00:47:01|    eth0|       ~|        ~|        ~|   1500|       ~|       ~|       ~
+00:47:01|       =|       ~|        ~|        ~|      ~|   38220|       ~| 6068648
 00:47:01|1 minute|       ~|        ~|        ~|      ~|       ~|   0.820|       ~
 00:47:01|5 minute|       ~|        ~|        ~|      ~|       ~|   0.700|       ~
 00:47:01|15 minut|       ~|        ~|        ~|      ~|       ~|   0.590|       ~
-00:47:03|sda     |   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
-00:47:03|sdb     |  30.000|  296.500|  326.500|      ~|       ~|       ~|       ~
-00:47:03|sdc     |   0.500|    0.500|    1.000|      ~|       ~|       ~|       ~
-00:47:03|hdc     |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:03|sdd     |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:03|sde     |   1.000|   12.000|   12.000|      ~|       ~|       ~|       ~
-00:47:03|lo      |       ~|        ~|        ~|  16436|       ~|       ~|       ~
-00:47:03|eth0    |       ~|        ~|        ~|   1500|       ~|       ~|       ~
-00:47:03|None    |       ~|        ~|        ~|      ~|   38220|       ~| 6068648
+00:47:03|     sda|   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
+00:47:03|     sdb|  30.000|  296.500|  326.500|      ~|       ~|       ~|       ~
+00:47:03|     sdc|   0.500|    0.500|    1.000|      ~|       ~|       ~|       ~
+00:47:03|     hdc|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:03|     sdd|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:03|     sde|   1.000|   12.000|   12.000|      ~|       ~|       ~|       ~
+00:47:03|      lo|       ~|        ~|        ~|  16436|       ~|       ~|       ~
+00:47:03|    eth0|       ~|        ~|        ~|   1500|       ~|       ~|       ~
+00:47:03|       =|       ~|        ~|        ~|      ~|   38220|       ~| 6068648
 00:47:03|1 minute|       ~|        ~|        ~|      ~|       ~|   0.820|       ~
 00:47:03|5 minute|       ~|        ~|        ~|      ~|       ~|   0.700|       ~
 00:47:03|15 minut|       ~|        ~|        ~|      ~|       ~|   0.590|       ~
-00:47:05|sda     |   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
-00:47:05|sdb     |  30.000|  296.000|  326.000|      ~|       ~|       ~|       ~
-00:47:05|sdc     |   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
-00:47:05|hdc     |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:05|sdd     |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:05|sde     |   1.000|   11.500|   12.500|      ~|       ~|       ~|       ~
-00:47:05|lo      |       ~|        ~|        ~|  16436|       ~|       ~|       ~
-00:47:05|eth0    |       ~|        ~|        ~|   1500|       ~|       ~|       ~
-00:47:05|None    |       ~|        ~|        ~|      ~|   38220|       ~| 6068648
+00:47:05|     sda|   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
+00:47:05|     sdb|  30.000|  296.000|  326.000|      ~|       ~|       ~|       ~
+00:47:05|     sdc|   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
+00:47:05|     hdc|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:05|     sdd|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:05|     sde|   1.000|   11.500|   12.500|      ~|       ~|       ~|       ~
+00:47:05|      lo|       ~|        ~|        ~|  16436|       ~|       ~|       ~
+00:47:05|    eth0|       ~|        ~|        ~|   1500|       ~|       ~|       ~
+00:47:05|       =|       ~|        ~|        ~|      ~|   38220|       ~| 6068648
 00:47:05|1 minute|       ~|        ~|        ~|      ~|       ~|   0.820|       ~
 00:47:05|5 minute|       ~|        ~|        ~|      ~|       ~|   0.700|       ~
 00:47:05|15 minut|       ~|        ~|        ~|      ~|       ~|   0.590|       ~
-00:47:07|sda     |   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
-00:47:07|sdb     |  30.000|  296.500|  326.500|      ~|       ~|       ~|       ~
-00:47:07|sdc     |   0.500|    0.500|    1.000|      ~|       ~|       ~|       ~
-00:47:07|hdc     |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:07|sdd     |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:07|sde     |   1.000|   11.500|   12.500|      ~|       ~|       ~|       ~
-00:47:07|lo      |       ~|        ~|        ~|  16436|       ~|       ~|       ~
-00:47:07|eth0    |       ~|        ~|        ~|   1500|       ~|       ~|       ~
-00:47:07|None    |       ~|        ~|        ~|      ~|   38220|       ~| 6068648
+00:47:07|     sda|   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
+00:47:07|     sdb|  30.000|  296.500|  326.500|      ~|       ~|       ~|       ~
+00:47:07|     sdc|   0.500|    0.500|    1.000|      ~|       ~|       ~|       ~
+00:47:07|     hdc|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:07|     sdd|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:07|     sde|   1.000|   11.500|   12.500|      ~|       ~|       ~|       ~
+00:47:07|      lo|       ~|        ~|        ~|  16436|       ~|       ~|       ~
+00:47:07|    eth0|       ~|        ~|        ~|   1500|       ~|       ~|       ~
+00:47:07|       =|       ~|        ~|        ~|      ~|   38220|       ~| 6068648
 00:47:07|1 minute|       ~|        ~|        ~|      ~|       ~|   0.820|       ~
 00:47:07|5 minute|       ~|        ~|        ~|      ~|       ~|   0.700|       ~
 00:47:07|15 minut|       ~|        ~|        ~|      ~|       ~|   0.590|       ~
-00:47:09|sda     |   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
-00:47:09|sdb     |  30.000|  296.000|  326.000|      ~|       ~|       ~|       ~
-00:47:09|sdc     |   0.500|    0.500|    0.500|      ~|       ~|       ~|       ~
-00:47:09|hdc     |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:09|sdd     |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:09|sde     |   0.500|   11.500|   12.500|      ~|       ~|       ~|       ~
-00:47:09|lo      |       ~|        ~|        ~|  16436|       ~|       ~|       ~
-00:47:09|eth0    |       ~|        ~|        ~|   1500|       ~|       ~|       ~
-00:47:09|None    |       ~|        ~|        ~|      ~|   38220|       ~| 6068648
+00:47:09|     sda|   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
+00:47:09|     sdb|  30.000|  296.000|  326.000|      ~|       ~|       ~|       ~
+00:47:09|     sdc|   0.500|    0.500|    0.500|      ~|       ~|       ~|       ~
+00:47:09|     hdc|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:09|     sdd|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:09|     sde|   0.500|   11.500|   12.500|      ~|       ~|       ~|       ~
+00:47:09|      lo|       ~|        ~|        ~|  16436|       ~|       ~|       ~
+00:47:09|    eth0|       ~|        ~|        ~|   1500|       ~|       ~|       ~
+00:47:09|       =|       ~|        ~|        ~|      ~|   38220|       ~| 6068648
 00:47:09|1 minute|       ~|        ~|        ~|      ~|       ~|   0.820|       ~
 00:47:09|5 minute|       ~|        ~|        ~|      ~|       ~|   0.700|       ~
 00:47:09|15 minut|       ~|        ~|        ~|      ~|       ~|   0.590|       ~
         |Instance name|d.d.read|d.d.write|d.d.total|n.i.mtu|m.u.free|k.a.load|m.u.used
         |             | count/s|  count/s|  count/s|   byte|   Kbyte|        |   Kbyte
-00:47:01|sda          |     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
-00:47:01|sdb          |     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
-00:47:01|sdc          |     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
-00:47:01|hdc          |     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
-00:47:01|sdd          |     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
-00:47:01|sde          |     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
-00:47:01|lo           |       ~|        ~|        ~|  16436|       ~|       ~|       ~
-00:47:01|eth0         |       ~|        ~|        ~|   1500|       ~|       ~|       ~
-00:47:01|None         |       ~|        ~|        ~|      ~|   38220|       ~| 6068648
-00:47:01|1 minute     |       ~|        ~|        ~|      ~|       ~|   0.820|       ~
-00:47:01|5 minute     |       ~|        ~|        ~|      ~|       ~|   0.700|       ~
-00:47:01|15 minute    |       ~|        ~|        ~|      ~|       ~|   0.590|       ~
-00:47:03|sda          |   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
-00:47:03|sdb          |  30.000|  296.500|  326.500|      ~|       ~|       ~|       ~
-00:47:03|sdc          |   0.500|    0.500|    1.000|      ~|       ~|       ~|       ~
-00:47:03|hdc          |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:03|sdd          |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:03|sde          |   1.000|   12.000|   12.000|      ~|       ~|       ~|       ~
-00:47:03|lo           |       ~|        ~|        ~|  16436|       ~|       ~|       ~
-00:47:03|eth0         |       ~|        ~|        ~|   1500|       ~|       ~|       ~
-00:47:03|None         |       ~|        ~|        ~|      ~|   38220|       ~| 6068648
-00:47:03|1 minute     |       ~|        ~|        ~|      ~|       ~|   0.820|       ~
-00:47:03|5 minute     |       ~|        ~|        ~|      ~|       ~|   0.700|       ~
-00:47:03|15 minute    |       ~|        ~|        ~|      ~|       ~|   0.590|       ~
-00:47:05|sda          |   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
-00:47:05|sdb          |  30.000|  296.000|  326.000|      ~|       ~|       ~|       ~
-00:47:05|sdc          |   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
-00:47:05|hdc          |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:05|sdd          |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:05|sde          |   1.000|   11.500|   12.500|      ~|       ~|       ~|       ~
-00:47:05|lo           |       ~|        ~|        ~|  16436|       ~|       ~|       ~
-00:47:05|eth0         |       ~|        ~|        ~|   1500|       ~|       ~|       ~
-00:47:05|None         |       ~|        ~|        ~|      ~|   38220|       ~| 6068648
-00:47:05|1 minute     |       ~|        ~|        ~|      ~|       ~|   0.820|       ~
-00:47:05|5 minute     |       ~|        ~|        ~|      ~|       ~|   0.700|       ~
-00:47:05|15 minute    |       ~|        ~|        ~|      ~|       ~|   0.590|       ~
-00:47:07|sda          |   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
-00:47:07|sdb          |  30.000|  296.500|  326.500|      ~|       ~|       ~|       ~
-00:47:07|sdc          |   0.500|    0.500|    1.000|      ~|       ~|       ~|       ~
-00:47:07|hdc          |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:07|sdd          |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:07|sde          |   1.000|   11.500|   12.500|      ~|       ~|       ~|       ~
-00:47:07|lo           |       ~|        ~|        ~|  16436|       ~|       ~|       ~
-00:47:07|eth0         |       ~|        ~|        ~|   1500|       ~|       ~|       ~
-00:47:07|None         |       ~|        ~|        ~|      ~|   38220|       ~| 6068648
-00:47:07|1 minute     |       ~|        ~|        ~|      ~|       ~|   0.820|       ~
-00:47:07|5 minute     |       ~|        ~|        ~|      ~|       ~|   0.700|       ~
-00:47:07|15 minute    |       ~|        ~|        ~|      ~|       ~|   0.590|       ~
-00:47:09|sda          |   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
-00:47:09|sdb          |  30.000|  296.000|  326.000|      ~|       ~|       ~|       ~
-00:47:09|sdc          |   0.500|    0.500|    0.500|      ~|       ~|       ~|       ~
-00:47:09|hdc          |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:09|sdd          |   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
-00:47:09|sde          |   0.500|   11.500|   12.500|      ~|       ~|       ~|       ~
-00:47:09|lo           |       ~|        ~|        ~|  16436|       ~|       ~|       ~
-00:47:09|eth0         |       ~|        ~|        ~|   1500|       ~|       ~|       ~
-00:47:09|None         |       ~|        ~|        ~|      ~|   38220|       ~| 6068648
-00:47:09|1 minute     |       ~|        ~|        ~|      ~|       ~|   0.820|       ~
-00:47:09|5 minute     |       ~|        ~|        ~|      ~|       ~|   0.700|       ~
-00:47:09|15 minute    |       ~|        ~|        ~|      ~|       ~|   0.590|       ~
+00:47:01|          sda|     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
+00:47:01|          sdb|     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
+00:47:01|          sdc|     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
+00:47:01|          hdc|     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
+00:47:01|          sdd|     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
+00:47:01|          sde|     N/A|      N/A|      N/A|      ~|       ~|       ~|       ~
+00:47:01|           lo|       ~|        ~|        ~|  16436|       ~|       ~|       ~
+00:47:01|         eth0|       ~|        ~|        ~|   1500|       ~|       ~|       ~
+00:47:01|            =|       ~|        ~|        ~|      ~|   38220|       ~| 6068648
+00:47:01|     1 minute|       ~|        ~|        ~|      ~|       ~|   0.820|       ~
+00:47:01|     5 minute|       ~|        ~|        ~|      ~|       ~|   0.700|       ~
+00:47:01|    15 minute|       ~|        ~|        ~|      ~|       ~|   0.590|       ~
+00:47:03|          sda|   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
+00:47:03|          sdb|  30.000|  296.500|  326.500|      ~|       ~|       ~|       ~
+00:47:03|          sdc|   0.500|    0.500|    1.000|      ~|       ~|       ~|       ~
+00:47:03|          hdc|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:03|          sdd|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:03|          sde|   1.000|   12.000|   12.000|      ~|       ~|       ~|       ~
+00:47:03|           lo|       ~|        ~|        ~|  16436|       ~|       ~|       ~
+00:47:03|         eth0|       ~|        ~|        ~|   1500|       ~|       ~|       ~
+00:47:03|            =|       ~|        ~|        ~|      ~|   38220|       ~| 6068648
+00:47:03|     1 minute|       ~|        ~|        ~|      ~|       ~|   0.820|       ~
+00:47:03|     5 minute|       ~|        ~|        ~|      ~|       ~|   0.700|       ~
+00:47:03|    15 minute|       ~|        ~|        ~|      ~|       ~|   0.590|       ~
+00:47:05|          sda|   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
+00:47:05|          sdb|  30.000|  296.000|  326.000|      ~|       ~|       ~|       ~
+00:47:05|          sdc|   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
+00:47:05|          hdc|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:05|          sdd|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:05|          sde|   1.000|   11.500|   12.500|      ~|       ~|       ~|       ~
+00:47:05|           lo|       ~|        ~|        ~|  16436|       ~|       ~|       ~
+00:47:05|         eth0|       ~|        ~|        ~|   1500|       ~|       ~|       ~
+00:47:05|            =|       ~|        ~|        ~|      ~|   38220|       ~| 6068648
+00:47:05|     1 minute|       ~|        ~|        ~|      ~|       ~|   0.820|       ~
+00:47:05|     5 minute|       ~|        ~|        ~|      ~|       ~|   0.700|       ~
+00:47:05|    15 minute|       ~|        ~|        ~|      ~|       ~|   0.590|       ~
+00:47:07|          sda|   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
+00:47:07|          sdb|  30.000|  296.500|  326.500|      ~|       ~|       ~|       ~
+00:47:07|          sdc|   0.500|    0.500|    1.000|      ~|       ~|       ~|       ~
+00:47:07|          hdc|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:07|          sdd|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:07|          sde|   1.000|   11.500|   12.500|      ~|       ~|       ~|       ~
+00:47:07|           lo|       ~|        ~|        ~|  16436|       ~|       ~|       ~
+00:47:07|         eth0|       ~|        ~|        ~|   1500|       ~|       ~|       ~
+00:47:07|            =|       ~|        ~|        ~|      ~|   38220|       ~| 6068648
+00:47:07|     1 minute|       ~|        ~|        ~|      ~|       ~|   0.820|       ~
+00:47:07|     5 minute|       ~|        ~|        ~|      ~|       ~|   0.700|       ~
+00:47:07|    15 minute|       ~|        ~|        ~|      ~|       ~|   0.590|       ~
+00:47:09|          sda|   0.000|    0.500|    0.500|      ~|       ~|       ~|       ~
+00:47:09|          sdb|  30.000|  296.000|  326.000|      ~|       ~|       ~|       ~
+00:47:09|          sdc|   0.500|    0.500|    0.500|      ~|       ~|       ~|       ~
+00:47:09|          hdc|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:09|          sdd|   0.000|    0.000|    0.000|      ~|       ~|       ~|       ~
+00:47:09|          sde|   0.500|   11.500|   12.500|      ~|       ~|       ~|       ~
+00:47:09|           lo|       ~|        ~|        ~|  16436|       ~|       ~|       ~
+00:47:09|         eth0|       ~|        ~|        ~|   1500|       ~|       ~|       ~
+00:47:09|            =|       ~|        ~|        ~|      ~|   38220|       ~| 6068648
+00:47:09|     1 minute|       ~|        ~|        ~|      ~|       ~|   0.820|       ~
+00:47:09|     5 minute|       ~|        ~|        ~|      ~|       ~|   0.700|       ~
+00:47:09|    15 minute|       ~|        ~|        ~|      ~|       ~|   0.590|       ~
+== exercise precision correctness
+  s.seconds
+        s/s
+        N/A
+        N/A
+  1.0000000
+  1.0000000
+  1.0000000
+  s.seconds
+        s/s
+        N/A
+        N/A
+      1.000
+      1.000
+      1.000
+== exercise extended header
+
+  archive: QAPATH/archives/rep
+     host: slack
+ timezone: UTC+11
+    start: Wed Feb 10 14:39:13 2016
+      end: Wed Feb 10 14:39:17 2016
+  metrics: 21 (21 instances)
+  samples: N/A
+ interval: N/A
+ duration: 00:00:04
+
+
+  archive: QAPATH/archives/20130706
+     host: billing02
+ timezone: UTC+10
+    start: Sat Jul  6 00:17:01 2013
+      end: Sun Jul  7 00:15:43 2013
+  metrics: 294 (564 instances)
+  samples: N/A
+ interval: N/A
+ duration: 23:58:41
+
+
+  archive: QAPATH/archives/bug-1044.meta
+     host: super.elastic.org
+ timezone: UTC-5
+    start: Fri Jan 10 17:58:09 2014
+      end: Mon Jan 13 08:59:49 2014
+  metrics: 5 (5 instances)
+  samples: N/A
+ interval: N/A
+ duration: 2 days, 15:01:40
+
+== exercise separate header
+[ 1] - mem.util.free - Kbyte
+[ 2] - disk.dev.read["sda"] - count/s
+[ 3] - disk.dev.read["sdb"] - count/s
+[ 4] - disk.dev.read["sdc"] - count/s
+[ 5] - disk.dev.read["hdc"] - count/s
+[ 6] - disk.dev.read["sdd"] - count/s
+[ 7] - disk.dev.read["sde"] - count/s
+[ 8] - mem.util.used - Kbyte
+
+         1         2         3         4         5         6         7         8
+     38220       N/A       N/A       N/A       N/A       N/A       N/A   6068648
+     38220     0.000    30.000     0.500     0.000     0.000     1.000   6068648
+
+[ 1] - mem.util.free - Kbyte
+[ 2] - disk.dev.read["sda"] - count/s
+[ 3] - disk.dev.read["sdb"] - count/s
+[ 4] - disk.dev.read["sdc"] - count/s
+[ 5] - disk.dev.read["hdc"] - count/s
+[ 6] - disk.dev.read["sdd"] - count/s
+[ 7] - disk.dev.read["sde"] - count/s
+[ 8] - mem.util.used - Kbyte
+
+         1         2         3         4         5         6         7         8
+     38220     0.000    30.000     0.000     0.000     0.000     1.000   6068648
+     38220     0.000    30.000     0.500     0.000     0.000     1.000   6068648
+
+[ 1] - mem.util.free - Kbyte
+[ 2] - disk.dev.read["sda"] - count/s
+[ 3] - disk.dev.read["sdb"] - count/s
+[ 4] - disk.dev.read["sdc"] - count/s
+[ 5] - disk.dev.read["hdc"] - count/s
+[ 6] - disk.dev.read["sdd"] - count/s
+[ 7] - disk.dev.read["sde"] - count/s
+[ 8] - mem.util.used - Kbyte
+
+         1         2         3         4         5         6         7         8
+     38220     0.000    30.000     0.500     0.000     0.000     0.500   6068648
+[ 1] - mem.util.free - Kbyte
+[ 2] - disk.dev.read["sda"] - count/s
+[ 2] - disk.dev.read["sdb"] - count/s
+[ 2] - disk.dev.read["sdc"] - count/s
+[ 2] - disk.dev.read["hdc"] - count/s
+[ 2] - disk.dev.read["sdd"] - count/s
+[ 2] - disk.dev.read["sde"] - count/s
+[ 3] - disk.dev.write["sda"] - count/s
+[ 3] - disk.dev.write["sdb"] - count/s
+[ 3] - disk.dev.write["sdc"] - count/s
+[ 3] - disk.dev.write["hdc"] - count/s
+[ 3] - disk.dev.write["sdd"] - count/s
+[ 3] - disk.dev.write["sde"] - count/s
+[ 4] - mem.util.used - Kbyte
+
+        |        |       1|       2|        3|       4
+00:47:01|       =|   38220|       ~|        ~| 6068648
+00:47:01|     sda|       ~|     N/A|      N/A|       ~
+00:47:01|     sdb|       ~|     N/A|      N/A|       ~
+00:47:01|     sdc|       ~|     N/A|      N/A|       ~
+00:47:01|     hdc|       ~|     N/A|      N/A|       ~
+00:47:01|     sdd|       ~|     N/A|      N/A|       ~
+00:47:01|     sde|       ~|     N/A|      N/A|       ~
+00:47:03|       =|   38220|       ~|        ~| 6068648
+00:47:03|     sda|       ~|   0.000|    0.500|       ~
+00:47:03|     sdb|       ~|  30.000|  296.500|       ~
+00:47:03|     sdc|       ~|   0.500|    0.500|       ~
+00:47:03|     hdc|       ~|   0.000|    0.000|       ~
+00:47:03|     sdd|       ~|   0.000|    0.000|       ~
+00:47:03|     sde|       ~|   1.000|   12.000|       ~
+00:47:05|       =|   38220|       ~|        ~| 6068648
+00:47:05|     sda|       ~|   0.000|    0.500|       ~
+00:47:05|     sdb|       ~|  30.000|  296.000|       ~
+00:47:05|     sdc|       ~|   0.000|    0.500|       ~
+00:47:05|     hdc|       ~|   0.000|    0.000|       ~
+00:47:05|     sdd|       ~|   0.000|    0.000|       ~
+00:47:05|     sde|       ~|   1.000|   11.500|       ~
+00:47:07|       =|   38220|       ~|        ~| 6068648
+00:47:07|     sda|       ~|   0.000|    0.500|       ~
+00:47:07|     sdb|       ~|  30.000|  296.500|       ~
+00:47:07|     sdc|       ~|   0.500|    0.500|       ~
+00:47:07|     hdc|       ~|   0.000|    0.000|       ~
+00:47:07|     sdd|       ~|   0.000|    0.000|       ~
+00:47:07|     sde|       ~|   1.000|   11.500|       ~
+00:47:09|       =|   38220|       ~|        ~| 6068648
+00:47:09|     sda|       ~|   0.000|    0.500|       ~
+00:47:09|     sdb|       ~|  30.000|  296.000|       ~
+00:47:09|     sdc|       ~|   0.500|    0.500|       ~
+00:47:09|     hdc|       ~|   0.000|    0.000|       ~
+00:47:09|     sdd|       ~|   0.000|    0.000|       ~
+00:47:09|     sde|       ~|   0.500|   11.500|       ~
+[ 1] - mem.util.used - Kbyte
+[ 2] - kernel.all.cpu.user - ms/s
+[ 2] - kernel.percpu.cpu.user["cpu0"] - ms/s
+[ 2] - kernel.percpu.cpu.user["cpu1"] - ms/s
+[ 3] - mem.util.free - Kbyte
+[ 4] - mem.util.shared - Kbyte
+
+                       1     2         3           4
+00:47:01     =   6068648   N/A     38220         N/A
+00:47:01  cpu0         ~   N/A         ~           ~
+00:47:01  cpu1         ~   N/A         ~           ~
+00:47:03     =   6068648   404     38220         N/A
+00:47:03  cpu0         ~  21.0         ~           ~
+00:47:03  cpu1         ~   384         ~           ~
+00:47:05     =   6068648   404     38220         N/A
+00:47:05  cpu0         ~  20.5         ~           ~
+00:47:05  cpu1         ~   384         ~           ~
+00:47:07     =   6068648   405     38220         N/A
+00:47:07  cpu0         ~  21.0         ~           ~
+00:47:07  cpu1         ~   384         ~           ~
+00:47:09     =   6068648   404     38220         N/A
+00:47:09  cpu0         ~  21.0         ~           ~
+00:47:09  cpu1         ~   384         ~           ~
+== invalid command line parameters
+Error while parsing options: Non-negative integer expected.
+Error while parsing options: Non-negative integer expected.
+Error while parsing options: Non-negative integer expected.
+Invalid regex '(':
+Invalid regex '.[]*':
+Invalid regex '.[z-a]':
+Metricset definition ':nosuchset' not found.
+== invalid configuration file
+Error while parsing options: Invalid output target specified.
+pcp: sample count must be a positive numeric argument
+Error while parsing options: Non-negative integer expected.
+pmrep: Impossible value or scale conversion
+Invalid metric bogus (PM_ERR_NAME Unknown metric name).
+== unsupported metric type
+Invalid metric sample.sysinfo (PM_ERR_TYPE Unknown or illegal metric type).
 == exercise non-integer options
 
   archive: QAPATH/archives/sample-secs
      host: rattle
- timezone: ...-11
+ timezone: UTC+10
     start: Mon May  1 20:36:45 2000
       end: Mon May  1 20:37:45 2000
-  metrics: 2
+  metrics: 2 (2 instances)
   samples: 6
  interval: 0.5 sec
- duration: 2.500 sec
+ duration: 00:00:03
 
           s.seconds  s.milliseconds
                 s/s            ms/s
@@ -236,7 +417,214 @@ HH:MM:SS        1
      380436   380435679.381
      380438   380437679.382
      380440   380439679.413
+== exercise samples/interval/endtime settings and combinations
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+10
+    start: Mon May  1 20:36:45 2000
+      end: Mon May  1 20:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 3
+ interval: 1.0 sec
+ duration: 00:00:02
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+20:36:45        N/A             N/A
+20:36:46        N/A             N/A
+20:36:47      1.000        1000.216
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+10
+    start: Mon May  1 20:36:45 2000
+      end: Mon May  1 20:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 21
+ interval: 3.0 sec
+ duration: 00:01:00
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+20:36:45        N/A             N/A
+20:36:48        N/A             N/A
+20:36:51      1.000         999.992
+20:36:54      1.000        1000.011
+20:36:57      1.000        1000.002
+20:37:00      1.000         999.995
+20:37:03      1.000        1000.004
+20:37:06      1.000         999.997
+20:37:09      1.000        1000.000
+20:37:12      1.000        1000.001
+20:37:15      1.000        1000.000
+20:37:18      1.000        1000.002
+20:37:21      1.000        1000.003
+20:37:24      1.000         999.994
+20:37:27      1.000        1000.003
+20:37:30      1.000         999.996
+20:37:33      1.000        1000.001
+20:37:36      1.000         999.995
+20:37:39      1.000        1000.005
+20:37:42      1.000        1000.004
+20:37:45      1.000         999.997
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+10
+    start: Mon May  1 20:36:45 2000
+      end: Mon May  1 20:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 4
+ interval: 1.0 sec
+ duration: 00:00:03
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+20:36:45        N/A             N/A
+20:36:46        N/A             N/A
+20:36:47      1.000        1000.216
+20:36:48      1.000        1000.090
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+10
+    start: Mon May  1 20:36:45 2000
+      end: Mon May  1 20:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 3
+ interval: 3.0 sec
+ duration: 00:00:06
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+20:36:45        N/A             N/A
+20:36:48        N/A             N/A
+20:36:51      1.000         999.992
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+10
+    start: Mon May  1 20:36:45 2000
+      end: Mon May  1 20:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 3
+ interval: 1.5 sec
+ duration: 00:00:03
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+20:36:45        N/A             N/A
+20:36:46        N/A             N/A
+20:36:48      1.333        1000.132
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+10
+    start: Mon May  1 20:36:45 2000
+      end: Mon May  1 20:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 4
+ interval: 3.0 sec
+ duration: 00:00:09
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+20:36:45        N/A             N/A
+20:36:48        N/A             N/A
+20:36:51      1.000         999.992
+20:36:54      1.000        1000.011
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+10
+    start: Mon May  1 20:36:45 2000
+      end: Mon May  1 20:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 3
+ interval: 0.5 sec
+ duration: 00:00:01
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+20:36:45        N/A             N/A
+20:36:45        N/A             N/A
+20:36:46      2.000        1000.216
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+10
+    start: Mon May  1 20:36:45 2000
+      end: Mon May  1 20:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 3
+ interval: 1.0 sec
+ duration: 00:00:02
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+20:36:45        N/A             N/A
+20:36:46        N/A             N/A
+20:36:47      1.000        1000.216
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+10
+    start: Mon May  1 20:36:45 2000
+      end: Mon May  1 20:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 3
+ interval: 1.5 sec
+ duration: 00:00:03
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+20:36:45        N/A             N/A
+20:36:46        N/A             N/A
+20:36:48      1.333        1000.132
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+10
+    start: Mon May  1 20:36:45 2000
+      end: Mon May  1 20:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 3
+ interval: 3.0 sec
+ duration: 00:00:06
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+20:36:45        N/A             N/A
+20:36:48        N/A             N/A
+20:36:51      1.000         999.992
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+10
+    start: Mon May  1 20:36:45 2000
+      end: Mon May  1 20:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 2
+ interval: 4.0 sec
+ duration: 00:00:04
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+20:36:45        N/A             N/A
+20:36:49        N/A             N/A
 == exercise timezone setting
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+0
+    start: Mon May  1 10:36:45 2000
+      end: Mon May  1 10:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 5
+ interval: 2.0 sec
+ duration: 00:00:08
+
           s.seconds  s.milliseconds
                 s/s            ms/s
 10:36:45        N/A             N/A
@@ -244,6 +632,243 @@ HH:MM:SS        1
 10:36:49      1.000        1000.033
 10:36:51      1.000        1000.001
 10:36:53      1.000        1000.016
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+0
+    start: Mon May  1 10:36:45 2000
+      end: Mon May  1 10:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 5
+ interval: 2.0 sec
+ duration: 00:00:08
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+10:36:45        N/A             N/A
+10:36:47        N/A             N/A
+10:36:49      1.000        1000.033
+10:36:51      1.000        1000.001
+10:36:53      1.000        1000.016
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+0
+    start: Mon May  1 10:36:45 2000
+      end: Mon May  1 10:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 5
+ interval: 2.0 sec
+ duration: 00:00:08
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+10:36:45        N/A             N/A
+10:36:47        N/A             N/A
+10:36:49      1.000        1000.033
+10:36:51      1.000        1000.001
+10:36:53      1.000        1000.016
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+0
+    start: Mon May  1 10:36:45 2000
+      end: Mon May  1 10:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 5
+ interval: 2.0 sec
+ duration: 00:00:08
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+10:36:45        N/A             N/A
+10:36:47        N/A             N/A
+10:36:49      1.000        1000.033
+10:36:51      1.000        1000.001
+10:36:53      1.000        1000.016
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+5
+    start: Mon May  1 15:36:45 2000
+      end: Mon May  1 15:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 5
+ interval: 2.0 sec
+ duration: 00:00:08
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+15:36:45        N/A             N/A
+15:36:47        N/A             N/A
+15:36:49      1.000        1000.033
+15:36:51      1.000        1000.001
+15:36:53      1.000        1000.016
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC-5
+    start: Mon May  1 05:36:45 2000
+      end: Mon May  1 05:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 5
+ interval: 2.0 sec
+ duration: 00:00:08
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+05:36:45        N/A             N/A
+05:36:47        N/A             N/A
+05:36:49      1.000        1000.033
+05:36:51      1.000        1000.001
+05:36:53      1.000        1000.016
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC-4
+    start: Mon May  1 06:36:45 2000
+      end: Mon May  1 06:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 5
+ interval: 2.0 sec
+ duration: 00:00:08
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+06:36:45        N/A             N/A
+06:36:47        N/A             N/A
+06:36:49      1.000        1000.033
+06:36:51      1.000        1000.001
+06:36:53      1.000        1000.016
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+3
+    start: Mon May  1 13:36:45 2000
+      end: Mon May  1 13:37:45 2000
+  metrics: 2 (2 instances)
+  samples: 5
+ interval: 2.0 sec
+ duration: 00:00:08
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+13:36:45        N/A             N/A
+13:36:47        N/A             N/A
+13:36:49      1.000        1000.033
+13:36:51      1.000        1000.001
+13:36:53      1.000        1000.016
+
+  archive: QAPATH/archives/sample-secs
+     host: rattle
+ timezone: UTC+5:30
+    start: Mon May  1 16:06:45 2000
+      end: Mon May  1 16:07:45 2000
+  metrics: 2 (2 instances)
+  samples: 5
+ interval: 2.0 sec
+ duration: 00:00:08
+
+          s.seconds  s.milliseconds
+                s/s            ms/s
+16:06:45        N/A             N/A
+16:06:47        N/A             N/A
+16:06:49      1.000        1000.033
+16:06:51      1.000        1000.001
+16:06:53      1.000        1000.016
+
+  archive: QAPATH/archives/numa
+     host: grundy
+ timezone: UTC-7
+    start: Thu Apr 10 19:55:52 2014
+      end: Thu Apr 10 19:56:01 2014
+  metrics: 1 (1 instance)
+  samples: 10
+ interval: 1.0 sec
+ duration: 00:00:09
+
+
+  archive: QAPATH/archives/rep
+     host: slack
+ timezone: UTC+11
+    start: Wed Feb 10 14:39:13 2016
+      end: Wed Feb 10 14:39:17 2016
+  metrics: 1 (1 instance)
+  samples: 4
+ interval: 1.0 sec
+ duration: 00:00:03
+
+== exercise timezone change
+
+  archive: QAPATH/archives/coverage
+     host: localhost.localdomain
+ timezone: UTC+3
+    start: Sun Oct 29 03:30:00 2017
+      end: Sun Oct 29 04:46:00 2017
+  metrics: 1 (1 instance)
+  samples: N/A
+ interval: N/A
+ duration: 01:16:00
+
+          m.u.free
+             Kbyte
+03:30:00   1900820
+03:35:00   1900372
+03:40:00   1900280
+03:45:00   1855104
+03:50:00   1855044
+03:55:00   1854660
+04:00:00   1854660
+04:05:00   1854600
+04:10:00   1854664
+04:15:00   1854504
+04:20:00   1854568
+04:25:00   1854476
+04:30:00   1854508
+04:35:00   1854380
+04:40:00   1854288
+04:45:00   1854228
+
+  archive: QAPATH/archives/coverage
+     host: localhost.localdomain
+ timezone: UTC+0
+    start: Sun Oct 29 00:30:00 2017
+      end: Sun Oct 29 01:46:00 2017
+  metrics: 1 (1 instance)
+  samples: N/A
+ interval: N/A
+ duration: 01:16:00
+
+          m.u.free
+             Kbyte
+00:30:00   1900820
+00:35:00   1900372
+00:40:00   1900280
+00:45:00   1855104
+00:50:00   1855044
+00:55:00   1854660
+01:00:00   1854660
+01:05:00   1854600
+01:10:00   1854664
+01:15:00   1854504
+01:20:00   1854568
+01:25:00   1854476
+01:30:00   1854508
+01:35:00   1854380
+01:40:00   1854288
+01:45:00   1854228
+== exercise starttime handling / confirm no negative duration/samples
+
+  archive: QAPATH/archives/19970807.09.54
+     host: gonzo
+ timezone: UTC+0
+    start: Thu Aug  7 22:59:00 1997
+      end: Wed Aug  6 23:55:01 1997
+  metrics: 1 (1 instance)
+  samples: 0
+ interval: 1.0 sec
+ duration: 00:00:00
+
 == exercise extended CSV output
 11
 Host,Interval,Time,"sample.seconds","sample.milliseconds"
@@ -252,6 +877,13 @@ rattle,2,2000-05-01 20:36:47 UTC+10,380434,380433679.314
 rattle,2,2000-05-01 20:36:49 UTC+10,380436,380435679.381
 rattle,2,2000-05-01 20:36:51 UTC+10,380438,380437679.382
 rattle,2,2000-05-01 20:36:53 UTC+10,380440,380439679.413
+== exercise delimiter corner cases
+       h.machine
+           linux
+         freemem usedmem
+           Kbyte   Kbyte
+00:47:01   38220 6068648
+00:47:03   38220 6068648
 == exercise CSV and alternate delimiters
 Time,"sample.seconds","sample.milliseconds"
 2000-05-01 20:36:45,,
@@ -265,13 +897,19 @@ Time|"sample.seconds"|"sample.milliseconds"
 2000-05-01 20:36:49|380436|380435679.381
 2000-05-01 20:36:51|380438|380437679.382
 2000-05-01 20:36:53|380440|380439679.413
+Host,Interval,Time;"sample.seconds";"sample.milliseconds"
+rattle;0;2000-05-01 20:36:45 UTC+10;;
+rattle;2;2000-05-01 20:36:47 UTC+10;380434;380433679.314
+rattle;2;2000-05-01 20:36:49 UTC+10;380436;380435679.381
+rattle;2;2000-05-01 20:36:51 UTC+10;380438;380437679.382
+rattle;2;2000-05-01 20:36:53 UTC+10;380440;380439679.413
 == exercise CSV and instance handling
 Time,"hinv.map.scsi-scsi0:0:0:0 Direct-Access","hinv.map.scsi-scsi0:0:1:0 Direct-Access","hinv.map.scsi-scsi0:0:2:0 Direct-Access","hinv.map.scsi-scsi0:0:3:0 Direct-Access","hinv.map.scsi-scsi0:0:4:0 Direct-Access","kernel.all.load-1 minute","kernel.all.load-5 minute","kernel.all.load-15 minute"
-2013-07-06 00:47:01,"sda","sdb","sdc","sdd","sde",0.82,0.7,0.59
-2013-07-06 00:47:03,"sda","sdb","sdc","sdd","sde",0.82,0.7,0.59
-2013-07-06 00:47:05,"sda","sdb","sdc","sdd","sde",0.82,0.7,0.59
-2013-07-06 00:47:07,"sda","sdb","sdc","sdd","sde",0.82,0.7,0.59
-2013-07-06 00:47:09,"sda","sdb","sdc","sdd","sde",0.82,0.7,0.59
+2013-07-06 00:47:01,"sda","sdb","sdc","sdd","sde",0.820,0.700,0.590
+2013-07-06 00:47:03,"sda","sdb","sdc","sdd","sde",0.820,0.700,0.590
+2013-07-06 00:47:05,"sda","sdb","sdc","sdd","sde",0.820,0.700,0.590
+2013-07-06 00:47:07,"sda","sdb","sdc","sdd","sde",0.820,0.700,0.590
+2013-07-06 00:47:09,"sda","sdb","sdc","sdd","sde",0.820,0.700,0.590
 == compare output-to-file versus stdout
 ok
 == exercise repeated headers option
@@ -279,14 +917,17 @@ ok
         s/s
         N/A
         N/A
+
   s.seconds
         s/s
       1.000
       1.000
+
   s.seconds
         s/s
       1.000
 == exercise units conversion options
+pmrep: Impossible value or scale conversion
                  m.u.free         m.u.used
                        MB               MB
 00:47:01             37.3           5926.4
@@ -369,7 +1010,81 @@ ok
 14:39:15    -0.000  2746624.0
 14:39:16     0.000  2746624.0
 14:39:17     0.000  2746624.0
+== exercise compact metricset specification and overrides
+                 mem free         mem-used
+                       MB               GB
+00:47:01               37             5.79
+00:47:03               37             5.79
+00:47:05               37             5.79
+00:47:07               37             5.79
+00:47:09               37             5.79
+== exercise forced override options
+         m.u.used
+               MB
+         5926.414
+         m.u.used
+               MB
+         5926.414
+         m.u.used
+               MB
+         5926.414
+         m.u.used
+               MB
+         5926.414
+  d.d.read
+       sda
+   count/s
+       N/A
+       0.0
+  d.d.read
+       sda
+   count/s
+       N/A
+       0.0
+  d.d.read
+       sda
+   count/s
+       N/A
+       0.0
+  d.d.read
+       sda
+   count/s
+       N/A
+       0.0
+  d.d.read
+       sda
+     count
+  57062162
+  57062162
+  d.d.read
+       sda
+     count
+  57062162
+  57062162
+  d.d.read
+       sda
+     count
+  57062162
+  57062162
+  d.d.read
+       sda
+     count
+  57062162
+  57062162
+  d.d.read
+       sda
+   count/s
+       N/A
+     0.000
+  m.u.used
+        MB
+  5926.414
+  m.u.used
+        MB
+  5926.414
 == derived metrics configuration file
+Failed to load derived metric definitions from file ...:
+No such file or directory.
   s.combo
       s/s
       N/A
@@ -385,7 +1100,11 @@ ok
     1.001
     1.001
     1.001
+== derived metrics definition files on command line
+No output expected.
 == derived metrics in pmrep.conf
+No output expected.
+No output expected.
 No output expected.
 == extended existing sample configuration
   s.combo  s.seconds  s.milliseconds
@@ -436,6 +1155,18 @@ Incompatible configuration file version (read v99, need v1).
              Kbyte
 00:48:01     36832
 00:49:01     38236
+== time alignment with archive/host
+          m.u.free
+             Kbyte
+00:48:00     38220
+00:48:02     36832
+00:48:04     36832
+00:48:06     36832
+00:48:08     36832
+        Xs.l.one
+        X       
+ALIGN_OK_X      1
+ALIGN_OK_X      1
 == basic string value reporting
   p.version
            
@@ -495,6 +1226,22 @@ Requested global instances:
                                          1 minute          5 minute               sda
       count/s             Kbyte                                               count/s
           N/A             38220             0.820             0.700               N/A
+  d.d.read  d.d.read  d.d.read  d.d.read  d.d.read  d.d.read
+       sda       sdb       sdc       hdc       sdd       sde
+   count/s   count/s   count/s   count/s   count/s   count/s
+       N/A       N/A       N/A       N/A       N/A       N/A
+  d.d.read
+       sda
+   count/s
+       N/A
+      read      read      read      read      read
+       sda       sdb       sdc       sdd       sde
+   count/s   count/s   count/s   count/s   count/s
+       N/A       N/A       N/A       N/A       N/A
+| sd.* | sd.* | sd.* | sd.* | sd.* 
+|   sda|   sdb|   sdc|   sdd|   sde
+|count/|count/|count/|count/|count/
+|   N/A|   N/A|   N/A|   N/A|   N/A
 === more instance handling
 No matching instances found.
 
@@ -533,6 +1280,137 @@ pmrep: Impossible value or scale conversion
   d.d.avactive  d.d.read  d.d.write  d.d.total  d.d.read_bytes  d.d.write_bytes
            sda       sda        sda        sda             sda              sda
           ms/s   count/s    count/s    count/s         Kbyte/s          Kbyte/s
+== output value truncation
+  h.m
+     
+  lin
+  m.u
+  Kby
+  xxx
+== handle empty/invalid/multiple metricsets in config file
+Invalid metric yes (PM_ERR_NAME Unknown metric name).
+Unknown option mem.util.free in [options].
+No metrics specified.
+
+  archive: QAPATH/archives/20130706
+     host: billing02
+ timezone: UTC+10
+    start: Sat Jul  6 00:47:01 2013
+      end: Sun Jul  7 00:15:43 2013
+  metrics: 1 (1 instance)
+  samples: 1
+ interval: 3.0 sec
+ duration: 00:00:00
+
+
+  archive: QAPATH/archives/20130706
+     host: billing02
+ timezone: UTC+10
+    start: Sat Jul  6 00:47:01 2013
+      end: Sun Jul  7 00:15:43 2013
+  metrics: 1 (1 instance)
+  samples: 1
+ interval: 3.0 sec
+ duration: 00:00:00
+
+
+  archive: QAPATH/archives/20130706
+     host: billing02
+ timezone: UTC+10
+    start: Sat Jul  6 00:47:01 2013
+      end: Sun Jul  7 00:15:43 2013
+  metrics: 1 (1 instance)
+  samples: 1
+ interval: 2.0 sec
+ duration: 00:00:00
+
+== handle options/global/metricset section corner cases / issues
+Unknown option mem.util.free in [options].
+   test   freemem
+            Kbyte
+  yes  freemem
+         Kbyte
+
+  archive: QAPATH/archives/20130706
+     host: billing02
+ timezone: UTC+10
+    start: Sat Jul  6 00:47:01 2013
+      end: Sun Jul  7 00:15:43 2013
+  metrics: 1 (1 instance)
+  samples: 1
+ interval: 2.0 sec
+ duration: 00:00:00
+
+  m.u.used
+     Kbyte
+No options allowed in [global] section.
+No metrics specified.
+
+  archive: QAPATH/archives/20130706
+     host: billing02
+ timezone: UTC+10
+    start: Sat Jul  6 00:47:01 2013
+      end: Sun Jul  7 00:15:43 2013
+  metrics: 1 (1 instance)
+  samples: 1
+ interval: 2.0 sec
+ duration: 00:00:00
+
+  freemem
+    Kbyte
+
+  archive: QAPATH/archives/20130706
+     host: billing02
+ timezone: UTC+10
+    start: Sat Jul  6 00:47:01 2013
+      end: Sun Jul  7 00:15:43 2013
+  metrics: 2 (2 instances)
+  samples: 1
+ interval: 2.0 sec
+ duration: 00:00:00
+
+  freemem  usedmem
+    Kbyte    Kbyte
+
+  archive: QAPATH/archives/20130706
+     host: billing02
+ timezone: UTC+10
+    start: Sat Jul  6 00:47:01 2013
+      end: Sun Jul  7 00:15:43 2013
+  metrics: 1 (1 instance)
+  samples: 1
+ interval: 2.0 sec
+ duration: 00:00:00
+
+  usedmem
+    Kbyte
+
+  archive: QAPATH/archives/20130706
+     host: billing02
+ timezone: UTC+10
+    start: Sat Jul  6 00:47:01 2013
+      end: Sun Jul  7 00:15:43 2013
+  metrics: 2 (2 instances)
+  samples: 1
+ interval: 2.0 sec
+ duration: 00:00:00
+
+  freemem  usedmem
+    Kbyte    Kbyte
+== handle same labels
+          %usr          %usr          %usr
+                        cpu0          cpu1
+      millisec      millisec      millisec
+    4998314520    2062490350    2935824170
+    4998332000    2062491170    2935840820
+  test          %usr
+            millisec
+     =    4998314520
+  cpu0    2062490350
+  cpu1    2935824170
+     =    4998332000
+  cpu0    2062491170
+  cpu1    2935840820
 == exercise option priority
           m.u.free
              Kbyte
@@ -578,4 +1456,14 @@ HH:MM:SS         1
                one
                   
 HH:MM:SS         1
+---
+          freemem
+00:47:01    38220
+00:47:03    38220
+00:47:05    38220
+== exercise signal handling
+  s.l.one
+         
+        1
+        1
 == done

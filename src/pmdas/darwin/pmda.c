@@ -24,7 +24,6 @@
 #include <sys/utsname.h>
 #include <mach/mach.h>
 #include "pmapi.h"
-#include "impl.h"
 #include "pmda.h"
 #include "domain.h"
 
@@ -1128,7 +1127,7 @@ fetch_nfs(unsigned int item, unsigned int inst, pmAtomValue *atom)
 static int
 darwin_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 {
-    __pmID_int	*idp = (__pmID_int *)&(mdesc->m_desc.pmid);
+    unsigned int	item;
 
     if (mdesc->m_user) {
 	/*   
@@ -1154,27 +1153,27 @@ darwin_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 	return 1;
     }
 
-    switch (idp->cluster) {
-    case CLUSTER_LOADAVG:	return fetch_loadavg(idp->item, inst, atom);
-    case CLUSTER_CPULOAD:	return fetch_cpuload(idp->item, atom);
-    case CLUSTER_VMSTAT:	return fetch_vmstat(idp->item, inst, atom);
-    case CLUSTER_KERNEL_UNAME:	return fetch_uname(idp->item, atom);
-    case CLUSTER_FILESYS:	return fetch_filesys(idp->item, inst, atom);
-    case CLUSTER_DISK:		return fetch_disk(idp->item, inst, atom);
-    case CLUSTER_CPU:		return fetch_cpu(idp->item, inst, atom);
-    case CLUSTER_NETWORK:	return fetch_network(idp->item, inst, atom);
-    case CLUSTER_NFS:		return fetch_nfs(idp->item, inst, atom);
+    item = pmID_item(mdesc->m_desc.pmid);
+    switch (pmID_cluster(mdesc->m_desc.pmid)) {
+    case CLUSTER_LOADAVG:	return fetch_loadavg(item, inst, atom);
+    case CLUSTER_CPULOAD:	return fetch_cpuload(item, atom);
+    case CLUSTER_VMSTAT:	return fetch_vmstat(item, inst, atom);
+    case CLUSTER_KERNEL_UNAME:	return fetch_uname(item, atom);
+    case CLUSTER_FILESYS:	return fetch_filesys(item, inst, atom);
+    case CLUSTER_DISK:		return fetch_disk(item, inst, atom);
+    case CLUSTER_CPU:		return fetch_cpu(item, inst, atom);
+    case CLUSTER_NETWORK:	return fetch_network(item, inst, atom);
+    case CLUSTER_NFS:		return fetch_nfs(item, inst, atom);
     }
     return 0;
 }
 
 static int
-darwin_instance(pmInDom indom, int inst, char *name, __pmInResult **result, pmdaExt *pmda)
+darwin_instance(pmInDom indom, int inst, char *name, pmInResult **result, pmdaExt *pmda)
 {
-    __pmInDom_int	*indomp = (__pmInDom_int *)&indom;
     int			need_refresh[NUM_CLUSTERS] = { 0 };
 
-    switch (indomp->serial) {
+    switch (pmInDom_serial(indom)) {
     case FILESYS_INDOM: need_refresh[CLUSTER_FILESYS]++; break;
     case DISK_INDOM:	need_refresh[CLUSTER_DISK]++; break;
     case CPU_INDOM:	need_refresh[CLUSTER_CPU]++; break;
@@ -1190,9 +1189,9 @@ darwin_fetch(int numpmid, pmID pmidlist[], pmResult **resp, pmdaExt *pmda)
     int	i, need_refresh[NUM_CLUSTERS] = { 0 };
 
     for (i = 0; i < numpmid; i++) {
-	__pmID_int *idp = (__pmID_int *)&(pmidlist[i]);
-	if (idp->cluster >= 0 && idp->cluster < NUM_CLUSTERS)
-	    need_refresh[idp->cluster]++;
+	unsigned int	cluster = pmID_cluster(pmidlist[i]);
+	if (cluster >= 0 && cluster < NUM_CLUSTERS)
+	    need_refresh[cluster]++;
     }
     darwin_refresh(need_refresh);
     return pmdaFetch(numpmid, pmidlist, resp, pmda);
@@ -1204,13 +1203,13 @@ darwin_init(pmdaInterface *dp)
     int		sts;
 
     if (_isDSO) {
-	int sep = __pmPathSeparator();
+	int sep = pmPathSeparator();
 	char helppath[MAXPATHLEN];
 	pmsprintf(helppath, MAXPATHLEN, "%s%c" "darwin" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
 	pmdaDSO(dp, PMDA_INTERFACE_3, "darwin DSO", helppath);
     } else {
-	__pmSetProcessIdentity(username);
+	pmSetProcessIdentity(username);
     }
 
     if (dp->status != 0)
@@ -1237,7 +1236,7 @@ darwin_init(pmdaInterface *dp)
 static void
 usage(void)
 {
-    fprintf(stderr, "Usage: %s [options]\n\n", pmProgname);
+    fprintf(stderr, "Usage: %s [options]\n\n", pmGetProgname());
     fputs("Options:\n"
 "  -d domain    use domain (numeric) for metrics domain of PMDA\n"
 "  -l logfile   write log into logfile rather than using default log name\n"
@@ -1254,17 +1253,17 @@ usage(void)
 int
 main(int argc, char **argv)
 {
-    int			c, sep = __pmPathSeparator();
+    int			c, sep = pmPathSeparator();
     int			errflag = 0;
     char		helppath[MAXPATHLEN];
 
     _isDSO = 0;
-    __pmSetProgname(argv[0]);
-    __pmGetUsername(&username);
+    pmSetProgname(argv[0]);
+    pmGetUsername(&username);
 
     pmsprintf(helppath, MAXPATHLEN, "%s%c" "darwin" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
-    pmdaDaemon(&dispatch, PMDA_INTERFACE_3, pmProgname, DARWIN, "darwin.log",
+    pmdaDaemon(&dispatch, PMDA_INTERFACE_3, pmGetProgname(), DARWIN, "darwin.log",
 		helppath);
 
     while ((c = pmdaGetOpt(argc, argv, "D:d:i:l:pu:U:6:?", &dispatch, &errflag)) != EOF) {

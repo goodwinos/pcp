@@ -21,7 +21,7 @@
 #include <sys/stat.h>
 #include <assert.h>
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "logger.h"
 #include <assert.h>
 
@@ -89,7 +89,7 @@ _report(__pmFILE *fp)
 
     here = __pmLseek(fp, 0L, SEEK_CUR);
     fprintf(stderr, "%s: Error occurred at byte offset %ld into a file of",
-	    pmProgname, (long)here);
+	    pmGetProgname(), (long)here);
     if (__pmFstat(fp, &sbuf) < 0)
 	fprintf(stderr, ": stat: %s\n", osstrerror());
     else
@@ -109,15 +109,15 @@ newvolume(int vol)
     __pmFILE		*newfp;
 
     if ((newfp = __pmLogNewFile(outarch.name, vol)) != NULL) {
-	__pmFclose(outarch.logctl.l_mfp);
-	outarch.logctl.l_mfp = newfp;
-	outarch.logctl.l_label.ill_vol = outarch.logctl.l_curvol = vol;
-	__pmLogWriteLabel(outarch.logctl.l_mfp, &outarch.logctl.l_label);
-	__pmFflush(outarch.logctl.l_mfp);
+	__pmFclose(outarch.archctl.ac_mfp);
+	outarch.archctl.ac_mfp = newfp;
+	outarch.logctl.l_label.ill_vol = outarch.archctl.ac_curvol = vol;
+	__pmLogWriteLabel(outarch.archctl.ac_mfp, &outarch.logctl.l_label);
+	__pmFflush(outarch.archctl.ac_mfp);
     }
     else {
 	fprintf(stderr, "%s: __pmLogNewFile(%s,%d) Error: %s\n",
-		pmProgname, outarch.name, vol, pmErrStr(-oserror()));
+		pmGetProgname(), outarch.name, vol, pmErrStr(-oserror()));
 	abandon();
 	/*NOTREACHED*/
     }
@@ -173,14 +173,14 @@ writelabel(int do_rewind)
 	__pmFseek(outarch.logctl.l_mdfp, (long)old_offset, SEEK_SET);
 
     if (do_rewind) {
-	old_offset = __pmFtell(outarch.logctl.l_mfp);
+	old_offset = __pmFtell(outarch.archctl.ac_mfp);
 	assert(old_offset >= 0);
-	__pmRewind(outarch.logctl.l_mfp);
+	__pmRewind(outarch.archctl.ac_mfp);
     }
     outarch.logctl.l_label.ill_vol = 0;
-    __pmLogWriteLabel(outarch.logctl.l_mfp, &outarch.logctl.l_label);
+    __pmLogWriteLabel(outarch.archctl.ac_mfp, &outarch.logctl.l_label);
     if (do_rewind)
-	__pmFseek(outarch.logctl.l_mfp, (long)old_offset, SEEK_SET);
+	__pmFseek(outarch.archctl.ac_mfp, (long)old_offset, SEEK_SET);
 }
 
 /*
@@ -190,13 +190,13 @@ static int
 nextmeta()
 {
     int			sts;
-    __pmLogCtl		*lcp;
+    __pmArchCtl		*acp = inarch.ctxp->c_archctl;
+    __pmLogCtl		*lcp = acp->ac_log;
 
-    lcp = inarch.ctxp->c_archctl->ac_log;
-    if ((sts = _pmLogGet(lcp, PM_LOG_VOL_META, &inarch.metarec)) < 0) {
+    if ((sts = _pmLogGet(acp, PM_LOG_VOL_META, &inarch.metarec)) < 0) {
 	if (sts != PM_ERR_EOL) {
 	    fprintf(stderr, "%s: Error: _pmLogGet[meta %s]: %s\n",
-		    pmProgname, inarch.name, pmErrStr(sts));
+		    pmGetProgname(), inarch.name, pmErrStr(sts));
 	    _report(lcp->l_mdfp);
 	}
 	return -1;
@@ -218,25 +218,23 @@ nextmeta()
 static int
 nextlog(void)
 {
+    __pmArchCtl		*acp = inarch.ctxp->c_archctl;
     int			sts;
-    __pmLogCtl		*lcp;
     int			old_vol;
 
-
-    lcp = inarch.ctxp->c_archctl->ac_log;
-    old_vol = inarch.ctxp->c_archctl->ac_log->l_curvol;
+    old_vol = inarch.ctxp->c_archctl->ac_curvol;
 
     sts = __pmLogRead_ctx(inarch.ctxp, PM_MODE_FORW, NULL, &inarch.rp, PMLOGREAD_NEXT);
     if (sts < 0) {
 	if (sts != PM_ERR_EOL) {
 	    fprintf(stderr, "%s: Error: __pmLogRead[log %s]: %s\n",
-		    pmProgname, inarch.name, pmErrStr(sts));
-	    _report(lcp->l_mfp);
+		    pmGetProgname(), inarch.name, pmErrStr(sts));
+	    _report(acp->ac_mfp);
 	}
 	return -1;
     }
 
-    return old_vol == inarch.ctxp->c_archctl->ac_log->l_curvol ? 0 : 1;
+    return old_vol == acp->ac_curvol ? 0 : 1;
 }
 
 #ifdef IS_MINGW
@@ -255,7 +253,7 @@ parseargs(int argc, char *argv[])
 {
     int			c;
     int			sts;
-    int			sep = __pmPathSeparator();
+    int			sep = pmPathSeparator();
     struct stat		sbuf;
 
     while ((c = pmgetopt_r(argc, argv, &opts)) != EOF) {
@@ -264,7 +262,7 @@ parseargs(int argc, char *argv[])
 	case 'c':	/* config file */
 	    if (stat(opts.optarg, &sbuf) < 0) {
 		pmprintf("%s: stat(%s) failed: %s\n",
-			pmProgname, opts.optarg, osstrerror());
+			pmGetProgname(), opts.optarg, osstrerror());
 		opts.errors++;
 		break;
 	    }
@@ -279,7 +277,7 @@ parseargs(int argc, char *argv[])
 		char		path[MAXPATHLEN+1];
 
 		if ((dirp = opendir(opts.optarg)) == NULL) {
-		    pmprintf("%s: opendir(%s) failed: %s\n", pmProgname, opts.optarg, osstrerror());
+		    pmprintf("%s: opendir(%s) failed: %s\n", pmGetProgname(), opts.optarg, osstrerror());
 		    opts.errors++;
 		}
 		else while ((dp = readdir(dirp)) != NULL) {
@@ -287,7 +285,7 @@ parseargs(int argc, char *argv[])
 		    if (dp->d_name[0] == '.') continue;
 		    pmsprintf(path, sizeof(path), "%s%c%s", opts.optarg, sep, dp->d_name);
 		    if (stat(path, &sbuf) < 0) {
-			pmprintf("%s: %s: %s\n", pmProgname, path, osstrerror());
+			pmprintf("%s: %s: %s\n", pmGetProgname(), path, osstrerror());
 			opts.errors++;
 		    }
 		    else if (S_ISREG(sbuf.st_mode) || S_ISLINK(sbuf.st_mode)) {
@@ -305,11 +303,11 @@ parseargs(int argc, char *argv[])
 		    closedir(dirp);
 	    }
 	    else {
-		pmprintf("%s: Error: -c config %s is not a file or directory\n", pmProgname, opts.optarg);
+		pmprintf("%s: Error: -c config %s is not a file or directory\n", pmGetProgname(), opts.optarg);
 		opts.errors++;
 	    }
 	    if (nconf > 0 && conf == NULL) {
-		fprintf(stderr, "%s: Error: conf[%d] realloc(%d) failed: %s\n", pmProgname, nconf, (int)(nconf*sizeof(conf[0])), strerror(errno));
+		fprintf(stderr, "%s: Error: conf[%d] realloc(%d) failed: %s\n", pmGetProgname(), nconf, (int)(nconf*sizeof(conf[0])), strerror(errno));
 		abandon();
 		/*NOTREACHED*/
 	    }
@@ -329,7 +327,7 @@ parseargs(int argc, char *argv[])
 	    sts = pmSetDebug(opts.optarg);
 	    if (sts < 0) {
 		pmprintf("%s: unrecognized debug options specification (%s)\n",
-			pmProgname, opts.optarg);
+			pmGetProgname(), opts.optarg);
 		opts.errors++;
 	    }
 	    break;
@@ -376,7 +374,7 @@ parseconfig(char *file)
     configfile = file;
     if ((yyin = fopen(configfile, "r")) == NULL) {
 	fprintf(stderr, "%s: Cannot open config file \"%s\": %s\n",
-		pmProgname, configfile, osstrerror());
+		pmGetProgname(), configfile, osstrerror());
 	exit(1);
     }
     if (vflag > 1)
@@ -593,13 +591,13 @@ fixstamp(struct timeval *tvp)
 {
     if (global.flags & GLOBAL_CHANGE_TIME) {
 	if (global.time.tv_sec > 0) {
-	    __pmtimevalInc(tvp, &global.time);
+	    pmtimevalInc(tvp, &global.time);
 	    return 1;
 	}
 	else if (global.time.tv_sec < 0) {
 	    /*
 	     * parser makes tv_sec < 0 and tv_usec >= 0 ...
-	     * so cannot use __pmtimevalDec() here
+	     * so cannot use pmtimevalDec() here
 	     */
 	    tvp->tv_sec += global.time.tv_sec;
 	    tvp->tv_usec -= global.time.tv_usec;
@@ -870,7 +868,7 @@ main(int argc, char **argv)
     int		dir_fd = -1;		/* poinless initialization to humour gcc */
     int		needti = 0;
     int		doneti = 0;
-    __pmTimeval	tstamp = { 0 };		/* for last log record */
+    pmTimeval	tstamp = { 0 };		/* for last log record */
     off_t	old_log_offset = 0;	/* log offset before last log record */
     off_t	old_meta_offset;
     int		seen_event = 0;
@@ -892,7 +890,7 @@ main(int argc, char **argv)
 
     if ((inarch.ctx = pmNewContext(PM_CONTEXT_ARCHIVE, inarch.name)) < 0) {
 	fprintf(stderr, "%s: Error: cannot open archive \"%s\": %s\n",
-		pmProgname, inarch.name, pmErrStr(inarch.ctx));
+		pmGetProgname(), inarch.name, pmErrStr(inarch.ctx));
 	exit(1);
     }
     inarch.ctxp = __pmHandleToPtr(inarch.ctx);
@@ -908,13 +906,13 @@ main(int argc, char **argv)
 
     if ((sts = pmGetArchiveLabel(&inarch.label)) < 0) {
 	fprintf(stderr, "%s: Error: cannot get archive label record (%s): %s\n",
-		pmProgname, inarch.name, pmErrStr(sts));
+		pmGetProgname(), inarch.name, pmErrStr(sts));
 	exit(1);
     }
 
     if ((inarch.label.ll_magic & 0xff) != PM_LOG_VERS02) {
 	fprintf(stderr,"%s: Error: illegal version number %d in archive (%s)\n",
-		pmProgname, inarch.label.ll_magic & 0xff, inarch.name);
+		pmGetProgname(), inarch.label.ll_magic & 0xff, inarch.name);
 	exit(1);
     }
 
@@ -944,7 +942,7 @@ main(int argc, char **argv)
 	mode_t	cur_umask;
 	int	tmp_f1;			/* fd for first temp basename */
 	int	tmp_f2;			/* fd for second temp basename */
-	int	sep = __pmPathSeparator();
+	int	sep = pmPathSeparator();
 
 #if HAVE_MKSTEMP
 	strncpy(path, argv[argc-1], sizeof(path));
@@ -952,7 +950,7 @@ main(int argc, char **argv)
 	strncpy(dname, dirname(path), sizeof(dname));
 	dname[sizeof(dname)-1] = '\0';
 	if ((dir_fd = open(dname, O_RDONLY)) < 0) {
-	    fprintf(stderr, "%s: Error: cannot open directory \"%s\" for reading: %s\n", pmProgname, dname, strerror(errno));
+	    fprintf(stderr, "%s: Error: cannot open directory \"%s\" for reading: %s\n", pmGetProgname(), dname, strerror(errno));
 	    abandon();
 	    /*NOTREACHED*/
 	}
@@ -962,7 +960,7 @@ main(int argc, char **argv)
 	umask(cur_umask);
 	outarch.name = strdup(path);
 	if (outarch.name == NULL) {
-	    fprintf(stderr, "%s: Error: temp file strdup(%s) failed: %s\n", pmProgname, path, strerror(errno));
+	    fprintf(stderr, "%s: Error: temp file strdup(%s) failed: %s\n", pmGetProgname(), path, strerror(errno));
 	    abandon();
 	    /*NOTREACHED*/
 	}
@@ -982,14 +980,14 @@ main(int argc, char **argv)
 	dname[sizeof(dname)-1] = '\0';
 
 	if ((s = tempnam(dname, fname)) == NULL) {
-	    fprintf(stderr, "%s: Error: first tempnam() failed: %s\n", pmProgname, strerror(errno));
+	    fprintf(stderr, "%s: Error: first tempnam() failed: %s\n", pmGetProgname(), strerror(errno));
 	    abandon();
 	    /*NOTREACHED*/
 	}
 	else {
 	    outarch.name = strdup(s);
 	    if (outarch.name == NULL) {
-		fprintf(stderr, "%s: Error: temp file strdup(%s) failed: %s\n", pmProgname, s, strerror(errno));
+		fprintf(stderr, "%s: Error: temp file strdup(%s) failed: %s\n", pmGetProgname(), s, strerror(errno));
 		abandon();
 		/*NOTREACHED*/
 	    }
@@ -998,7 +996,7 @@ main(int argc, char **argv)
 	    umask(cur_umask);
 	}
 	if ((s = tempnam(dname, fname)) == NULL) {
-	    fprintf(stderr, "%s: Error: second tempnam() failed: %s\n", pmProgname, strerror(errno));
+	    fprintf(stderr, "%s: Error: second tempnam() failed: %s\n", pmGetProgname(), strerror(errno));
 	    abandon();
 	    /*NOTREACHED*/
 	}
@@ -1010,12 +1008,12 @@ main(int argc, char **argv)
 	}
 #endif
 	if (tmp_f1 < 0) {
-	    fprintf(stderr, "%s: Error: create first temp (%s) failed: %s\n", pmProgname, outarch.name, strerror(errno));
+	    fprintf(stderr, "%s: Error: create first temp (%s) failed: %s\n", pmGetProgname(), outarch.name, strerror(errno));
 	    abandon();
 	    /*NOTREACHED*/
 	}
 	if (tmp_f2 < 0) {
-	    fprintf(stderr, "%s: Error: create second temp (%s) failed: %s\n", pmProgname, bak_base, strerror(errno));
+	    fprintf(stderr, "%s: Error: create second temp (%s) failed: %s\n", pmGetProgname(), bak_base, strerror(errno));
 	    abandon();
 	    /*NOTREACHED*/
 	}
@@ -1052,9 +1050,10 @@ main(int argc, char **argv)
 	exit(0);
 
     /* create output log - must be done before writing label */
-    if ((sts = __pmLogCreate("", outarch.name, PM_LOG_VERS02, &outarch.logctl)) < 0) {
+    outarch.archctl.ac_log = &outarch.logctl;
+    if ((sts = __pmLogCreate("", outarch.name, PM_LOG_VERS02, &outarch.archctl)) < 0) {
 	fprintf(stderr, "%s: Error: __pmLogCreate(%s): %s\n",
-		pmProgname, outarch.name, pmErrStr(sts));
+		pmGetProgname(), outarch.name, pmErrStr(sts));
 	abandon();
 	/*NOTREACHED*/
     }
@@ -1081,7 +1080,7 @@ main(int argc, char **argv)
 	old_meta_offset = __pmFtell(outarch.logctl.l_mdfp);
 	assert(old_meta_offset >= 0);
 
-	in_offset = __pmFtell(inarch.ctxp->c_archctl->ac_log->l_mfp);
+	in_offset = __pmFtell(inarch.ctxp->c_archctl->ac_mfp);
 	stslog = nextlog();
 	if (stslog < 0) {
 	    if (pmDebugOptions.appl0)
@@ -1090,22 +1089,22 @@ main(int argc, char **argv)
 	}
 	if (stslog == 1) {
 	    /* volume change */
-	    if (inarch.ctxp->c_archctl->ac_log->l_curvol >= outarch.logctl.l_curvol+1)
+	    if (inarch.ctxp->c_archctl->ac_curvol >= outarch.archctl.ac_curvol+1)
 		/* track input volume numbering */
-		newvolume(inarch.ctxp->c_archctl->ac_log->l_curvol);
+		newvolume(inarch.ctxp->c_archctl->ac_curvol);
 	    else
 		/*
 		 * output archive volume number is ahead, probably because
 		 * rewriting has forced an earlier volume change
 		 */
-		newvolume(outarch.logctl.l_curvol+1);
+		newvolume(outarch.archctl.ac_curvol+1);
 	}
 	if (pmDebugOptions.appl0) {
 	    struct timeval	stamp;
 	    fprintf(stderr, "Log: read ");
 	    stamp.tv_sec = inarch.rp->timestamp.tv_sec;
 	    stamp.tv_usec = inarch.rp->timestamp.tv_usec;
-	    __pmPrintStamp(stderr, &stamp);
+	    pmPrintStamp(stderr, &stamp);
 	    fprintf(stderr, " numpmid=%d @ offset=%ld\n", inarch.rp->numpmid, in_offset);
 	}
 
@@ -1202,7 +1201,7 @@ main(int argc, char **argv)
 	    }
 	    else if (stsmeta == TYPE_INDOM) {
 		struct timeval	stamp;
-		__pmTimeval	*tvp = (__pmTimeval *)&inarch.metarec[2];
+		pmTimeval	*tvp = (pmTimeval *)&inarch.metarec[2];
 		stamp.tv_sec = ntohl(tvp->tv_sec);
 		stamp.tv_usec = ntohl(tvp->tv_usec);
 		if (fixstamp(&stamp)) {
@@ -1219,9 +1218,21 @@ main(int argc, char **argv)
 		needti = 1;
 		do_indom();
 	    }
+	    else if (stsmeta == TYPE_LABEL) {
+		/* TODO: support label metadata extraction */
+		if (pmDebugOptions.logmeta)
+		    fprintf(stderr, "%s: Warning: %s\n",
+			    pmGetProgname(), pmErrStr(PM_ERR_NOLABELS));
+	    }
+	    else if (stsmeta == TYPE_TEXT) {
+		/* TODO: support help text extraction */
+		if (pmDebugOptions.logmeta)
+		    fprintf(stderr, "%s: Warning: %s\n",
+			    pmGetProgname(), pmErrStr(PM_ERR_TEXT));
+	    }
 	    else {
 		fprintf(stderr, "%s: Error: unrecognised meta data type: %d\n",
-		    pmProgname, stsmeta);
+		    pmGetProgname(), stsmeta);
 		abandon();
 		/*NOTREACHED*/
 	    }
@@ -1244,11 +1255,11 @@ main(int argc, char **argv)
 
 	if (needti) {
 	    __pmFflush(outarch.logctl.l_mdfp);
-	    __pmFflush(outarch.logctl.l_mfp);
+	    __pmFflush(outarch.archctl.ac_mfp);
 	    new_meta_offset = __pmFtell(outarch.logctl.l_mdfp);
 	    assert(new_meta_offset >= 0);
             __pmFseek(outarch.logctl.l_mdfp, (long)old_meta_offset, SEEK_SET);
-            __pmLogPutIndex(&outarch.logctl, &tstamp);
+            __pmLogPutIndex(&outarch.archctl, &tstamp);
             __pmFseek(outarch.logctl.l_mdfp, (long)new_meta_offset, SEEK_SET);
 	    needti = 0;
 	    doneti = 1;
@@ -1256,7 +1267,7 @@ main(int argc, char **argv)
 	else
 	    doneti = 0;
 
-	old_log_offset = __pmFtell(outarch.logctl.l_mfp);
+	old_log_offset = __pmFtell(outarch.archctl.ac_mfp);
 	assert(old_log_offset >= 0);
 
 	if (inarch.rp->numpmid == 0)
@@ -1268,9 +1279,9 @@ main(int argc, char **argv)
 
     if (!doneti) {
 	/* Final temporal index entry */
-	__pmFflush(outarch.logctl.l_mfp);
-	__pmFseek(outarch.logctl.l_mfp, (long)old_log_offset, SEEK_SET);
-	__pmLogPutIndex(&outarch.logctl, &tstamp);
+	__pmFflush(outarch.archctl.ac_mfp);
+	__pmFseek(outarch.archctl.ac_mfp, (long)old_log_offset, SEEK_SET);
+	__pmLogPutIndex(&outarch.archctl, &tstamp);
     }
 
     if (iflag) {
@@ -1280,25 +1291,25 @@ main(int argc, char **argv)
 	 */
 	if (__pmFsync(outarch.logctl.l_mdfp) < 0) {
 	    fprintf(stderr, "%s: Error: fsync(%d) failed for output metadata file: %s\n",
-		pmProgname, __pmFileno(outarch.logctl.l_mdfp), strerror(errno));
+		pmGetProgname(), __pmFileno(outarch.logctl.l_mdfp), strerror(errno));
 		abandon();
 		/*NOTREACHED*/
 	}
-	if (__pmFsync(outarch.logctl.l_mfp) < 0) {
+	if (__pmFsync(outarch.archctl.ac_mfp) < 0) {
 	    fprintf(stderr, "%s: Error: fsync(%d) failed for output data file: %s\n",
-		pmProgname, __pmFileno(outarch.logctl.l_mfp), strerror(errno));
+		pmGetProgname(), __pmFileno(outarch.archctl.ac_mfp), strerror(errno));
 		abandon();
 		/*NOTREACHED*/
 	}
 	if (__pmFsync(outarch.logctl.l_tifp) < 0) {
 	    fprintf(stderr, "%s: Error: fsync(%d) failed for output index file: %s\n",
-		pmProgname, __pmFileno(outarch.logctl.l_tifp), strerror(errno));
+		pmGetProgname(), __pmFileno(outarch.logctl.l_tifp), strerror(errno));
 		abandon();
 		/*NOTREACHED*/
 	}
 	if (fsync(dir_fd) < 0) {
 	    fprintf(stderr, "%s: Error: fsync(%d) failed for output directory: %s\n",
-		pmProgname, dir_fd, strerror(errno));
+		pmGetProgname(), dir_fd, strerror(errno));
 		abandon();
 		/*NOTREACHED*/
 	}
@@ -1328,10 +1339,10 @@ abandon(void)
 	_pmLogRemove(outarch.name);
 	if (iflag)
 	    _pmLogRename(bak_base, inarch.name);
-	while (outarch.logctl.l_curvol >= 0) {
-	    pmsprintf(path, sizeof(path), "%s.%d", outarch.name, outarch.logctl.l_curvol);
+	while (outarch.archctl.ac_curvol >= 0) {
+	    pmsprintf(path, sizeof(path), "%s.%d", outarch.name, outarch.archctl.ac_curvol);
 	    unlink(path);
-	    outarch.logctl.l_curvol--;
+	    outarch.archctl.ac_curvol--;
 	}
 	pmsprintf(path, sizeof(path), "%s.meta", outarch.name);
 	unlink(path);

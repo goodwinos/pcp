@@ -19,7 +19,7 @@ include $(TOPDIR)/src/include/builddefs
 CMDTARGET = pmlogger$(EXECSUFFIX)
 
 CFILES	= pmlogger.c fetch.c util.c error.c callback.c ports.c \
-	  dopdu.c check.c preamble.c rewrite.c events.c
+	  dopdu.c check.c logue.c rewrite.c events.c
 HFILES	= logger.h
 LFILES  = lex.l
 YFILES	= gram.y
@@ -48,3 +48,5 @@ lex.o gram.tab.o:	gram.tab.h
 default_pcp:	default
 
 install_pcp:	install
+
+$(OBJECTS):	$(TOPDIR)/src/include/pcp/libpcp.h

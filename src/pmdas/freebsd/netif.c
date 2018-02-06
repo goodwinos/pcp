@@ -19,7 +19,6 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
 #include "pmda.h"
 
 #include <sys/types.h>
@@ -79,7 +78,7 @@ refresh_netif_metrics(void)
 	    ifp = (struct if_data *)malloc(sizeof(*ifp));
 	    if (ifp == NULL) {
 		fprintf(stderr, "Error: struct if_data alloc failed for network interface \"%s\"\n", ifc->ifa_name);
-		__pmNoMem("refresh_netif_metrics", sizeof(*ifp), PM_FATAL_ERR);
+		pmNoMem("refresh_netif_metrics", sizeof(*ifp), PM_FATAL_ERR);
 		/*NOTREACHED*/
 	    }
 	    pmdaCacheStore(indomtab[NETIF_INDOM].it_indom, PMDA_CACHE_ADD, ifc->ifa_name, (void *)ifp);
@@ -105,7 +104,7 @@ do_netif_metrics(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 	if (sts == PMDA_CACHE_ACTIVE) {
 	    sts = 1;
 	    /* cluster and domain already checked, just need item ... */
-	    switch (pmid_item(mdesc->m_desc.pmid)) {
+	    switch (pmID_item(mdesc->m_desc.pmid)) {
 		case 0:		/* network.interface.mtu */
 		    atom->ul = (__uint32_t)ifp->ifi_mtu;
 		    break;

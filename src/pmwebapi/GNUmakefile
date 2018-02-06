@@ -21,7 +21,6 @@ CXXFILES = main.cxx pmwebapi.cxx pmresapi.cxx util.cxx
 
 LLDLIBS = $(PCPLIB) $(LIB_FOR_MICROHTTPD) $(LIB_FOR_PTHREADS) 
 LDIRT = pmwebd.log pmwebd.service
-SUBDIRS = webapps
 
 LCFLAGS += $(LIBMICROHTTPDCFLAGS)
 LCFLAGS += -Wextra
@@ -34,6 +33,9 @@ endif
 ifeq "$(HAVE_ZLIB)" "true"
 LLDLIBS += $(LIB_FOR_ZLIB)
 LCFLAGS += -DHAVE_ZLIB $(ZLIBCFLAGS)
+endif
+ifeq "$(HAVE_BOOST_FLYWEIGHT_HPP)" "yes"
+LCFLAGS += -DHAVE_BOOST_FLYWEIGHT_HPP=1
 endif
 ifeq "$(TARGET_OS)" "mingw"
 LLDLIBS += -lws2_32
@@ -50,11 +52,6 @@ include $(BUILDRULES)
 
 ifeq "$(ENABLE_WEBAPI)" "true"
 build-me::	$(CXXMDTARGET) pmwebd.service
-
-ifeq "$(HAVE_WEBAPPS)" "true"
-build-me::	$(SUBDIRS)
-	$(SUBDIRS_MAKERULE)
-endif
 
 pmwebd.service:	pmwebd.service.in
 	$(SED) <$< >$@ \
@@ -98,3 +95,5 @@ gcov:
 indent:
 	# indent -nhnl -l400 $(CXXFILES) $(HFILES)
 	astyle  -A10 -n -xd -v -H -U -xy -xC100 $(CXXFILES) $(HFILES)
+
+$(OBJECTS):	$(TOPDIR)/src/include/pcp/libpcp.h

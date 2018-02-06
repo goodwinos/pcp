@@ -24,14 +24,14 @@ CFILES = connect.c context.c desc.c err.c fetch.c fetchgroup.c freeresult.c \
 	p_profile.c p_result.c p_text.c p_pmns.c p_creds.c p_attr.c p_label.c \
 	pdu.c pdubuf.c pmns.c profile.c store.c units.c util.c ipc.c \
 	sortinst.c logmeta.c logportmap.c logutil.c tz.c interp.c \
-	checksum.c rtime.c tv.c spec.c fetchlocal.c optfetch.c AF.c \
+	rtime.c tv.c spec.c fetchlocal.c optfetch.c AF.c \
 	stuffvalue.c endian.c config.c auxconnect.c auxserver.c discovery.c \
 	p_lcontrol.c p_lrequest.c p_lstatus.c logconnect.c logcontrol.c \
 	connectlocal.c derive_fetch.c events.c lock.c hash.c jsmn.c \
-	fault.c access.c getopt.c probe.c io.c io_stdio.c io_xz.c \
-	exec.c
+	fault.c access.c getopt.c probe.c io.c io_stdio.c exec.c \
+	deprecated.c
 HFILES = derive.h internal.h avahi.h probe.h compiler.h pmdbg.h jsmn.h
-XFILES = jsmn.h jsmn.c sort_r.h
+EXT_FILES = jsmn.h jsmn.c sort_r.h
 YFILES = getdate.y derive_parser.y
 GENERATED_HFILES = pmdbg.h
 
@@ -49,6 +49,10 @@ endif
 
 ifeq "$(ENABLE_AVAHI)" "true"
 CFILES += avahi.c
+endif
+
+ifeq "$(ENABLE_LZMA)" "true"
+CFILES += io_xz.c
 endif
 
 ifneq "$(TARGET_OS)" "mingw"
@@ -76,10 +80,10 @@ LIBTARGET =
 SYMTARGET =
 endif
 
-LDIRT += $(SYMTARGET) $(YFILES:%.y=%.tab.?) $(XFILES) $(LIBCONFIG) \
+LDIRT += $(SYMTARGET) $(YFILES:%.y=%.tab.?) $(EXT_FILES) $(LIBCONFIG) \
 	getdate.h derive_parser.y check.done $(GENERATED_HFILES)
 
-base default : $(XFILES) $(LIBTARGET) $(SYMTARGET) $(STATICLIBTARGET) \
+base default : $(EXT_FILES) $(LIBTARGET) $(SYMTARGET) $(STATICLIBTARGET) \
 	$(LIBCONFIG) check.done
 
 ifneq "$(SYMTARGET)" ""
@@ -96,7 +100,6 @@ derive.o derive_fetch.o: derive.h derive_parser.tab.h
 util.o:	pmdbg.h
 
 $(OBJECTS):	$(TOPDIR)/src/include/pcp/pmapi.h \
-		$(TOPDIR)/src/include/pcp/impl.h \
 		$(TOPDIR)/src/include/pcp/platform_defs.h \
 		$(GENERATED_HFILES)
 
@@ -131,7 +134,7 @@ ifneq ($(STATICLIBTARGET),)
 	$(INSTALL) -m 755 $(STATICLIBTARGET) $(PCP_LIB_DIR)/$(STATICLIBTARGET)
 endif
 
-$(XFILES):
+$(EXT_FILES):
 	$(LN_S) $(TOPDIR)/src/external/$@ .
 
 default_pcp : default
@@ -141,8 +144,10 @@ install_pcp : install
 $(TOPDIR)/src/pmns/stdpmid:
 	cd $(@D); $(MAKE) $(@F)
 
-pmdbg.h : ../../include/pcp/pmapi.h ../../include/pcp/impl.h mk_pmdbg
+pmdbg.h : ../../include/pcp/pmapi.h mk_pmdbg
 	./mk_pmdbg
+
+labels.o:	sort_r.h
 
 # The library is thread-safe ... check-statics will force a build failure
 # if there has been any change to the static variables and their disposition
@@ -162,3 +167,5 @@ $(LIBCONFIG): $(LIBCONFIG).in
 	     -e's|@INCDIR@|$(PCP_INC_DIR)|g' \
 	     -e's|@VERSION@|$(PCP_VERSION)|g' <$? >$@
 endif
+
+$(OBJECTS):	$(TOPDIR)/src/include/pcp/libpcp.h

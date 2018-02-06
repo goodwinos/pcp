@@ -14,7 +14,7 @@
 
 #include <ctype.h>
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "pmda.h"
 
 #include "root.h"
@@ -45,7 +45,7 @@ lxc_setup(container_engine_t *dp)
      dp->path[sizeof(dp->path)-1] = '\0';
 
     if (pmDebugOptions.attr)
-	__pmNotifyErr(LOG_DEBUG, "lxc_setup: using path: %s\n", dp->path);
+	pmNotifyErr(LOG_DEBUG, "lxc_setup: using path: %s\n", dp->path);
 }
 
 int
@@ -80,7 +80,7 @@ lxc_insts_refresh(container_engine_t *dp, pmInDom indom)
     if ((rundir = opendir(dp->path)) == NULL) {
 	if (pmDebugOptions.attr)
 	    fprintf(stderr, "%s: skipping lxc path %s\n",
-		    pmProgname, dp->path);
+		    pmGetProgname(), dp->path);
 	return;
     }
 
@@ -94,7 +94,7 @@ lxc_insts_refresh(container_engine_t *dp, pmInDom indom)
 	if (sts != PMDA_CACHE_INACTIVE) {
 	    if (pmDebugOptions.attr)
 		fprintf(stderr, "%s: adding lxc container %s\n",
-			pmProgname, path);
+			pmGetProgname(), path);
 	    if ((cp = calloc(1, sizeof(container_t))) == NULL)
 		continue;
 	    cp->engine = dp;
@@ -157,14 +157,20 @@ lxc_value_refresh(container_engine_t *dp, const char *name, container_t *values)
     int		sts;
     FILE	*pp;
     char	path[MAXPATHLEN];
+    __pmExecCtl_t	*argp = NULL;
 
     pmsprintf(path, sizeof(path), "%s -n %s", lxc_info, name);
     if (pmDebugOptions.attr)
-	__pmNotifyErr(LOG_DEBUG, "lxc_values_refresh: pipe=%s\n", path);
-    if ((pp = popen(path, "r")) == NULL)
-	return -oserror();
+	pmNotifyErr(LOG_DEBUG, "lxc_values_refresh: pipe=%s\n", path);
+    if ((sts = __pmProcessUnpickArgs(&argp, path)) < 0)
+	return sts;
+    if ((sts = __pmProcessPipe(&argp, "r", PM_EXEC_TOSS_NONE, &pp)) < 0)
+	return sts;
+
     sts = lxc_values_parse(pp, name, values);
-    pclose(pp);
+
+    __pmProcessPipeClose(pp);
+
     return sts;
 }
 

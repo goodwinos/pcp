@@ -6,7 +6,6 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include <pcp/pmda.h>
 #include <arpa/inet.h>
 
@@ -54,7 +53,7 @@ main(int argc, char **argv)
     int		mykeylen = 0;			/* pander to gcc */
     void	*mykey = NULL;			/* pander to gcc */
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     while ((c = getopt(argc, argv, "D:k")) != EOF) {
 	switch (c) {
@@ -63,7 +62,7 @@ main(int argc, char **argv)
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
@@ -80,7 +79,7 @@ main(int argc, char **argv)
     }
 
     if (errflag || optind != argc) {
-	fprintf(stderr, "Usage: %s %s\n", pmProgname, usage);
+	fprintf(stderr, "Usage: %s %s\n", pmGetProgname(), usage);
 	exit(1);
     }
 

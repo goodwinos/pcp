@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 Red Hat.
+ * Copyright (c) 2012-2018 Red Hat.
  * Copyright (c) 1995-2001 Silicon Graphics, Inc.  All Rights Reserved.
  * 
  * This program is free software; you can redistribute it and/or modify it
@@ -17,7 +17,7 @@
 #define _PMCD_H
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "pmda.h"
 
 /*
@@ -109,7 +109,7 @@ PMCD_DATA extern int		nAgents;	/* Number of agents in array */
 /*
  * DomainId-to-AgentIndex map
  * 9 bits of DomainId, max value is 510 because 511 is special (see
- * DYNAMIC_PMID in impl.h)
+ * DYNAMIC_PMID in libpcp.h)
  */
 #define MAXDOMID	510
 extern int		mapdom[];	/* the map */
@@ -156,6 +156,9 @@ PMCD_DATA extern int	pmcd_timeout;
 
 /* timeout for credentials */
 extern int	_creds_timeout;
+
+/* flag for context label changes */
+extern int	labelChanged;
 
 /* global PMCD PMDA variables */
 
@@ -221,7 +224,8 @@ extern int VerifyConfig(char *);
 extern int ParseInitAgents(char *);
 extern void ParseRestartAgents(char *);
 extern void PrintAgentInfo(FILE *);
-extern void MarkStateChanges(int);
+extern void CheckLabelChange(void);
+extern void MarkStateChanges(unsigned int);
 extern void CleanupClient(ClientInfo *, int);
 extern int ClientsAttributes(AgentInfo *);
 extern int AgentsAttributes(int);
@@ -236,6 +240,9 @@ PMCD_CALL extern void pmcd_openfds_sethi(int);
 
 /* Explicitly requested hostname (pmcd.hostname metric) */
 PMCD_DATA extern char *pmcd_hostname;
+
+/* Current context label set (pmcd.labels metric) */
+PMCD_DATA extern char *pmcd_labels;
 
 /* Counter of SIGHUPs received and responded to by pmcd */
 PMCD_DATA extern unsigned pmcd_sighups;

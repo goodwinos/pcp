@@ -114,7 +114,7 @@ Options\n\
   -6 port	expect PMCD to connect on given ipv6 port (number or name)\n\
 \n\
 If none of the -i, -p or -u options are given, the configuration file is\n\
-checked and then %s terminates.\n", pmProgname, pmProgname);
+checked and then %s terminates.\n", pmGetProgname(), pmGetProgname());
     exit(1);
 }
 
@@ -171,7 +171,7 @@ logmessage(int priority, const char *format, ...)
     for (p = buffer; *p; p++);
     if (*(--p) == '\n') *p = '\0';
 
-    fprintf(stderr, "[%.19s] %s(%" FMT_PID ") %s: %s\n", ctime(&now), pmProgname, getpid(), level, buffer) ;
+    fprintf(stderr, "[%.19s] %s(%" FMT_PID ") %s: %s\n", ctime(&now), pmGetProgname(), (pid_t)getpid(), level, buffer) ;
 }
 
 /*
@@ -328,7 +328,7 @@ receivePDUs(pmdaInterface *dispatch)
     for (;;) {
 
 	FD_SET(fileno(stdin), &rfds);
-	__pmtimevalNow(&timeout);
+	pmtimevalNow(&timeout);
 	timeout.tv_usec = 0;
 	interval = (time_t)wl_refreshDelay - (timeout.tv_sec % (time_t)wl_refreshDelay);
 	timeout.tv_sec = interval;
@@ -450,7 +450,7 @@ main(int argc, char **argv)
     int			argCount = 0;
     int			checkOnly = 0;
     int			sts = 0;
-    int			sep = __pmPathSeparator();
+    int			sep = pmPathSeparator();
     int			n = 0;
     int			serverTableSize = 0;
     int			regexTableSize = 0;
@@ -470,16 +470,16 @@ main(int argc, char **argv)
     struct timeval	end;
     double		startTime;
 
-    __pmSetProgname(argv[0]);
-    __pmGetUsername(&wl_username);
+    pmSetProgname(argv[0]);
+    pmGetUsername(&wl_username);
 
-    __pmtimevalNow(&start);
+    pmtimevalNow(&start);
 
     wl_isDSO = 0;
 
     pmsprintf(wl_helpFile, sizeof(wl_helpFile), "%s%c" "weblog" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
-    pmdaDaemon(&desc, PMDA_INTERFACE_2, pmProgname, WEBSERVER,
+    pmdaDaemon(&desc, PMDA_INTERFACE_2, pmGetProgname(), WEBSERVER,
 		wl_logFile, wl_helpFile);
 
     while ((n = pmdaGetOpt(argc, argv, "CD:d:h:i:l:n:pS:t:u:U:6:?", 
@@ -494,7 +494,7 @@ main(int argc, char **argv)
 	    wl_sprocThresh = (int)strtol(optarg, &endnum, 10);
 	    if (*endnum != '\0') {
 		fprintf(stderr, "%s: -S requires numeric argument\n",
-			pmProgname);
+			pmGetProgname());
 		err++;
 	    }
 	    break;
@@ -503,7 +503,7 @@ main(int argc, char **argv)
 	    if (pmParseInterval(optarg, &delta, &err_msg) < 0) {
                     (void)fprintf(stderr,
                             "%s: -n requires a time interval: %s\n",
-                            err_msg, pmProgname);
+                            err_msg, pmGetProgname());
                     free(err_msg);
                     err++;
                 }
@@ -516,7 +516,7 @@ main(int argc, char **argv)
 	    if (pmParseInterval(optarg, &delta, &err_msg) < 0) {
                     (void)fprintf(stderr,
                             "%s: -t requires a time interval: %s\n",
-                            err_msg, pmProgname);
+                            err_msg, pmGetProgname());
                     free(err_msg);
                     err++;
                 }
@@ -530,7 +530,7 @@ main(int argc, char **argv)
 	    break;
 
 	default:
-	    fprintf(stderr, "%s: Unknown option \"-%c\"", pmProgname, (char)n);
+	    fprintf(stderr, "%s: Unknown option \"-%c\"", pmGetProgname(), (char)n);
 	    err++;
 	    break;
 	}
@@ -555,7 +555,7 @@ main(int argc, char **argv)
 	 * on into the logfile
 	 */
 	pmdaOpenLog(&desc);
-	__pmSetProcessIdentity(wl_username);
+	pmSetProcessIdentity(wl_username);
     }
 
     /*
@@ -599,7 +599,7 @@ main(int argc, char **argv)
 		wl_regexTable = (WebRegex*)realloc(wl_regexTable,
 					   regexTableSize * sizeof(WebRegex));
 		if (wl_regexTable == (WebRegex*)0) {
-		    __pmNoMem("main.wl_regexInst", 
+		    pmNoMem("main.wl_regexInst", 
 			     (wl_numRegex + 1) * sizeof(WebRegex),
 			     PM_FATAL_ERR);
 		}
@@ -719,7 +719,7 @@ main(int argc, char **argv)
 
 	    wl_regexTable[wl_numRegex].regex = malloc(sizeof(*wl_regexTable[wl_numRegex].regex));
 	    if(wl_regexTable[wl_numRegex].regex == NULL) {
-		__pmNoMem("main.wl_regex", 
+		pmNoMem("main.wl_regex", 
 			  sizeof(*wl_regexTable[wl_numRegex].regex),
 			  PM_FATAL_ERR);
 	    }
@@ -747,7 +747,7 @@ main(int argc, char **argv)
 		wl_regexTable = (WebRegex*)realloc(wl_regexTable,
 					   regexTableSize * sizeof(WebRegex));
 		if (wl_regexTable == (WebRegex*)0) {
-		    __pmNoMem("main.wl_regexInst", 
+		    pmNoMem("main.wl_regexInst", 
 			     (wl_numRegex + 1) * sizeof(WebRegex),
 			     PM_FATAL_ERR);
 		}
@@ -828,7 +828,7 @@ main(int argc, char **argv)
 		wl_serverInst = (pmdaInstid*)realloc(wl_serverInst,
 					 serverTableSize * sizeof(pmdaInstid));
 		if (wl_serverInst == (pmdaInstid*)0) {
-		    __pmNoMem("main.wl_serverInst", 
+		    pmNoMem("main.wl_serverInst", 
 			     (wl_numServers + 1) * sizeof(pmdaInstid),
 			     PM_FATAL_ERR);
 		}
@@ -836,7 +836,7 @@ main(int argc, char **argv)
 		wl_servers = (WebServer*)realloc(wl_servers,
 					 serverTableSize * sizeof(WebServer));
 		if (wl_servers == (WebServer*)0) {
-		    __pmNoMem("main.wl_servers", 
+		    pmNoMem("main.wl_servers", 
 			     (wl_numServers + 1) * sizeof(WebServer),
 			     PM_FATAL_ERR);
 		}
@@ -1056,7 +1056,7 @@ main(int argc, char **argv)
 		   "wl_numServers = %d, wl_sprocThresh = %d",
 		   wl_numServers,
 		   wl_sprocThresh);
-	__pmNoMem("main.wl_sproc", 
+	pmNoMem("main.wl_sproc", 
 		  (wl_numSprocs+1) * sizeof(WebSproc),
 		  PM_FATAL_ERR);
     }
@@ -1171,8 +1171,8 @@ main(int argc, char **argv)
 	}
     }
 
-    __pmtimevalNow(&end);
-    startTime = __pmtimevalSub(&end, &start);
+    pmtimevalNow(&end);
+    startTime = pmtimevalSub(&end, &start);
     if (pmDebugOptions.appl0)
 	logmessage(LOG_DEBUG, "Agent started in %f seconds", startTime);
 

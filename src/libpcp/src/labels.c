@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Red Hat.
+ * Copyright (c) 2016-2018 Red Hat.
  * 
  * This library is free software; you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published
@@ -15,12 +15,21 @@
 #include <assert.h>
 #include <ctype.h>
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "pmda.h"
 #include "internal.h"
 #include "sort_r.h"
 #include "fault.h"
 #include "jsmn.h"
+
+#define MAXLABELSET		(PM_MAXLABELS * 6)	/* 6 hierarchy levels */
+#define INC_TOKENS		64	/* parser tokens allocation increment */
+
+#define label_name(lp, json)	(json+(lp)->name)
+#define label_value(lp, json)	(json+(lp)->value)
+
+static int __pmMergeLabels(const char *, const char *, char *, int);
+static int __pmParseLabels(const char *, int, pmLabel *, int, char *, int *);
 
 void
 pmFreeLabelSets(pmLabelSet *sets, int nsets)
@@ -37,14 +46,43 @@ pmFreeLabelSets(pmLabelSet *sets, int nsets)
 	free(sets);
 }
 
+static pmLabelSet *
+__pmDupLabelSets(pmLabelSet *source, int nsets)
+{
+    pmLabelSet		*sets, *target;
+    size_t		size;
+    int			i;
+
+    assert(nsets > 0);
+    if ((sets = (pmLabelSet *)calloc(nsets, sizeof(pmLabelSet))) == NULL)
+	return NULL;
+
+    for (i = 0; i < nsets; i++) {
+	target = &sets[i];
+	memcpy(target, source, sizeof(pmLabelSet));
+	if ((target->json = strdup(source->json)) == NULL)
+	    break;
+	size = source->nlabels * sizeof(pmLabel);
+	if ((target->labels = malloc(size)) == NULL)
+	    break;
+	memcpy(target->labels, source->labels, size);
+	source++;
+    }
+    if (i == nsets)
+	return sets;
+
+    pmFreeLabelSets(sets, nsets);
+    return NULL;
+}
+
 int
 __pmAddLabels(pmLabelSet **lspp, const char *extras, int flags)
 {
     pmLabelSet		*lsp = *lspp;
-    pmLabel		labels[MAXLABELS], *lp = NULL;
+    pmLabel		labels[PM_MAXLABELS], *lp = NULL;
     char		*json = NULL;
-    char		buffer[MAXLABELJSONLEN];
-    char		result[MAXLABELJSONLEN];
+    char		buffer[PM_MAXLABELJSONLEN];
+    char		result[PM_MAXLABELJSONLEN];
     int			bytes, size, sts, i;
 
     if (lsp)
@@ -61,7 +99,7 @@ __pmAddLabels(pmLabelSet **lspp, const char *extras, int flags)
 
     size = sizeof(result);
     if ((sts = __pmParseLabels(buffer, bytes,
-                                labels, MAXLABELS, result, &size)) < 0) {
+                                labels, PM_MAXLABELS, result, &size)) < 0) {
 	if (lsp) memset(lsp, 0, sizeof(*lsp));
 	return sts;
     }
@@ -103,12 +141,12 @@ int
 __pmParseLabelSet(const char *json, int jlen, int flags, pmLabelSet **set)
 {
     pmLabelSet	*result;
-    pmLabel	*lp, labels[MAXLABELS];
-    char	*bp, buf[MAXLABELJSONLEN];
-    int		i, sts, nlabels, bsz = MAXLABELJSONLEN;
+    pmLabel	*lp, labels[MAXLABELSET];
+    char	*bp, buf[PM_MAXLABELJSONLEN];
+    int		i, sts, nlabels, bsz = PM_MAXLABELJSONLEN;
 
     sts = nlabels = (!jlen || !json) ? 0 :
-	__pmParseLabels(json, jlen, labels, MAXLABELS, buf, &bsz);
+	__pmParseLabels(json, jlen, labels, MAXLABELSET, buf, &bsz);
     if (sts < 0)
 	return sts;
 
@@ -116,7 +154,7 @@ __pmParseLabelSet(const char *json, int jlen, int flags, pmLabelSet **set)
 	if ((lp = calloc(nlabels, sizeof(*lp))) == NULL)
 	    return -ENOMEM;
 	for (i = 0; i < nlabels; i++)
-	    lp[i].flags |= flags;
+	    labels[i].flags |= flags;
     } else {
 	lp = NULL;
     }
@@ -147,12 +185,6 @@ __pmParseLabelSet(const char *json, int jlen, int flags, pmLabelSet **set)
     *set = result;
     return 1;
 }
-
-#define MAX_TOKENS	(MAXLABELS * 4)
-#define INC_TOKENS	64
-
-#define label_name(lp, json)	(json+(lp)->name)
-#define label_value(lp, json)	(json+(lp)->value)
 
 static int
 namecmp4(const pmLabel *ap, const char *as, const pmLabel *bp, const char *bs)
@@ -249,10 +281,10 @@ verify_label_name(pmLabel *lp, const char *json)
 
     if (length == 0)
 	return -EINVAL;
-    if (!isalpha(*sp))	/* first character must be alphanumeric */
+    if (!isalpha((int)*sp))	/* first character must be alphanumeric */
 	return -EINVAL;
     while (++sp < (start + length)) {
-	if (isalnum(*sp) || *sp == '_')
+	if (isalnum((int)*sp) || *sp == '_')
 	    continue;
 	return -EINVAL;
     }
@@ -274,13 +306,13 @@ sort_labels(pmLabel *lp, int nlabels, const char *json)
     for (i = 0; i < nlabels-1; i++) {
 	if (namecmp(&lp[i], &lp[i+1], data) == 0) {
 	    if (pmDebugOptions.labels)
-		__pmNotifyErr(LOG_ERR, "Label name duplicated %.*s",
+		pmNotifyErr(LOG_ERR, "Label name duplicated %.*s",
 				(int)lp[i].namelen, label_name(&lp[i], json));
 	    return -EINVAL;
 	}
 	if (verify_label_name(&lp[i], json) < 0) {
 	    if (pmDebugOptions.labels)
-		__pmNotifyErr(LOG_ERR, "Label name is invalid %.*s",
+		pmNotifyErr(LOG_ERR, "Label name is invalid %.*s",
 			    (int)lp[i].namelen, label_name(&lp[i], json));
 	    return -EINVAL;
 	}
@@ -303,7 +335,7 @@ sort_labels(pmLabel *lp, int nlabels, const char *json)
  * produce "clean" JSONB form into the given buffer.  The labels
  * array indexes into this sanitized buffer.
  */
-int
+static int
 __pmParseLabels(const char *s, int slen,
 		pmLabel *labels, int maxlabels, char *buffer, int *buflen)
 {
@@ -323,7 +355,7 @@ __pmParseLabels(const char *s, int slen,
 	    return -ENOMEM;
 	jsmn_init(&parser);
 	sts = jsmn_parse(&parser, s, slen, tokens, ntokens);
-	if (sts == JSMN_ERROR_NOMEM && ntokens < MAX_TOKENS)
+	if (sts == JSMN_ERROR_NOMEM && ntokens < MAXLABELSET)
 	    continue;	/* try again, larger buffer */
 	if (sts == JSMN_ERROR_INVAL || sts == JSMN_ERROR_PART) {
 	    sts = -EINVAL;
@@ -343,7 +375,7 @@ __pmParseLabels(const char *s, int slen,
 	case START:
 	    if (token->type != JSMN_OBJECT) {
 		if (pmDebugOptions.labels)
-		    __pmNotifyErr(LOG_ERR, "Root element must be JSON object");
+		    pmNotifyErr(LOG_ERR, "Root element must be JSON object");
 		sts = -EINVAL;
 		goto done;
 	    }
@@ -356,7 +388,7 @@ __pmParseLabels(const char *s, int slen,
 	case NAME:
 	    if (token->type != JSMN_STRING) {
 		if (pmDebugOptions.labels)
-		    __pmNotifyErr(LOG_ERR, "Label name must be JSON string");
+		    pmNotifyErr(LOG_ERR, "Label name must be JSON string");
 		sts = -EINVAL;
 		goto done;
 	    }
@@ -364,7 +396,7 @@ __pmParseLabels(const char *s, int slen,
 	    namelen = token->end - token->start;
 	    if (namelen >= MAXLABELNAMELEN) {	/* will the name fit too? */
 		if (pmDebugOptions.labels)
-		    __pmNotifyErr(LOG_ERR, "Label name is too long %.*s",
+		    pmNotifyErr(LOG_ERR, "Label name is too long %.*s",
 				(int)namelen, s + token->start);
 		sts = -E2BIG;
 		goto done;
@@ -372,7 +404,7 @@ __pmParseLabels(const char *s, int slen,
 
 	    if (nlabels >= maxlabels) {	/* will this one fit in the given array? */
 		if (pmDebugOptions.labels)
-		    __pmNotifyErr(LOG_ERR, "Too many labels (%d)", nlabels);
+		    pmNotifyErr(LOG_ERR, "Too many labels (%d)", nlabels);
 		sts = -E2BIG;
 		goto done;
 	    }
@@ -449,7 +481,13 @@ __pmParseLabels(const char *s, int slen,
 	}
     }
     if (nlabels == 0) {
+	/*
+	 * Zero labels. Happens if we are passed an empty labelset string.
+	 * Argument buffer is set to a zero length string and we return 0
+	 */
 	sts = nlabels;
+	*buflen = 0;
+	buffer[0] = '\0';
 	goto done;
     }
     if (sts < 0)
@@ -538,24 +576,24 @@ done:
     return sts;
 }
 
-int
+static int
 __pmMergeLabels(const char *a, const char *b, char *buffer, int buflen)
 {
-    pmLabel	alabels[MAXLABELS], blabels[MAXLABELS];
-    char	abuf[MAXLABELJSONLEN], bbuf[MAXLABELJSONLEN];
-    int		abufsz = MAXLABELJSONLEN, bbufsz = MAXLABELJSONLEN;
+    pmLabel	alabels[MAXLABELSET], blabels[MAXLABELSET];
+    char	abuf[PM_MAXLABELJSONLEN], bbuf[PM_MAXLABELJSONLEN];
+    int		abufsz = PM_MAXLABELJSONLEN, bbufsz = PM_MAXLABELJSONLEN;
     int		sts, na = 0, nb = 0;
 
     if (!a || (na = strlen(a)) == 0)
 	abufsz = 0;
     else if ((sts = na = __pmParseLabels(a, na,
-				alabels, MAXLABELS, abuf, &abufsz)) < 0)
+				alabels, MAXLABELSET, abuf, &abufsz)) < 0)
 	return sts;
 
     if (!b || (nb = strlen(b)) == 0)
 	bbufsz = 0;
     else if ((sts = nb = __pmParseLabels(b, strlen(b),
-				blabels, MAXLABELS, bbuf, &bbufsz)) < 0)
+				blabels, MAXLABELSET, bbuf, &bbufsz)) < 0)
 	return sts;
 
     if (!abufsz && !bbufsz)
@@ -575,9 +613,9 @@ int
 pmMergeLabelSets(pmLabelSet **sets, int nsets, char *buffer, int buflen,
 	int (*filter)(const pmLabel *, const char *, void *), void *arg)
 {
-    pmLabel	olabels[PM_MAXLABELS];
-    pmLabel	blabels[PM_MAXLABELS];
-    char	buf[MAXLABELJSONLEN];
+    pmLabel	olabels[MAXLABELSET];
+    pmLabel	blabels[MAXLABELSET];
+    char	buf[PM_MAXLABELJSONLEN];
     int		nlabels = 0;
     int		i, sts = 0;
 
@@ -602,13 +640,16 @@ pmMergeLabelSets(pmLabelSet **sets, int nsets, char *buffer, int buflen,
 	    __pmDumpLabelSet(stderr, sets[i]);
 	}
 
-	if ((sts = __pmMergeLabelSets(sets[i]->labels,
-				sets[i]->json, sets[i]->nlabels,
-				blabels, buf, nlabels,
+	/*
+	 * Merge sets[i] with blabels into olabels. Any duplicate label
+	 * names in sets[i] prevail over those in blabels.
+	 */
+	if ((sts = __pmMergeLabelSets(blabels, buf, nlabels,
+				sets[i]->labels, sets[i]->json, sets[i]->nlabels,
 				olabels, buffer, &nlabels, buflen,
 				filter, arg)) < 0)
 	    return sts;
-	if (sts >= buflen || sts >= MAXLABELJSONLEN)
+	if (sts >= buflen || sts >= PM_MAXLABELJSONLEN)
 	    return -E2BIG;
     }
     return sts;
@@ -622,7 +663,7 @@ pmMergeLabelSets(pmLabelSet **sets, int nsets, char *buffer, int buflen,
 int
 pmMergeLabels(char **sets, int nsets, char *buffer, int buflen)
 {
-    char	buf[MAXLABELJSONLEN];
+    char	buf[PM_MAXLABELJSONLEN];
     int		bytes = 0;
     int		i, sts;
 
@@ -635,7 +676,7 @@ pmMergeLabels(char **sets, int nsets, char *buffer, int buflen)
 	    memcpy(buf, buffer, bytes);
 	if ((sts = bytes = __pmMergeLabels(buf, sets[i], buffer, buflen)) < 0)
 	    return sts;
-	if (bytes >= buflen || bytes >= MAXLABELJSONLEN)
+	if (bytes >= buflen || bytes >= PM_MAXLABELJSONLEN)
 	    return -E2BIG;
     }
     return bytes;
@@ -648,7 +689,7 @@ labelfile(const char *path, const char *file, char *buf, int buflen)
     char		lf[MAXPATHLEN];
     size_t		bytes;
 
-    pmsprintf(lf, sizeof(lf), "%s%c%s", path, __pmPathSeparator(), file);
+    pmsprintf(lf, sizeof(lf), "%s%c%s", path, pmPathSeparator(), file);
     if ((fp = fopen(lf, "r")) == NULL)
 	return 0;
     bytes = fread(buf, 1, buflen-1, fp);
@@ -663,12 +704,12 @@ __pmGetContextLabels(pmLabelSet **set)
     struct dirent	**list = NULL;
     char		**labels;
     char		path[MAXPATHLEN];
-    char		buf[MAXLABELJSONLEN];
+    char		buf[PM_MAXLABELJSONLEN];
     size_t		length;
     int			i, num, sts = 0;
 
     pmsprintf(path, MAXPATHLEN, "%s%clabels",
-		pmGetConfig("PCP_SYSCONF_DIR"), __pmPathSeparator());
+		pmGetConfig("PCP_SYSCONF_DIR"), pmPathSeparator());
     if ((num = scandir(path, &list, NULL, alphasort)) < 0)
 	return -oserror();
 
@@ -685,7 +726,7 @@ __pmGetContextLabels(pmLabelSet **set)
 	labels[i] = strndup(buf, length + 1);
     }
     if ((sts = pmMergeLabels(labels, num, buf, sizeof(buf))) < 0) {
-	__pmNotifyErr(LOG_WARNING, "Failed to merge %s labels file: %s",
+	pmNotifyErr(LOG_WARNING, "Failed to merge %s labels file: %s",
 			path, pmErrStr(sts));
     }
     for (i = 0; i < num; i++) {
@@ -695,7 +736,7 @@ __pmGetContextLabels(pmLabelSet **set)
     free(labels);
     free(list);
 
-    if (sts < 0)
+    if (sts <= 0)
 	return sts;
 
     return __pmParseLabelSet(buf, sts, PM_LABEL_CONTEXT, set);
@@ -721,7 +762,7 @@ static int
 archive_context_labels(__pmContext *ctxp, pmLabelSet **sets)
 {
     pmLabelSet	*lp = NULL;
-    char	buf[MAXLABELJSONLEN];
+    char	buf[PM_MAXLABELJSONLEN];
     char	*hostp;
     int		sts;
 
@@ -749,7 +790,7 @@ static int
 local_context_labels(pmLabelSet **sets)
 {
     pmLabelSet	*lp = NULL;
-    char	buf[MAXLABELJSONLEN];
+    char	buf[PM_MAXLABELJSONLEN];
     char	*hostp;
     int		sts;
 
@@ -767,12 +808,19 @@ local_context_labels(pmLabelSet **sets)
 int
 __pmGetDomainLabels(int domain, const char *name, pmLabelSet **set)
 {
-    size_t		length;
-    char		buf[MAXLABELJSONLEN];
+    int		buflen, namelen;
+    char	buf[PM_MAXLABELJSONLEN];
   
     (void)domain;	/* not currently used */
-    length = pmsprintf(buf, sizeof(buf), "{\"agent\":\"%s\"}", name);
-    return __pmParseLabelSet(buf, length, PM_LABEL_DOMAIN, set);
+    /* clean the string - strip "pmda" prefix and "DSO" suffix */
+    if (strncmp(name, "pmda", 4) == 0 && name[4] != '\0')
+	name += 4;
+    namelen = strlen(name);
+    if (namelen > 4 && strcmp(name + namelen - 4, " DSO") == 0)
+	namelen -= 4;
+
+    buflen = pmsprintf(buf, sizeof(buf), "{\"agent\":\"%.*s\"}", namelen, name);
+    return __pmParseLabelSet(buf, buflen, PM_LABEL_DOMAIN, set);
 }
 
 static int
@@ -791,7 +839,7 @@ lookup_domain(int ident, int type)
     if (type & PM_LABEL_INDOM)
 	return pmInDom_domain(ident);
     if (type & (PM_LABEL_CLUSTER | PM_LABEL_ITEM | PM_LABEL_INSTANCES))
-	return pmid_domain(ident);
+	return pmID_domain(ident);
     return -EINVAL;
 }
 
@@ -853,11 +901,18 @@ getlabels(int ident, int type, pmLabelSet **sets, int *nsets)
 	}
     }
     else {
-	/* supply context labels for archives lacking label support */
-	if (type & PM_LABEL_CONTEXT)
-	    sts = archive_context_labels(ctxp, sets);
-	else
-	    sts = 0;
+	if ((sts = __pmLogLookupLabel(ctxp->c_archctl, type,
+				ident, sets, &ctxp->c_origin)) < 0) {
+	    /* supply context labels for archives lacking label support */
+	    if (type & PM_LABEL_CONTEXT)
+		sts = archive_context_labels(ctxp, sets);
+	    else
+		sts = 0;
+	} else if (sts > 0) {
+	    /* sets currently points into the context structures - copy */
+	    if ((*sets = __pmDupLabelSets(*sets, sts)) == NULL)
+		sts = -ENOMEM;
+	}
 	if (sts >= 0)
 	    *nsets = sts;
     }
@@ -946,7 +1001,7 @@ pmLookupLabels(pmID pmid, pmLabelSet **labels)
 	free(lsp);
     }
 
-    ident = pmid_domain(pmid);
+    ident = pmID_domain(pmid);
     if ((sts = pmGetDomainLabels(ident, &lsp)) < 0)
 	goto fail;
     if (lsp) {
@@ -963,7 +1018,7 @@ pmLookupLabels(pmID pmid, pmLabelSet **labels)
 	}
     }
 
-    ident = pmid_build(ident, pmid_cluster(pmid), 0);
+    ident = pmID_build(ident, pmID_cluster(pmid), 0);
     if ((sts = pmGetClusterLabels(ident, &lsp)) < 0)
 	goto fail;
     if (lsp) {
@@ -1002,4 +1057,30 @@ pmLookupLabels(pmID pmid, pmLabelSet **labels)
 fail:
     pmFreeLabelSets(sets, count);
     return sts;
+}
+
+void
+pmPrintLabelSets(FILE *fp, int ident, int type, pmLabelSet *sets, int nsets)
+{
+    int		i, n;
+    char	*flags;
+    char	idbuf[64], fbuf[32];
+    pmLabelSet	*p;
+
+    __pmLabelIdentString(ident, type, idbuf, sizeof(idbuf));
+    for (n = 0; n < nsets; n++) {
+	p = &sets[n];
+	if (type & PM_LABEL_INSTANCES)
+	    fprintf(fp, "    %s[%u] labels (%u bytes): %s\n",
+			idbuf, p->inst, p->jsonlen, p->json);
+	else
+	    fprintf(fp, "    %s labels (%u bytes): %s\n",
+			idbuf, p->jsonlen, p->json);
+	for (i = 0; i < p->nlabels; i++) {
+	    flags = __pmLabelFlagString(p->labels[i].flags, fbuf, sizeof(fbuf));
+	    fprintf(fp, "        [%d] name(%d,%d) : value(%d,%d) [%s]\n", i,
+		    p->labels[i].name, p->labels[i].namelen,
+		    p->labels[i].value, p->labels[i].valuelen, flags);
+	}
+    }
 }

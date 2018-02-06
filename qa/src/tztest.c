@@ -2,7 +2,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include "libpcp.h"
 
 char * __pmTimezone(void);
 

@@ -4,13 +4,11 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include <pcp/pmda.h>
 
 #define FORQA 251
 
 static pmInDom		indom;
-static __pmInDom_int	*indomp;
 static char		*xxx = "xxxsomefunnyinstancenamestringthatcanbechoppedabout";
 static char		nbuf[80];	/* at least as big as xxx[] */
 static	int		ncount;
@@ -21,8 +19,7 @@ _a(int load, int verbose, int extra)
     int		inst;
     int		sts;
 
-    indomp->domain = FORQA;
-    indomp->serial = 7;
+    indom = pmInDom_build(FORQA, 7);
 
     if (load) {
 	fprintf(stderr, "Load the instance domain ...\n");
@@ -119,7 +116,7 @@ _a(int load, int verbose, int extra)
     if (extra == 0)
 	return;
 
-    indomp->serial = 8;
+    indom = pmInDom_build(FORQA, 8);
     fprintf(stderr, "\nAdd foo in another indom ...\n");
     inst = pmdaCacheStore(indom, PMDA_CACHE_ADD, "foo", NULL);
     fprintf(stderr, "return -> %d", inst);
@@ -137,7 +134,7 @@ _a(int load, int verbose, int extra)
     if (verbose) __pmdaCacheDump(stderr, indom, 0);
 
 
-    indomp->serial = 7;
+    indom = pmInDom_build(FORQA, 7);
 
     fprintf(stderr, "\nMark all active ...\n");
     sts = pmdaCacheOp(indom, PMDA_CACHE_ACTIVE);
@@ -171,8 +168,7 @@ _b(void)
     int		sts;
     char	cmd[2*MAXPATHLEN+30];
 
-    indomp->domain = FORQA;
-    indomp->serial = 8;
+    indom = pmInDom_build(FORQA, 8);
 
     pmsprintf(cmd, sizeof(cmd), "rm -f %s/config/pmda/%s", pmGetConfig("PCP_VAR_DIR"), pmInDomStr(indom));
     sts = system(cmd);
@@ -271,8 +267,7 @@ _c(void)
     int		inst;
     int		sts;
 
-    indomp->domain = FORQA;
-    indomp->serial = 13;
+    indom = pmInDom_build(FORQA, 13);
 
     fprintf(stderr, "Load the instance domain ...\n");
     sts = pmdaCacheOp(indom, PMDA_CACHE_LOAD);
@@ -311,8 +306,7 @@ _e(int since)
     int		sts;
     int		inst;
 
-    indomp->domain = FORQA;
-    indomp->serial = 11;
+    indom = pmInDom_build(FORQA, 11);
 
     sts = pmdaCacheOp(indom, PMDA_CACHE_LOAD);
     if (sts < 0) {
@@ -358,8 +352,7 @@ _g(void)
     int		inst;
     int		i;
 
-    indomp->domain = FORQA;
-    indomp->serial = 7;
+    indom = pmInDom_build(FORQA, 7);
 
     for (i = 0; i < 254; i++) {
 	pmsprintf(nbuf, sizeof(nbuf), "hashing-instance-%03d", i);
@@ -395,8 +388,7 @@ _h(void)
     int		inst;
     int		i;
 
-    indomp->domain = FORQA;
-    indomp->serial = 17;
+    indom = pmInDom_build(FORQA, 17);
 
     sts = pmdaCacheOp(indom, PMDA_CACHE_LOAD);
     if (sts < 0) {
@@ -438,8 +430,7 @@ _i(int style)
     int		i;
     static int	first = 1;
 
-    indomp->domain = FORQA;
-    indomp->serial = 15;
+    indom = pmInDom_build(FORQA, 15);
 
     if (first) {
 	sts = pmdaCacheOp(indom, PMDA_CACHE_LOAD);
@@ -548,8 +539,7 @@ _j(void)
     int		sts;
     int		i;
 
-    indomp->domain = FORQA;
-    indomp->serial = 10;
+    indom = pmInDom_build(FORQA, 10);
 
     fprintf(stderr, "\nPopulate the instance domain ...\n");
     for (i = 0; i < 20; i++) {
@@ -590,9 +580,7 @@ main(int argc, char **argv)
     int		sts;
     int		c;
 
-    __pmSetProgname(argv[0]);
-
-    indomp = (__pmInDom_int *)&indom;
+    pmSetProgname(argv[0]);
 
     while ((c = getopt(argc, argv, "D:")) != EOF) {
 	switch (c) {
@@ -601,7 +589,7 @@ main(int argc, char **argv)
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
@@ -614,7 +602,7 @@ main(int argc, char **argv)
     }
 
     if (errflag) {
-	fprintf(stderr, "Usage: %s [-D...] [a|b|c|d|...|i 1|2|3}\n", pmProgname);
+	fprintf(stderr, "Usage: %s [-D...] [a|b|c|d|...|i 1|2|3}\n", pmGetProgname());
 	exit(1);
     }
 

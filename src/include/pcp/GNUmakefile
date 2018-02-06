@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013-2016 Red Hat.
+# Copyright (c) 2013-2018 Red Hat.
 # Copyright (c) 2000,2004 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
@@ -20,16 +20,21 @@ include $(TOPDIR)/src/include/builddefs
 HFILES = pmapi.h impl.h pmda.h pmtime.h pmdaroot.h pmafm.h \
 	 trace.h trace_dev.h mmv_stats.h mmv_dev.h import.h \
 	 config32.h config64.h platform32.h platform64.h \
-	 pmjson.h pmhttp.h pmdbg.h
+	 pmjson.h pmhttp.h pmdbg.h series.h deprecated.h
 INFILES = config.h.in configsz.h.in platform_defs.h.in platformsz.h.in
 CONFFILES = config.h configsz.h platform_defs.h platformsz.h
 GENERATED_HFILES = $(CONFFILES)
+NOSHIP_HFILES = libpcp.h
 
 LDIRT = $(GENERATED_HFILES)
 
 default :: default_pcp
 
 default_pcp : $(HEADERS) $(GENERATED_HFILES)
+	@if grep HAVE_64BIT config.h.in >/dev/null; then \
+	   echo "HAVE_64 in config.h.in; move to configsz.h.in for multilib"; \
+	   exit 1; \
+	fi
 
 include $(BUILDRULES)
 

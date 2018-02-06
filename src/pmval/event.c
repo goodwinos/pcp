@@ -123,7 +123,7 @@ myvaluesetdump(pmValueSet *xvsp, int idx, int *flagsp)
 	/* first time for this pmid */
 	hp = (DescHash *)malloc(sizeof(DescHash));
 	if (hp == NULL) {
-	    __pmNoMem("DescHash", sizeof(DescHash), PM_FATAL_ERR);
+	    pmNoMem("DescHash", sizeof(DescHash), PM_FATAL_ERR);
 	    /*NOTREACHED*/
 	}
 	if ((sts = pmNameID(xvsp->pmid, &hp->name)) < 0) {
@@ -213,7 +213,7 @@ myeventdump(pmValueSet *vsp, int idx, int highres)
 	    fprintf(stderr, "Warning: cannot get PMID for %s: %s\n",
 			name_flags, pmErrStr(sts));
 	    /* avoid subsequent warnings ... */
-	    __pmid_int(&pmid_flags)->item = 1;
+	    pmid_flags = pmID_build(pmID_domain(pmid_flags), pmID_cluster(pmid_flags), 1);
 	}
 	sts = pmLookupName(1, &name_missed, &pmid_missed);
 	if (sts < 0) {
@@ -221,7 +221,7 @@ myeventdump(pmValueSet *vsp, int idx, int highres)
 	    fprintf(stderr, "Warning: cannot get PMID for %s: %s\n",
 			name_missed, pmErrStr(sts));
 	    /* avoid subsequent warnings ... */
-	    __pmid_int(&pmid_missed)->item = 1;
+	    pmid_missed = pmID_build(pmID_domain(pmid_missed), pmID_cluster(pmid_missed), 1);
 	}
     }
 
@@ -229,11 +229,11 @@ myeventdump(pmValueSet *vsp, int idx, int highres)
 	printf("  ");
 	if (highres) {
 	    numpmid = hres[r]->numpmid;
-	    __pmPrintHighResStamp(stdout, &hres[r]->timestamp);
+	    pmPrintHighResStamp(stdout, &hres[r]->timestamp);
 	}
 	else {
 	    numpmid = res[r]->numpmid;
-	    __pmPrintStamp(stdout, &res[r]->timestamp);
+	    pmPrintStamp(stdout, &res[r]->timestamp);
 	}
 
 	printf(" --- event record [%d]", r);
@@ -299,12 +299,12 @@ printevents(Context *x, pmValueSet *vset, int cols)
 			sts = pmNameInDom(x->desc.indom, inst, &iname);
 		    if (sts < 0) {
 			fprintf(stderr, "%s: pmNameInDom: %s[%u]: %s\n",
-				pmProgname, x->metric, inst, pmErrStr(sts));
+				pmGetProgname(), x->metric, inst, pmErrStr(sts));
 			exit(EXIT_FAILURE);
 		    }
 		    if ((sts = __pmHashAdd(inst, (void *)iname, &x->ihash)) < 0) {
 			fprintf(stderr, "%s: __pmHashAdd: %s[%s (%u)]: %s\n",
-				pmProgname, x->metric, iname, inst,
+				pmGetProgname(), x->metric, iname, inst,
 				pmErrStr(sts));
 			exit(EXIT_FAILURE);
 		    }

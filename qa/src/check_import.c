@@ -5,7 +5,6 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include <pcp/import.h>
 
 static void
@@ -31,7 +30,7 @@ main(int argc, char **argv)
     int		c;
     static char	*usage = "[-D debugspec] ";
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     while ((c = getopt(argc, argv, "D:")) != EOF) {
 	switch (c) {
@@ -40,7 +39,7 @@ main(int argc, char **argv)
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
@@ -53,7 +52,7 @@ main(int argc, char **argv)
     }
 
     if (errflag) {
-	printf("Usage: %s %s\n", pmProgname, usage);
+	printf("Usage: %s %s\n", pmGetProgname(), usage);
 	exit(1);
     }
 
@@ -73,7 +72,7 @@ main(int argc, char **argv)
     sts = pmiUseContext(ctx1);
     check(sts, "pmiUseContext");
 
-    sts = pmiAddMetric("my.metric.foo", pmid_build(245,0,1), PM_TYPE_U32, PM_INDOM_NULL, PM_SEM_INSTANT, pmiUnits(1,-1,0,PM_SPACE_MBYTE,PM_TIME_SEC,0));
+    sts = pmiAddMetric("my.metric.foo", pmID_build(245,0,1), PM_TYPE_U32, PM_INDOM_NULL, PM_SEM_INSTANT, pmiUnits(1,-1,0,PM_SPACE_MBYTE,PM_TIME_SEC,0));
     check(sts, "pmiAddMetric");
     sts = pmiAddMetric("my.metric.bar", PM_ID_NULL, PM_TYPE_U64, pmInDom_build(245,1), PM_SEM_INSTANT, pmiUnits(1,-1,0,PM_SPACE_MBYTE,PM_TIME_SEC,0));
     check(sts, "pmiAddMetric");
@@ -85,7 +84,7 @@ main(int argc, char **argv)
     check(sts, "pmiAddMetric");
     sts = pmiAddMetric("my.metric.string", PM_ID_NULL, PM_TYPE_STRING, PM_INDOM_NULL, PM_SEM_INSTANT, pmiUnits(0,0,0,0,0,0));
     check(sts, "pmiAddMetric");
-    sts = pmiAddMetric("my.dup.pmid", pmid_build(245,0,3), PM_TYPE_32, PM_INDOM_NULL, PM_SEM_INSTANT, pmiUnits(0,0,0,0,0,0));
+    sts = pmiAddMetric("my.dup.pmid", pmID_build(245,0,3), PM_TYPE_32, PM_INDOM_NULL, PM_SEM_INSTANT, pmiUnits(0,0,0,0,0,0));
     check(sts, "pmiAddMetric");
     sts = pmiAddMetric("my.metric.float", PM_ID_NULL, PM_TYPE_FLOAT, PM_INDOM_NULL, PM_SEM_DISCRETE, pmiUnits(0,0,0,0,0,0));
     check(sts, "pmiAddMetric");

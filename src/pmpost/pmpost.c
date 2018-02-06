@@ -13,7 +13,6 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
 #include <sys/stat.h>
 #include <sys/file.h>
 #ifdef HAVE_GRP_H
@@ -53,14 +52,16 @@ mkdir_r(char *path)
 	    return -1;
 	sts = mkdir2(path, 0775);
 #ifndef IS_MINGW
-	if (chown(path, 0, gid) < 0)
-	    fprintf(stderr, "pmpost: cannot set dir gid[%d]: %s\n", gid, path);
+	if (sts >= 0) {
+	    if ((sts = chown(path, 0, gid)) < 0)
+		fprintf(stderr, "pmpost: cannot set dir gid[%d]: %s\n", gid, path);
+	}
 #endif
 	return sts;
     }
     else if ((sbuf.st_mode & S_IFDIR) == 0) {
 	fprintf(stderr, "pmpost: \"%s\" is not a directory\n", path);
-	exit(1);
+	return -1;
     }
     return 0;
 }
@@ -81,6 +82,7 @@ main(int argc, char **argv)
     struct tm	*tmp;
     int		sts = 0;
     char	notices[MAXPATHLEN];
+    char	*p;
 #ifndef IS_MINGW
     char	*ep;
     struct flock lock;
@@ -115,21 +117,21 @@ main(int argc, char **argv)
     }
 
     pmsprintf(notices, sizeof(notices), "%s%c" "NOTICES",
-		pmGetConfig("PCP_LOG_DIR"), __pmPathSeparator());
+		pmGetConfig("PCP_LOG_DIR"), pmPathSeparator());
 
     setup_group();
     dir = dirname(strdup(notices));
     if (mkdir_r(dir) < 0) {
 	fprintf(stderr, "pmpost: cannot create directory \"%s\": %s\n",
 	    dir, osstrerror());
-	exit(1);
+	goto oops;
     }
 
     if ((fd = open(notices, O_WRONLY|O_APPEND, 0)) < 0) {
 	if ((fd = open(notices, O_WRONLY|O_CREAT|O_APPEND, 0664)) < 0) {
-	    fprintf(stderr, "pmpost: cannot create file \"%s\": %s\n",
+	    fprintf(stderr, "pmpost: cannot open or create file \"%s\": %s\n",
 		notices, osstrerror());
-	    exit(1);
+	    goto oops;
 #ifndef IS_MINGW
 	} else if ((fchown(fd, 0, gid)) < 0) {
 	    fprintf(stderr, "pmpost: cannot set file gid \"%s\": %s\n",
@@ -144,7 +146,7 @@ main(int argc, char **argv)
      * drop root privileges for bug #827972
      */
     if (setuid(getuid()) < 0)
-    	exit(1);
+    	goto oops;
 
     lock.l_type = F_WRLCK;
     lock.l_whence = 0;
@@ -185,7 +187,7 @@ main(int argc, char **argv)
 
     if ((np = fdopen(fd, "a")) == NULL) {
 	fprintf(stderr, "pmpost: fdopen: %s\n", osstrerror());
-	exit(1);
+	goto oops;
     }
 
     time(&now);
@@ -212,12 +214,22 @@ main(int argc, char **argv)
 
     if (sts < 0) {
 	fprintf(stderr, "pmpost: write failed: %s\n", osstrerror());
-	fprintf(stderr, "Lost message ...");
-	for (i = 1; i < argc; i++) {
-	    fprintf(stderr, " %s", argv[i]);
-	}
-	fputc('\n', stderr);
+	goto oops;
     }
 
     exit(0);
+
+oops:
+    fprintf(stderr, "pmpost: unposted message: [");
+    time(&now);
+    tmp = localtime(&now);
+    for (p = ctime(&now); *p != '\n'; p++)
+	fputc(*p, stderr);
+    fputc(']', stderr);
+    for (i = 1; i < argc; i++) {
+	fprintf(stderr, " %s", argv[i]);
+    }
+    fputc('\n', stderr);
+
+    exit(1);
 }

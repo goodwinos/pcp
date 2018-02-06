@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 Red Hat.
+ * Copyright (c) 2014-2015,2018 Red Hat.
  * Copyright (c) 1995 Silicon Graphics, Inc.  All Rights Reserved.
  * 
  * This library is free software; you can redistribute it and/or modify it
@@ -16,7 +16,7 @@
 #include <limits.h>
 #include <ctype.h>
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "internal.h"
 
 
@@ -200,7 +200,7 @@ parseError(const char *spec, const char *point, char *msg, char **rslt)
     char	*q;
 
     if ((*rslt = malloc(need)) == NULL)
-	__pmNoMem("__pmParseTime", need, PM_FATAL_ERR);
+	pmNoMem("__pmParseTime", need, PM_FATAL_ERR);
     q = *rslt;
 
     for (p = spec; *p != '\0'; p++)
@@ -280,7 +280,7 @@ pmParseInterval(
     }
 
     /* convert into seconds and microseconds */
-    __pmtimevalFromReal(sec, rslt);
+    pmtimevalFromReal(sec, rslt);
     return 0;
 }
 
@@ -694,6 +694,10 @@ pmParseTimeWindow(
 	scan = swAlign;
 	if (pmParseInterval(scan, &tval, errMsg) < 0)
 	    return -1;
+	if (tval.tv_sec == 0 && tval.tv_usec == 0) {
+	    parseError(swAlign, swAlign, alignmsg, errMsg);
+	    return -1;
+	}
 	delta = tval.tv_usec + 1000000 * (__int64_t)tval.tv_sec;
 	align = start.tv_usec + 1000000 * (__int64_t)start.tv_sec;
 	blign = (align / delta) * delta;

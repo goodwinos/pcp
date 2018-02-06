@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 Red Hat.
+ * Copyright (c) 2013-2017 Red Hat.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,7 +16,7 @@
 #define _XOPEN_SOURCE 600
 #endif
 #include "pmmgr.h"
-#include "impl.h"
+#include "libpcp.h"
 
 #include <sys/stat.h>
 #include <cstdlib>
@@ -33,6 +33,9 @@ extern "C" {
 #include <unistd.h>
 #include <glob.h>
 #include <sys/wait.h>
+#if defined(HAVE_SYS_STATVFS_H)
+#include <sys/statvfs.h>
+#endif
 #ifdef HAVE_PTHREAD_H
 #include <pthread.h>
 #endif
@@ -74,25 +77,8 @@ sh_quote(const string& input)
 }
 
 
-// A little class that impersonates an ostream to the extent that it can
-// take << streaming operations.  It batches up the bits into an internal
-// stringstream until it is destroyed; then flushes to the original ostream.
-class obatched
-{
-private:
-  ostream& o;
-  stringstream stro;
-public:
-  obatched(ostream& oo): o(oo) {}
-  ~obatched() { o << stro.str(); o.flush(); }
-  operator ostream& () { return stro; }
-  template <typename T> ostream& operator << (const T& t) { stro << t; return stro; }
-};
-
-
-
 // Print a string to cout/cerr progress reports, similar to the
-// stuff produced by __pmNotifyErr
+// stuff produced by pmNotifyErr
 ostream&
 timestamp(ostream &o)
 {
@@ -103,7 +89,7 @@ timestamp(ostream &o)
   if (now2)
     now2[19] = '\0'; // overwrite " YYYY \n"
 
-  return o << "[" << (now2 ? now2 : "") << "] " << pmProgname << "("
+  return o << "[" << (now2 ? now2 : "") << "] " << pmGetProgname() << "("
 	   << getpid()
 #ifdef HAVE_PTHREAD_H
 #ifdef IS_LINUX
@@ -119,25 +105,25 @@ timestamp(ostream &o)
 
 
 // Lightweight wrapper for pthread_mutex_t, incl. nonlocking non-pthread backup implementation
-struct lock_t {
+struct my_lock_t {
 #if HAVE_PTHREAD_H
 private:
   pthread_mutex_t _lock;
 public:
-  lock_t() { pthread_mutex_init(& this->_lock, NULL); }
-  ~lock_t() { pthread_mutex_destroy (& this->_lock); }
+  my_lock_t() { pthread_mutex_init(& this->_lock, NULL); }
+  ~my_lock_t() { pthread_mutex_destroy (& this->_lock); }
   void lock() { pthread_mutex_lock (& this->_lock); }
   void unlock() { pthread_mutex_unlock (& this->_lock); }
 #else
 public:
-  lock_t() {}
-  ~lock_t() {}
+  my_lock_t() {}
+  ~my_lock_t() {}
   void lock() {}
   void unlock() {}
 #endif
 private:
-  lock_t(const lock_t&); // make uncopyable
-  lock_t& operator=(lock_t const&); // make unassignable
+  my_lock_t(const my_lock_t&); // make uncopyable
+  my_lock_t& operator=(my_lock_t const&); // make unassignable
 };
 
 
@@ -145,12 +131,31 @@ private:
 struct locker
 {
 public:
-  locker(lock_t *_m): m(_m) { m->lock(); }
+  locker(my_lock_t *_m): m(_m) { m->lock(); }
   ~locker() { m->unlock(); }
 private:
-  lock_t* m;
+  my_lock_t* m;
 };
 
+
+
+// A little class that impersonates an ostream to the extent that it can
+// take << streaming operations.  It batches up the bits into an internal
+// stringstream until it is destroyed; then flushes to the original ostream.
+class my_lock_t;
+class obatched
+{
+private:
+  ostream& o;
+  stringstream stro;
+  static my_lock_t lock;
+public:
+  obatched(ostream& oo): o(oo) { }
+  ~obatched() { locker do_not_cross_the_streams(& obatched::lock); o << stro.str(); o.flush(); }
+  operator ostream& () { return stro; }
+  template <typename T> ostream& operator << (const T& t) { stro << t; return stro; }
+};
+my_lock_t obatched::lock; // just the one, since cout/cerr iostreams are not thread-safe
 
 
 extern "C" void *
@@ -207,6 +212,45 @@ pmmgr_configurable::wrap_system(const std::string& cmd)
 }
 
 
+// A wrapper for something like popen(3), but responding quicker to
+// interrupts and standardizing tracing.
+string
+pmmgr_configurable::wrap_popen(const std::string& cmd)
+{
+  string output;
+  
+  if (pmDebugOptions.appl1)
+    timestamp(obatched(cout)) << "pipe-running " << cmd << endl;
+
+  FILE* f = popen(cmd.c_str(), "r");
+  if (f == NULL)
+    {
+      timestamp(obatched(cerr)) << "failed to popen " << cmd << endl;
+      return output;
+    }
+
+  // Block, collecting all stdout from the child process.
+  // Expecting only quick & small snippets.
+  while (!quit)
+    {
+      char buf[1024];
+      size_t rc = fread(buf, 1, sizeof(buf), f);
+      output += string(buf,rc);
+      if (feof(f) || ferror(f))
+        break;
+    }
+
+  int status = pclose(f);
+  //timestamp(obatched(cout)) << "done status=" << status << endl;
+  if (status != 0)
+    timestamp(obatched(cerr)) << "popen(" << cmd << ") failed: rc=" << status << endl;
+
+  if (pmDebugOptions.appl1)
+    timestamp(obatched(cout)) << "collected " << output << endl;
+
+  return output;
+}
+
 
 // ------------------------------------------------------------------------
 
@@ -222,7 +266,7 @@ pmmgr_configurable::get_config_multi(const string& file) const
 {
   vector<string> lines;
 
-  string complete_filename = config_directory + (char)__pmPathSeparator() + file;
+  string complete_filename = config_directory + (char)pmPathSeparator() + file;
   ifstream f (complete_filename.c_str());
   while (f.good()) {
     string line;
@@ -231,10 +275,17 @@ pmmgr_configurable::get_config_multi(const string& file) const
       lines.push_back(line);
     if (! f.good())
       break;
-    if (line == "")
-      timestamp(obatched(cerr)) << "file '" << file << "' parse warning: empty line ignored" << endl;
   }
 
+  return lines;
+}
+
+vector<string>
+pmmgr_configurable::get_config_multi(const string& file, const pmmgr_hostid& suffix) const
+{
+  vector<string> lines = get_config_multi (file + '.' + suffix);
+  vector<string> lines2 = get_config_multi (file);
+  lines.insert(lines.end(),lines2.begin(), lines2.end());
   return lines;
 }
 
@@ -242,9 +293,16 @@ pmmgr_configurable::get_config_multi(const string& file) const
 bool
 pmmgr_configurable::get_config_exists(const string& file) const
 {
-  string complete_filename = config_directory + (char)__pmPathSeparator() + file;
+  string complete_filename = config_directory + (char)pmPathSeparator() + file;
   ifstream f (complete_filename.c_str());
   return (f.good());
+}
+
+
+bool
+pmmgr_configurable::get_config_exists(const string& file, const pmmgr_hostid& suffix) const
+{
+  return get_config_exists(file + '.' + suffix) || get_config_exists(file);
 }
 
 
@@ -252,16 +310,23 @@ string
 pmmgr_configurable::get_config_single(const string& file) const
 {
   vector<string> lines = get_config_multi (file);
-  if (lines.size() == 1)
-    return lines[0];
-  else if (lines.size() > 1)
-    {
-      timestamp(obatched(cerr)) << "file '" << file << "' parse warning: ignored extra lines" << endl;
-      return "";
-    }
+  if (lines.size() >= 1)
+    return lines[0]; // ignore subsequent lines
   else
     return ""; // even an empty or nonexistent file comes back with a ""
 }
+
+
+string
+pmmgr_configurable::get_config_single(const string& file, const pmmgr_hostid& suffix) const
+{
+  vector<string> lines = get_config_multi (file, suffix);
+  if (lines.size() >= 1)
+    return lines[0]; // ignore subsequent lines
+  else
+    return ""; // even an empty or nonexistent file comes back with a ""
+}
+
 
 ostream& // NB: return by value!
 pmmgr_configurable::timestamp(ostream& o) const
@@ -277,7 +342,7 @@ pmmgr_configurable::timestamp(ostream& o) const
 // as it represents siply a parsing of a pcp metric-description string.
 
 static std::map<std::string,pmMetricSpec*> parsed_metric_cache;
-static lock_t parsed_metric_cache_lock;
+static my_lock_t parsed_metric_cache_lock;
 
 pmMetricSpec*
 pmmgr_job_spec::parse_metric_spec (const string& spec) const
@@ -307,19 +372,24 @@ pmmgr_job_spec::parse_metric_spec (const string& spec) const
 // NB: note: this function needs to be reentrant/concurrency-aware, since
 // multiple threads may be running it at the same time against the same
 // pmmgr_job_spec object!
-pmmgr_hostid
-pmmgr_job_spec::compute_hostid (const pcp_context_spec& ctx) const
+set<pmmgr_hostid>
+pmmgr_job_spec::compute_hostids (const pcp_context_spec& ctx) const
 {
-  // static hostid takes precedence
-  string hostid_static = get_config_single ("hostid-static");
-  if (hostid_static != "")
-    return pmmgr_hostid (hostid_static);
+  set<pmmgr_hostid> hostids;
+
+  // static hostids take precedence
+  vector<string> hostid_static = get_config_multi ("hostid-static");
+  if (hostid_static.size() != 0) {
+    hostids.insert(hostid_static.begin(), hostid_static.end());
+    return hostids;
+  }
 
   pmFG fg;
   int sts = pmCreateFetchGroup (&fg, PM_CONTEXT_HOST, ctx.c_str());
-  if (sts < 0)
-    return "";
-
+  if (sts < 0) {
+    return hostids; // empty
+  }
+  
   // parse all the hostid metric specifications
   vector<string> hostid_specs = get_config_multi("hostid-metrics");
   if (hostid_specs.size() == 0)
@@ -388,7 +458,11 @@ pmmgr_job_spec::compute_hostid (const pcp_context_spec& ctx) const
 	}
     }
 
-    return pmmgr_hostid (sanitized);
+  if (sanitized == "") // treat empty hostid as '-', from hostid-metrics separator
+    sanitized = "-";
+
+  hostids.insert(pmmgr_hostid (sanitized));
+  return hostids;
 }
 
 
@@ -479,7 +553,7 @@ struct pmcd_search_task
   // Single BKL to protect all shared data.  This should be sufficient
   // since the bulk of the time of the search threads should be
   // blocked in the network stack (attempting connections).
-  lock_t lock;
+  my_lock_t lock;
 
   pmmgr_job_spec *job; // reentrant/const members called from multiple threads
   set<pcp_context_spec>::const_iterator new_specs_iterator; // pointer into same
@@ -509,14 +583,13 @@ pmmgr_pmcd_search_thread (void *a)
       }
 
       // NB: this may take seconds! $PMCD_CONNECT_TIMEOUT
-      pmmgr_hostid hostid = t->job->compute_hostid (spec);
+      set<pmmgr_hostid> hostids = t->job->compute_hostids (spec);
 
-      if (hostid != "") // verified existence/liveness
-	{
-          locker update_output (& t->lock);
-
-          t->output.insert (make_pair (hostid, spec));
-        }
+      locker update_output (& t->lock);
+      for (set<pmmgr_hostid>::iterator it = hostids.begin();
+           it != hostids.end();
+           it++)
+        t->output.insert (make_pair (*it, spec));
     }
 
   return 0;
@@ -532,7 +605,7 @@ pmmgr_pmcd_search_thread (void *a)
 struct pmcd_choice_container_search_task
 {
   // Single BKL
-  lock_t lock;
+  my_lock_t lock;
 
   bool subtarget_containers; // RO: cached spec->get_config_exists()
 
@@ -689,11 +762,37 @@ pmmgr_job_spec::poll()
       free ((void*) urls);
     }
 
+  // probe kubernetes pods; assume they may be running pmcd at default port
+  if (get_config_exists ("target-kubectl-pod"))
+    {
+      string target_kubectl_pod = get_config_single("target-kubectl-pod");
+      string kubectl_cmd = "kubectl get pod -o " + sh_quote("jsonpath={.items[*].status.podIP}") +" "+ target_kubectl_pod;
+      string ips_str = wrap_popen(kubectl_cmd);
+      istringstream ips(ips_str);
+      while(ips.good())
+        {
+          string ip;
+          ips >> ip;
+          if (ip != "")
+            new_specs.insert(ip);
+        }
+    }
+
   // fallback to logging the local server, if nothing else is configured/discovered
   if (target_hosts.size() == 0 &&
-      target_discovery.size() == 0)
+      target_discovery.size() == 0 &&
+      !get_config_exists ("target-kubectl-pod"))
     new_specs.insert("local:");
 
+  if (pmDebugOptions.appl1)
+    {
+      timestamp(obatched(cout)) << "poll targets" << endl;
+      for (set<string>::const_iterator it = new_specs.begin();
+           it != new_specs.end();
+           ++it)
+        timestamp(obatched(cout)) << *it << endl;
+    }
+  
   // phase 2: move previously-identified targets over, so we can tell who
   // has come or gone
   const map<pmmgr_hostid,pcp_context_spec> old_known_targets = known_targets;
@@ -820,13 +919,17 @@ pmmgr_job_spec::poll()
 
   // XXX: getting a bit duplicative
   string default_log_dir =
-    string(pmGetConfig("PCP_LOG_DIR")) + (char)__pmPathSeparator() + "pmmgr";
+    string(pmGetConfig("PCP_LOG_DIR")) + (char)pmPathSeparator() + "pmmgr";
   string log_dir = get_config_single ("log-directory");
   if (log_dir == "") log_dir = default_log_dir;
-  else if(log_dir[0] != '/') log_dir = config_directory + (char)__pmPathSeparator() + log_dir;
+  else if(log_dir[0] != '/') log_dir = config_directory + (char)pmPathSeparator() + log_dir;
 
+  // adjust for ENOSPC retention-factor
+  double rf = retention_factor (log_dir);
+  tv.tv_sec *= rf;
+  
   glob_t the_blob;
-  string glob_pattern = log_dir + (char)__pmPathSeparator() + "*";
+  string glob_pattern = log_dir + (char)pmPathSeparator() + "*";
   rc = glob (glob_pattern.c_str(),
 	     GLOB_NOESCAPE
 #ifdef GLOB_ONLYDIR
@@ -871,15 +974,19 @@ pmmgr_job_spec::note_new_hostid(const pmmgr_hostid& hid, const pcp_context_spec&
 {
   timestamp(obatched(cout)) << "new hostid " << hid << " at " << string(spec) << endl;
 
-  if (get_config_exists("pmlogger"))
+  if (get_config_exists("pmlogger", hid))
     daemons.insert(make_pair(hid, new pmmgr_pmlogger_daemon(config_directory, hid, spec)));
 
-  if (get_config_exists("pmie"))
+  if (get_config_exists("pmie", hid))
     daemons.insert(make_pair(hid, new pmmgr_pmie_daemon(config_directory, hid, spec)));
 
-  vector<string> lines = get_config_multi ("monitor");
+  vector<string> lines = get_config_multi ("monitor", hid);
   for (unsigned i=0; i<lines.size(); i++)
     daemons.insert(make_pair(hid, new pmmgr_monitor_daemon(config_directory, lines[i], i, hid, spec)));
+
+  vector<string> lines2 = get_config_multi ("monitor-host-env", hid);
+  for (unsigned i=0; i<lines2.size(); i++)
+    daemons.insert(make_pair(hid, new pmmgr_monitor_daemon(config_directory, lines2[i], i, hid, spec)));
 }
 
 
@@ -933,6 +1040,24 @@ pmmgr_daemon::pmmgr_daemon(const std::string& config_directory,
   pid(0),
   last_restart_attempt(0)
 {
+}
+
+vector<string>
+pmmgr_daemon::get_config_multi(const string& file) const
+{
+  return pmmgr_configurable::get_config_multi(file, hostid);
+}
+
+bool
+pmmgr_daemon::get_config_exists(const string& file) const
+{
+  return pmmgr_configurable::get_config_exists(file, hostid);
+}
+
+string
+pmmgr_daemon::get_config_single(const string& file) const
+{
+  return pmmgr_configurable::get_config_single(file, hostid);
 }
 
 
@@ -1075,34 +1200,156 @@ void pmmgr_daemon::poll()
     }
 }
 
+/* A - disk-full-threshold
+ * B - disk-full-retention
+ * diskspace free  0..A - return 1 (no scaling)
+ * diskspace free  A..100 - determine percentage above 'A'
+ * ie: A = 0.2 and diskspace 80% full, we're at 75% of the threshold<->full space
+ * (80 - A) / (100 - A) = 60/80 = 75%
+ * At this point we'll be reducing logs at 75% of the 'B' value
+ * ((75%) * (100 - 'B'))
+ * B = 50 (50% log reduction rate)
+ * We'll be reducing the log retention by 37.5% (ie. return 0.625)
+ */
+double
+pmmgr_configurable::retention_factor (const std::string& logpath)
+{
+#if defined(HAVE_SYS_STATVFS_H)
+  // NB: all doubles used here are fractions between [0.0 and 1.0], not percentages.
+  // Literals used in double arithmetic get decimal points as reminder of FP arithmetic.
+  
+  // ---------- find the fullness threshold 
+  const double full_threshold_default = 0.75;
+  double full_threshold = 0.;
+  string full_threshold_str = get_config_single ("disk-full-threshold");
+  if (full_threshold_str == "")
+    full_threshold = full_threshold_default;
+  else
+    {
+      full_threshold = strtod (full_threshold_str.c_str(), NULL);
+      if (full_threshold > 100. || full_threshold < 0.) full_threshold = full_threshold_default;
+      else if (full_threshold <= 100. && full_threshold > 1.) full_threshold/=100.;
+    }
+
+  // ---------- find the actual fullness
+  struct statvfs logpartition;
+  int rc = statvfs(logpath.c_str(), &logpartition);
+  if (rc == -1)
+    {
+      timestamp(obatched(cerr)) << "statvfs " << logpath << " for log retention failed: errno=" << errno << endl;
+      return 1.;
+    }
+  if (logpartition.f_blocks == 0) // avoid division by zero, if hypothetically possible for a filesystem
+    return 1.;
+  double fraction_full = (1.-((double)logpartition.f_bavail / (double)logpartition.f_blocks));
+  
+  if (fraction_full <= full_threshold) // not too full
+    return 1.;
+  // red alert: this filesystem is officially too full
+  
+  // ---------- find the retention parameter
+  double full_retention = 0.;
+  const double full_retention_default = 0.5;
+  string full_retention_str = get_config_single ("disk-full-retention");
+  if (full_retention_str == "")
+    full_retention = full_retention_default;
+  else
+    {
+      full_retention = strtod (full_retention_str.c_str(), NULL);
+      if (full_retention > 100. || full_retention < 0.) full_retention = full_retention_default;
+      else if (full_retention <= 100. && full_retention > 1.) full_retention/=100.;
+    }
+
+  // ---------- compute how much overfull (above fraction_full, below 100%) the disk is 
+
+  const double epsilon = 0.0001; // a minimum value for FP calculations to avoid div-by-zero edge cases
+
+  // fraction_full   full_threshold -> normalized_overfull
+  // 0.500001       0.5               0.0
+  // 0.75           0.5               0.5
+  // 1.             0.5               1.
+  // 1.             0.0               1.
+  // 1.             1.                1.  (asymptote)
+  double normalized_overfull =
+    (epsilon + fraction_full - full_threshold) /
+    (epsilon + 1. - full_threshold);
+
+  /*
+  set xlabel "fraction-full"
+  set ylabel "full-threshold"
+  set isosamples 2,100
+  eps=0.0001
+  nt(x,y)=x>y ? (eps+x-y)/(eps+1-y) : 0 
+  splot [0:1] [0:1] nt(x,y) title "normalized-overfull"
+  */
+
+  // ---------- compute the final retention factor
+
+  // normalized_overfull   full_retention ->  retention_factor
+  // 1.                   0.0                 0.0
+  // 0.75                 0.0                 0.25
+  // 0.5                  0.0                 0.5
+  // 0.0                  0.0                 1.0
+  // 1.                   0.5                 0.5
+  // 0.75                 0.5                 0.625
+  // 0.5                  0.5                 0.75
+  // 0.0                  0.5                 1.0
+  // 1.                   1.0                 1.0
+  // 0.75                 1.0                 1.0
+  // 0.5                  1.0                 1.0
+  // 0.0                  1.0                 1.0
+  
+  double retention_factor =
+    (normalized_overfull * full_retention) + (1.-normalized_overfull);
+
+  /*
+  set xlabel "normalized-overfull"
+  set ylabel "full-retention"
+  rf(x,y) = (x*y) + (1-x)
+  splot [0:1] [0:1] rf(x,y) title "retention-factor"
+  */
+     
+  timestamp(obatched(cerr)) << "log directory " << logpath << " "
+                            << (int)(fraction_full*100.) << "% full, "
+                            << "adjusting to "
+                            << (int)(retention_factor*100.) << "% retention times" << endl;
+#else
+  double retention_factor = 1.0;
+#endif
+  return retention_factor;
+}
+
 
 std::string
 pmmgr_pmlogger_daemon::daemon_command_line()
 {
   string default_log_dir =
-    string(pmGetConfig("PCP_LOG_DIR")) + (char)__pmPathSeparator() + "pmmgr";
+    string(pmGetConfig("PCP_LOG_DIR")) + (char)pmPathSeparator() + "pmmgr";
   string log_dir = get_config_single ("log-directory");
   if (log_dir == "") log_dir = default_log_dir;
-  else if(log_dir[0] != '/') log_dir = config_directory + (char)__pmPathSeparator() + log_dir;
+  else if(log_dir[0] != '/') log_dir = config_directory + (char)pmPathSeparator() + log_dir;
 
   (void) mkdir2 (log_dir.c_str(), 0777); // implicitly consults umask(2)
 
-  string host_log_dir = log_dir + (char)__pmPathSeparator() + hostid;
+  string host_log_dir = log_dir + (char)pmPathSeparator() + hostid;
   (void) mkdir2 (host_log_dir.c_str(), 0777);
   // (errors creating actual files under host_log_dir will be noted shortly)
 
+  double rf = retention_factor(host_log_dir); // assess fullness of that space
+  assert (rf >= 0.0 && rf <= 1.0);
+
   string pmlogger_command =
-	string(pmGetConfig("PCP_BIN_DIR")) + (char)__pmPathSeparator() + "pmlogger";
+	string(pmGetConfig("PCP_BIN_DIR")) + (char)pmPathSeparator() + "pmlogger";
   string pmlogger_options = sh_quote(pmlogger_command);
   pmlogger_options += " " + get_config_single ("pmlogger") + " ";
 
   // run pmlogconf if requested
   if (get_config_exists("pmlogconf"))
     {
-      string pmlogconf_output_file = host_log_dir + (char)__pmPathSeparator() + "config.pmlogger";
+      string pmlogconf_output_file = host_log_dir + (char)pmPathSeparator() + "config.pmlogger";
       (void) unlink (pmlogconf_output_file.c_str());
       string pmlogconf_command =
-	string(pmGetConfig("PCP_BINADM_DIR")) + (char)__pmPathSeparator() + "pmlogconf";
+	string(pmGetConfig("PCP_BINADM_DIR")) + (char)pmPathSeparator() + "pmlogconf";
       string pmlogconf_options =
 	sh_quote(pmlogconf_command)
 	+ " -c -r -h " + sh_quote(spec)
@@ -1118,27 +1365,28 @@ pmmgr_pmlogger_daemon::daemon_command_line()
 
   // collect -h direction
   pmlogger_options += " -h " + sh_quote(spec);
+  pmlogger_options += " -H " + sh_quote(hostid);
 
   // hard-code -r to report metrics & expected disk usage rate
   pmlogger_options += " -r";
 
   // collect subsidiary pmlogger diagnostics
-  pmlogger_options += " -l " + sh_quote(host_log_dir + (char)__pmPathSeparator() + "pmlogger.log");
+  pmlogger_options += " -l " + sh_quote(host_log_dir + (char)pmPathSeparator() + "pmlogger.log");
 
   // do log merging
   if (get_config_exists ("pmlogmerge"))
     {
       string pmlogextract_command =
-	string(pmGetConfig("PCP_BIN_DIR")) + (char)__pmPathSeparator() + "pmlogextract";
+	string(pmGetConfig("PCP_BIN_DIR")) + (char)pmPathSeparator() + "pmlogextract";
 
       string pmlogcheck_command =
-	string(pmGetConfig("PCP_BIN_DIR")) + (char)__pmPathSeparator() + "pmlogcheck";
+	string(pmGetConfig("PCP_BIN_DIR")) + (char)pmPathSeparator() + "pmlogcheck";
 
       string pmlogrewrite_command =
-	string(pmGetConfig("PCP_BINADM_DIR")) + (char)__pmPathSeparator() + "pmlogrewrite";
+	string(pmGetConfig("PCP_BINADM_DIR")) + (char)pmPathSeparator() + "pmlogrewrite";
 
       string pmlogreduce_command =
-	string(pmGetConfig("PCP_BINADM_DIR")) + (char)__pmPathSeparator() + "pmlogreduce";
+	string(pmGetConfig("PCP_BINADM_DIR")) + (char)pmPathSeparator() + "pmlogreduce";
 
       string pmlogextract_options = sh_quote(pmlogextract_command);
 
@@ -1155,8 +1403,9 @@ pmmgr_pmlogger_daemon::daemon_command_line()
 	  retention_tv.tv_sec = 14*24*60*60;
 	  retention_tv.tv_usec = 0;
 	}
+      retention_tv.tv_sec *= rf;
       pmlogextract_options += " -S -" + sh_quote(retention);
-
+      
       // Arrange our new pmlogger to kill itself after the given
       // period, to give us a chance to rerun.
       string period = get_config_single ("pmlogmerge");
@@ -1175,7 +1424,7 @@ pmmgr_pmlogger_daemon::daemon_command_line()
 	{
 	  // adjust stopping time to the next multiple of period
 	  struct timeval now_tv;
-	  __pmtimevalNow (&now_tv);
+	  pmtimevalNow (&now_tv);
 	  time_t period_s = period_tv.tv_sec;
 	  if (period_s < 1) period_s = 1; // at least one second
 	  time_t period_end = ((now_tv.tv_sec + 1 + period_s) / period_s) * period_s - 1;
@@ -1194,16 +1443,16 @@ pmmgr_pmlogger_daemon::daemon_command_line()
 
       // Find prior archives by globbing for archive-*.index files,
       // to exclude reduced-archives (if any).  (*.index files are
-      // optional as per pcp-archive.5, but pmlogger_merge.sh relies
+      // optional as per LOGARCHIVE(5), but pmlogger_merge(1) relies
       // on it.)
       vector<string> mergeable_archives; // those to merge
       glob_t the_blob;
-      string glob_pattern = host_log_dir + (char)__pmPathSeparator() + "archive-*.index";
+      string glob_pattern = host_log_dir + (char)pmPathSeparator() + "archive-*.index";
       rc = glob (glob_pattern.c_str(), GLOB_NOESCAPE, NULL, & the_blob);
       if (rc == 0)
 	{
 	  struct timeval now_tv;
-	  __pmtimevalNow (&now_tv);
+	  pmtimevalNow (&now_tv);
 	  time_t period_s = period_tv.tv_sec;
 	  if (period_s < 1) period_s = 1; // at least one second
 	  time_t prior_period_start = ((now_tv.tv_sec + 1 - period_s) / period_s) * period_s;
@@ -1334,7 +1583,7 @@ pmmgr_pmlogger_daemon::daemon_command_line()
                   assert (pos != string::npos); // by glob
                   preserved_name.replace(pos, 8, "corrupt-");
 
-                  string rename_cmd = string(pmGetConfig("PCP_BIN_DIR"))+(char)__pmPathSeparator()+"pmlogmv";
+                  string rename_cmd = string(pmGetConfig("PCP_BIN_DIR"))+(char)pmPathSeparator()+"pmlogmv";
                   rename_cmd += " " + sh_quote(base_name) + " " + sh_quote(preserved_name);
 		  (void) wrap_system(rename_cmd);
 
@@ -1357,12 +1606,12 @@ pmmgr_pmlogger_daemon::daemon_command_line()
 	}
 
       // remove too-old reduced archives too
-      glob_pattern = host_log_dir + (char)__pmPathSeparator() + "reduced-*.index";
-      logans_run_archive_glob(glob_pattern, "pmlogreduce-retain", 90*24*60*60);
+      glob_pattern = host_log_dir + (char)pmPathSeparator() + "reduced-*.index";
+      logans_run_archive_glob(glob_pattern, "pmlogreduce-retain", 90*24*60*60, rf);
 
       // remove too-old corrupt archives too
-      glob_pattern = host_log_dir + (char)__pmPathSeparator() + "corrupt-*.index";
-      logans_run_archive_glob(glob_pattern, "pmlogcheck-corrupt-gc", 90*24*60*60);
+      glob_pattern = host_log_dir + (char)pmPathSeparator() + "corrupt-*.index";
+      logans_run_archive_glob(glob_pattern, "pmlogcheck-corrupt-gc", 90*24*60*60, rf);
 
       string timestr = "archive";
       time_t now2 = time(NULL);
@@ -1374,7 +1623,7 @@ pmmgr_pmlogger_daemon::daemon_command_line()
 	  if (rc > 0)
 	    timestr += timestr2;
 	}
-      string merged_archive_name = host_log_dir + (char)__pmPathSeparator() + timestr;
+      string merged_archive_name = host_log_dir + (char)pmPathSeparator() + timestr;
 
       if (mergeable_archives.size() > 1) // 1 or 0 are not worth merging!
 	{
@@ -1443,7 +1692,7 @@ pmmgr_pmlogger_daemon::daemon_command_line()
     }
 
   // last argument
-  pmlogger_options += " " + sh_quote(host_log_dir + (char)__pmPathSeparator() + timestr);
+  pmlogger_options += " " + sh_quote(host_log_dir + (char)pmPathSeparator() + timestr);
 
   return pmlogger_options;
 }
@@ -1452,7 +1701,8 @@ pmmgr_pmlogger_daemon::daemon_command_line()
 void
 pmmgr_pmlogger_daemon::logans_run_archive_glob(const std::string& glob_pattern,
                                                const std::string& carousel_config,
-                                               time_t carousel_default)
+                                               time_t carousel_default,
+                                               double rf)
 {
   int rc;
   struct timeval retention_tv;
@@ -1475,12 +1725,15 @@ pmmgr_pmlogger_daemon::logans_run_archive_glob(const std::string& glob_pattern,
       retention_tv.tv_usec = 0;
     }
 
+  // penalize if disk getting full
+  retention_tv.tv_sec *= rf;
+  
   glob_t the_blob;
   rc = glob (glob_pattern.c_str(), GLOB_NOESCAPE, NULL, & the_blob);
   if (rc == 0)
     {
       struct timeval now_tv;
-      __pmtimevalNow (&now_tv);
+      pmtimevalNow (&now_tv);
       for (unsigned i=0; i<the_blob.gl_pathc; i++)
         {
           if (quit) break;
@@ -1525,19 +1778,19 @@ std::string
 pmmgr_pmie_daemon::daemon_command_line()
 {
   string default_log_dir =
-    string(pmGetConfig("PCP_LOG_DIR")) + (char)__pmPathSeparator() + "pmmgr";
+    string(pmGetConfig("PCP_LOG_DIR")) + (char)pmPathSeparator() + "pmmgr";
   string log_dir = get_config_single ("log-directory");
   if (log_dir == "") log_dir = default_log_dir;
-  else if(log_dir[0] != '/') log_dir = config_directory + (char)__pmPathSeparator() + log_dir;
+  else if(log_dir[0] != '/') log_dir = config_directory + (char)pmPathSeparator() + log_dir;
 
   (void) mkdir2 (log_dir.c_str(), 0777); // implicitly consults umask(2)
 
-  string host_log_dir = log_dir + (char)__pmPathSeparator() + hostid;
+  string host_log_dir = log_dir + (char)pmPathSeparator() + hostid;
   (void) mkdir2 (host_log_dir.c_str(), 0777);
   // (errors creating actual files under host_log_dir will be noted shortly)
 
   string pmie_command =
-	string(pmGetConfig("PCP_BIN_DIR")) + (char)__pmPathSeparator() + "pmie";
+	string(pmGetConfig("PCP_BIN_DIR")) + (char)pmPathSeparator() + "pmie";
   string pmie_options = sh_quote (pmie_command);
 
   pmie_options += " " + get_config_single ("pmie") + " ";
@@ -1545,9 +1798,9 @@ pmmgr_pmie_daemon::daemon_command_line()
   // run pmieconf if requested
   if (get_config_exists ("pmieconf"))
     {
-      string pmieconf_output_file = host_log_dir + (char)__pmPathSeparator() + "config.pmie";
+      string pmieconf_output_file = host_log_dir + (char)pmPathSeparator() + "config.pmie";
       string pmieconf_command =
-	string(pmGetConfig("PCP_BIN_DIR")) + (char)__pmPathSeparator() + "pmieconf";
+	string(pmGetConfig("PCP_BIN_DIR")) + (char)pmPathSeparator() + "pmieconf";
 
       // NB: pmieconf doesn't take a host name as an argument, unlike pmlogconf
       string pmieconf_options =
@@ -1570,7 +1823,7 @@ pmmgr_pmie_daemon::daemon_command_line()
   pmie_options += " -f";
 
   // collect subsidiary pmlogger diagnostics
-  pmie_options += " -l " + sh_quote(host_log_dir + (char)__pmPathSeparator() + "pmie.log");
+  pmie_options += " -l " + sh_quote(host_log_dir + (char)pmPathSeparator() + "pmie.log");
 
   return pmie_options;
 }
@@ -1580,14 +1833,14 @@ std::string
 pmmgr_monitor_daemon::daemon_command_line()
 {
   string default_log_dir =
-    string(pmGetConfig("PCP_LOG_DIR")) + (char)__pmPathSeparator() + "pmmgr";
+    string(pmGetConfig("PCP_LOG_DIR")) + (char)pmPathSeparator() + "pmmgr";
   string log_dir = get_config_single ("log-directory");
   if (log_dir == "") log_dir = default_log_dir;
-  else if(log_dir[0] != '/') log_dir = config_directory + (char)__pmPathSeparator() + log_dir;
+  else if(log_dir[0] != '/') log_dir = config_directory + (char)pmPathSeparator() + log_dir;
 
   (void) mkdir2 (log_dir.c_str(), 0777); // implicitly consults umask(2)
 
-  string host_log_dir = log_dir + (char)__pmPathSeparator() + hostid;
+  string host_log_dir = log_dir + (char)pmPathSeparator() + hostid;
   (void) mkdir2 (host_log_dir.c_str(), 0777);
 
   stringstream monitor_command;
@@ -1596,6 +1849,24 @@ pmmgr_monitor_daemon::daemon_command_line()
                   << " >" << sh_quote(host_log_dir) << "/monitor-"  << config_index << ".out"
                   << " 2>" << sh_quote(host_log_dir) << "/monitor-"  << config_index << ".err";
 
+  // copy previous contents of .err file
+  ostringstream os;
+  os <<  host_log_dir << "/" << "monitor" << "-"  << config_index << ".err";
+  string err_filename = os.str();
+  ifstream f (err_filename.c_str()); // c_str for old school c++
+  while (f.good())
+    {
+      string line;
+      getline(f, line);
+      if (line != "")
+        timestamp(obatched(cerr)) << err_filename << ": " << line << endl;
+    }
+  // NB: we could opt to erase this file at this time, so we don't
+  // re-print the same thing next time.  But this is not necessary,
+  // because as soon as we return, this command line will be executed
+  // (up at pmmgr_daemon::poll), and the 2> part of the command line
+  // will truncate the file first.
+  
   return monitor_command.str();
 }
 
@@ -1685,12 +1956,12 @@ int main (int argc, char *argv[])
   setup_signals();
 
   string default_config_dir =
-    string(pmGetConfig("PCP_SYSCONF_DIR")) + (char)__pmPathSeparator() + "pmmgr";
+    string(pmGetConfig("PCP_SYSCONF_DIR")) + (char)pmPathSeparator() + "pmmgr";
   vector<pmmgr_job_spec*> js;
 
   int c;
   char* username_str;
-  __pmGetUsername(& username_str);
+  pmGetUsername(& username_str);
   string username = username_str;
   char* output_filename = NULL;
 
@@ -1705,7 +1976,7 @@ int main (int argc, char *argv[])
 	  if ((c = pmSetDebug(opts.optarg)) < 0)
 	    {
 	      pmprintf("%s: unrecognized debug options specification (%s)\n",
-		       pmProgname, opts.optarg);
+		       pmGetProgname(), opts.optarg);
 	      opts.errors++;
 	    }
 	  break;
@@ -1725,7 +1996,7 @@ int main (int argc, char *argv[])
 	  polltime = atoi(opts.optarg);
 	  if (polltime <= 0)
 	    {
-	      pmprintf("%s: poll time too short\n", pmProgname);
+	      pmprintf("%s: poll time too short\n", pmGetProgname());
 	      opts.errors++;
 	    }
 	  break;
@@ -1757,16 +2028,16 @@ int main (int argc, char *argv[])
   // NB: A failure from this call is of no significance: pmmgr is not
   // required to be run as uid pcp or root, so must not fail for the
   // mere inability to write into /var/run/pcp.
-  (void) __pmServerCreatePIDFile(pmProgname, 0);
+  (void) __pmServerCreatePIDFile(pmGetProgname(), 0);
 
 #ifndef IS_MINGW
     /* lose root privileges if we have them */
     if (geteuid () == 0)
 #endif
-      __pmSetProcessIdentity(username.c_str());
+      pmSetProcessIdentity(username.c_str());
 
   // (re)create log file, redirect stdout/stderr
-  // NB: must be done after __pmSetProcessIdentity() for proper file permissions
+  // NB: must be done after pmSetProcessIdentity() for proper file permissions
   if (output_filename)
     {
       int fd;
@@ -1810,6 +2081,24 @@ int main (int argc, char *argv[])
       alarm (0);
       (void) signal (SIGCHLD, SIG_DFL);
       (void) signal (SIGALRM, SIG_DFL);
+
+      // Reap any zombie child processes.  These could be
+      // (a) direct daemon processes we started - in which case
+      //     our later specif waitpid()s will fail, but that's OK;
+      //     at worst we'll lose the wstatus code; we still test
+      //     for liveness with kill($pid, 0)
+      // (b) indirect children of our daemon processes, or
+      // (c) random child processes, if pmmgr happens to be pid=1,
+      //     and in both cases we can simply reap the zombie
+      // but not
+      // (d) a temporary child process opened with popen() or similar,
+      //     whose output we were collecting, and whose rc we really
+      //     care about ... because all those child processes will have
+      //     been conclusively dealt with during the -> poll()'s above.
+      int pid;
+      do {
+        pid = waitpid(-1, NULL, WNOHANG);
+      } while (pid > 0);
     }
 
   // NB: don't let this cleanup be interrupted by pending-quit signals;

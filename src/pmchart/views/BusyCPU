@@ -25,13 +25,18 @@ _err()
     done
     echo >>$tmp/msg
     echo "Sorry, there is nothing to display." >>$tmp/msg
-    pmconfirm >/dev/null \
-	-header "pmchart view construction failure" \
-	-file $tmp/msg \
-	-icon error \
-	-B "OK"
+    if $dialog
+    then
+	pmconfirm >/dev/null \
+	    -header "pmchart view construction failure" \
+	    -file $tmp/msg \
+	    -icon error \
+	    -B "OK"
+    else
+	cat >&2 $tmp/msg
+    fi
     exit
-}
+    }
 
 # find top 10 consumers of user mode CPU cycles and generate a plot for each
 #
@@ -49,14 +54,26 @@ _err()
 #
 echo "/\[0*$$ /d" >$tmp/sed
 
-# progress notifier while we do our job
-#
-pmquery >/dev/null 2>&1 \
-    -timeout 5 \
-    -header "kmchart view construction" \
-    -t "Finding top CPU burners, please wait 5 seconds ..." &
-query=$!
-echo "/\[0*$query /d" >>$tmp/sed
+dialog=true
+if [ "${PCP_STDERR+set}" = set ]
+then
+    if [ -z "$PCP_STDERR" -o "$PCP_STDERR" != DISPLAY ]
+    then
+	dialog=false
+    fi
+fi
+
+if $dialog
+then
+    # progress notifier while we do our job
+    #
+    pmquery >/dev/null 2>&1 \
+	-timeout 5 \
+	-header "pmchart view construction" \
+	-t "Finding top CPU burners, please wait 5 seconds ..." &
+    query=$!
+    echo "/\[0*$query /d" >>$tmp/sed
+fi
 
 # deal with alternative metric names ...
 #
@@ -64,10 +81,10 @@ i=0
 fail=true
 for metric in proc.psinfo.utime proc.psusage.utime
 do
-    nval=`pmprobe -if $* $metric 2>&1 \
+    nval=`pmprobe -ifF $* $metric 2>&1 \
           | tee $tmp/err.$i \
-	  | $PCP_AWK_PROG '{print $2}'`
-    if [ "$nval" -gt 0 ]
+	  | $PCP_AWK_PROG '$1 == "'$metric'" && $2 > 0 {print $2}'`
+    if [ -n "$nval" ] && [ "$nval" -gt 0 ]
     then
 	fail=false
 	break
@@ -111,20 +128,20 @@ sed -f $tmp/sed $tmp/1 \
 s/.*inst \[//
 s/ or .* \([0-9][0-9]*\)$/ \1/p
 }' \
-| sort >$tmp/1.list
+| sort -k 1b,1 >$tmp/1.list
 
 sed -n -e '/inst \[/{
 s/.*inst \[//
 s/or "\(.*\)".* \([0-9][0-9]*\)$/\2 \1/p
 }' $tmp/2 \
-| sort >$tmp/2.list
+| sort -k 1b,1 >$tmp/2.list
 
 #DEBUG# echo "First list ..." >/tmp/busy.debug
 #DEBUG# cat $tmp/1.list >>/tmp/busy.debug
 #DEBUG# echo "Second list ..." >>/tmp/busy.debug
 #DEBUG# cat $tmp/2.list >>/tmp/busy.debug
 
-join $tmp/1.list $tmp/2.list \
+join -j1 $tmp/1.list $tmp/2.list \
 | $PCP_AWK_PROG '
 $3 > $2	{ # this process has consumed some user mode CPU cycles
 	  printf "%d",$3-$2
@@ -136,11 +153,16 @@ if [ ! -s $tmp/found ]
 then
     # no processes qualify
     #
-    pmconfirm >/dev/null \
-	-header "pmchart view construction failure" \
-	-t "No qualifying processes were found!" \
-	-icon warning \
-	-B "OK"
+    if $dialog
+    then
+	pmconfirm >/dev/null \
+	    -header "pmchart view construction failure" \
+	    -t "No qualifying processes were found!" \
+	    -icon warning \
+	    -B "OK"
+    else
+	echo "pmchart view construction failure: No qualifying processes were found!"
+    fi
     exit
 fi
 

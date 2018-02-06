@@ -23,7 +23,6 @@ endif
 ifeq "$(HAVE_PYTHON)" "true"
 SUBDIRS += secure mic haproxy lio prometheus
 endif
-LCONFIG = localconfig
 
 # No implicit rules here, thank you
 #
@@ -33,10 +32,10 @@ LCONFIG = localconfig
 #
 %.out: %
 
-default_pcp default: new remake check qa_outfiles $(OTHERS) $(SUBDIRS) $(LCONFIG)
+default_pcp default: new remake check qa_outfiles localconfig $(OTHERS) $(SUBDIRS)
 	$(SUBDIRS_MAKERULE)
 
-setup: $(SUBDIRS) $(LCONFIG) qa_hosts
+setup: $(SUBDIRS) localconfig qa_hosts
 	$(SUBDIRS_MAKERULE)
 
 LDIRT += 051.work 134.full.* \
@@ -59,7 +58,7 @@ COMMON = common.check common.config common.filter \
 	 common.secure common.gfs2 common.rpm \
 	 common.qt common.avahi common.docker \
 	 common.discovery common.compress common.webapi \
-	 common.python 
+	 common.python common.prometheus
 
 OTHERS = group qa_hosts.master README sanity.coverage \
 	 $(shell echo valgrind-suppress* helgrind-suppress*)

@@ -41,14 +41,14 @@ getDiskCtl(pmInDom dindom, const char *name)
     if ((rv == PMDA_CACHE_INACTIVE) && ctl) {
 	rv = pmdaCacheStore(dindom, PMDA_CACHE_ADD, name, ctl);
 	if (rv < 0) {
-	    __pmNotifyErr(LOG_WARNING,
+	    pmNotifyErr(LOG_WARNING,
 			  "Cannot reactivate cached data for disk '%s': %s\n",
 			  name, pmErrStr(rv));
 	    return NULL;
 	}
     } else {
 	if ((ctl = (ctl_t *)calloc(1, sizeof(ctl_t))) == NULL) {
-	    __pmNotifyErr(LOG_WARNING,
+	    pmNotifyErr(LOG_WARNING,
 			  "Out of memory to keep state for disk '%s'\n",
 			  name);
 	   return NULL;
@@ -56,7 +56,7 @@ getDiskCtl(pmInDom dindom, const char *name)
 
 	rv = pmdaCacheStore(dindom, PMDA_CACHE_ADD, name, ctl);
 	if (rv < 0) {
-	    __pmNotifyErr(LOG_WARNING,
+	    pmNotifyErr(LOG_WARNING,
 			  "Cannot cache data for disk '%s': %s\n",
 			  name, pmErrStr(rv));
 	    free(ctl);
@@ -137,11 +137,9 @@ static __uint64_t
 disk_derived(pmdaMetric *mdesc, int inst, const kstat_io_t *iostat)
 {
     pmID	pmid;
-    __pmID_int	*ip = (__pmID_int *)&pmid;
     __uint64_t	val;
 
-    pmid = mdesc->m_desc.pmid;
-    ip->domain = 0;
+    pmid = pmID_build(0, pmID_cluster(mdesc->m_desc.pmid), pmID_item(mdesc->m_desc.pmid));
 
 // from kstat_io_t ...
 //
@@ -201,7 +199,7 @@ fetch_disk_data(kstat_ctl_t *kc, const pmdaMetric *mdesc, ctl_t *ctl,
 
     if ((kstat_read(kc, ctl->ksp, &ctl->iostat) == -1)) {
 	if (ctl->err == 0) {
-	    __pmNotifyErr(LOG_WARNING,
+	    pmNotifyErr(LOG_WARNING,
 			  "Error: disk_fetch(pmid=%s disk=%s ...) - "
 			   "kstat_read(kc=%p, ksp=%p, ...) failed: %s\n",
 			   pmIDStr(mdesc->m_desc.pmid), diskname,
@@ -214,7 +212,7 @@ fetch_disk_data(kstat_ctl_t *kc, const pmdaMetric *mdesc, ctl_t *ctl,
 
     ctl->fetched = 1;
     if (ctl->err != 0) {
-	__pmNotifyErr(LOG_INFO,
+	pmNotifyErr(LOG_INFO,
 		      "Success: disk_fetch(pmid=%s disk=%s ...) "
 		      "after %d errors as previously reported\n",
 		      pmIDStr(mdesc->m_desc.pmid), diskname, ctl->err);
@@ -309,7 +307,7 @@ get_instance_value(pmdaMetric *mdesc, pmInDom dindom, int inst,
     }
 
     if (offset == -1) {
-	if (pmid_item(mdesc->m_desc.pmid) == 35) { /* hinv.disk.devlink */
+	if (pmID_item(mdesc->m_desc.pmid) == 35) { /* hinv.disk.devlink */
 	    return fetch_disk_devlink(ctl->ksp, atom);
 	}
 	if (!fetch_disk_data(kc, mdesc, ctl, diskname))
@@ -328,7 +326,7 @@ get_instance_value(pmdaMetric *mdesc, pmInDom dindom, int inst,
 	    }
 
 	    if ((kn = kstat_data_lookup(ctl->sderr, m)) == NULL) {
-		if (pmDebugOptions.appl0 && pmDebugOptions.appl2) {
+		if (pmDebugOptions.appl0 && pmDebugOptions.appl2)
 		    fprintf(stderr, "No %s in %s\n", m, diskname);
 		return 0;
 	    }
@@ -379,7 +377,7 @@ disk_fetch(pmdaMetric *mdesc, int inst, pmAtomValue *atom)
     int	i;
     pmInDom dindom = indomtab[DISK_INDOM].it_indom;
 
-    if (pmid_item(mdesc->m_desc.pmid) == 20) { /* hinv.ndisk */
+    if (pmID_item(mdesc->m_desc.pmid) == 20) { /* hinv.ndisk */
 	i = pmdaCacheOp(dindom, PMDA_CACHE_SIZE_ACTIVE);
 	if (i < 0) {
 		return 0;

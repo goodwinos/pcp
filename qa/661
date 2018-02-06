@@ -15,8 +15,6 @@ test -d "$PCP_SHARE_DIR/webapps/graphite" || \
 test -d "$PCP_SHARE_DIR/webapps/blinkenlights" || \
 	_notrun "blinkenlights webapp is not installed"
 which curl >/dev/null 2>&1 || _notrun "No curl binary installed"
-$python -c "import json.tool" >/dev/null 2>&1
-[ $? -eq 0 ] || _notrun "python import json.tool not installed"
 
 $sudo rm -fr $tmp.dir
 $sudo rm -f $tmp.*
@@ -44,18 +42,35 @@ $PCP_BINADM_DIR/pmwebd $webargs -GX -R $PCP_SHARE_DIR/webapps -i 15 -A `pwd` -N 
 pid=$!
 _wait_for_pmwebd_logfile $tmp.out $webport
 
+# Not sure what this is trying to do ... just echoing GET HTTP/1.0 will
+# cause telnet-probe to hang waiting for a response from pmwebd ...
+# sending "GET HTTP/1.0" followed by "FOO" gets no response to the
+# illegal request ... is that what we're trying to test?
+#
 echo "crashers"
-# TODO: telnet-probe hanging in read(2) here:
-#echo "GET  HTTP/1.0
-# | $PCP_BINADM_DIR/telnet-probe localhost $webport
-#echo "GET  HTTP/1.0
-# | $PCP_BINADM_DIR/telnet-probe localhost $webport
+( echo "GET  HTTP/1.0"; echo FOO ) \
+| $PCP_BINADM_DIR/telnet-probe localhost $webport
+( echo "GET HTTP/1.0"; echo FOO ) \
+| $PCP_BINADM_DIR/telnet-probe localhost $webport
 
 _filter_curl_i()
 {
     tr -d '\r' |                      # drop ^M from httpd results
-    sed -e 's,^Date:.*$,Date: XXX,' |
+    sed -e 's,^Date:.*$,Date: XXX,' -e 's/302 Moved Temporarily/302 Found/' |
     grep -v 'Connection:.*Alive'      # some microhttpd versions add this
+}
+
+_filter_graphite_image()
+{
+    imgname=$1
+
+    # note: PIL is deprecated, pillow is apparently the successor.
+    $python -c "
+import sys
+from PIL import Image
+img = Image.open('$imgname')
+print('size=%dx%d\n' % (img.size[0], img.size[1]))
+"
 }
 
 echo "the catalog"
@@ -66,16 +81,20 @@ curl -s -S "http://localhost:$webport/graphite/index.html?foo=bar&ectoplasm=egon
 
 echo
 echo "metric name breakage" 
-curl -s -S "http://localhost:$webport/graphite/render?format=json&target=.." | _webapi_json_pretty
-curl --compressed -s -S "http://localhost:$webport/graphite/render?format=json&target=foo-XX-bar" | _webapi_json_pretty
+curl -s -S "http://localhost:$webport/graphite/render?format=json&target=.." | pmjson --pretty
+curl --compressed -s -S "http://localhost:$webport/graphite/render?format=json&target=foo-XX-bar" | pmjson --pretty
 
 echo
 echo "metric tree iteration" 
-curl -s -S "http://localhost:$webport/graphite/metrics/find?query=archives*naslog*.*" | _webapi_json_pretty
-curl --compressed -s -S "http://localhost:$webport/graphite/metrics/find?format=completer&query=archives*naslog*.*" | _webapi_json_pretty
-curl -s -S "http://localhost:$webport/graphite/metrics/find?format=completer&query=archives*naslog*.k*." | _webapi_json_pretty
-curl --compressed -s -S "http://localhost:$webport/graphite/metrics/find?format=completer&query=archives*naslog*.k*.all" | _webapi_json_pretty
-curl -s -S "http://localhost:$webport/graphite/metrics/find?format=completer&query=archives*naslog*.k*.all." | _webapi_json_pretty
+curl -s -S "http://localhost:$webport/graphite/metrics/find?query=archives*naslog*.*" | pmjson --pretty | tee -a $here/$seq.full
+
+curl --compressed -s -S "http://localhost:$webport/graphite/metrics/find?format=completer&query=archives*naslog*.*" | pmjson --pretty | tee -a $here/$seq.full
+
+curl -s -S "http://localhost:$webport/graphite/metrics/find?format=completer&query=archives*naslog*.k*." | pmjson --pretty | tee -a $here/$seq.full
+
+curl --compressed -s -S "http://localhost:$webport/graphite/metrics/find?format=completer&query=archives*naslog*.k*.all" | pmjson --pretty | tee -a $here/$seq.full
+
+curl -s -S "http://localhost:$webport/graphite/metrics/find?format=completer&query=archives*naslog*.k*.all." | pmjson --pretty | tee -a $here/$seq.full
 
 echo
 echo "metric regex grep 1" 
@@ -87,31 +106,33 @@ echo # not \n terminated
 
 echo
 echo "metric value dump 1" 
-curl -s -S "http://localhost:$webport/graphite/render?format=json&target=*/node_archive.proc.psinfo.pid.*&from=15:50_20131127&until=1385585880&maxDataPoints=100" | _webapi_json_pretty
+curl -s -S "http://localhost:$webport/graphite/render?format=json&target=*/node_archive.proc.psinfo.pid.*&from=15:50_20131127&until=1385585880&maxDataPoints=100" \
+| pmjson --pretty | tee -a $here/$seq.full
+
 echo
 echo "metric value dump 2" 
-curl --compressed -s -S "http://localhost:$webport/graphite/rawdata?target=*/node_archive.proc.psinfo.pid.*&from=00:00_20131127&until=00:00_20131129&maxDataPoints=300" | _webapi_json_pretty
+curl --compressed -s -S "http://localhost:$webport/graphite/rawdata?target=*/node_archive.proc.psinfo.pid.*&from=00:00_20131127&until=00:00_20131129&maxDataPoints=300" | pmjson --pretty | tee -a $here/$seq.full
 
 echo
 echo compressed archive, expect non-empty result
-curl -s -S "http://localhost:$webport/graphite/rawdata?target=*20130706.kernel.all.nprocs&from=00:00_20130705&until=23:59_20130705" | _webapi_json_pretty
+curl -s -S "http://localhost:$webport/graphite/rawdata?target=*20130706.kernel.all.nprocs&from=00:00_20130705&until=23:59_20130705" | pmjson --pretty | tee -a $here/$seq.full
 
 echo
 echo "metric gfx rendering" 
 curl -s -S "http://localhost:$webport/graphite/render?width=999&height=999&hideLegend=false&bgcolor=%23FF0&title=hello&format=png&target=*-chartqa1-2E-meta.sample.*byte*&target=*-chartqa1-2E-meta.*NOSUCH*&target=*-chartqa1-2E-meta.sample.dodgey.value.NOSUCH&from=22:31_20071010&until=22:36_20071010" > $tmp.png
-_webapi_img_pretty $tmp.png
+_filter_graphite_image $tmp.png
 curl -s -S "http://localhost:$webport/graphite/render?width=999&height=999&target=*archive*20150417*.proc.nprocs&from=09:30_20150417&until=23:00_20150417" > $tmp.png
-_webapi_img_pretty $tmp.png
+_filter_graphite_image $tmp.png
 # until=now should trigger redirect
 curl --compressed -s -S "http://localhost:$webport/graphite/render?width=999&height=999&target=*archive*20150417*.proc.nprocs&from=09:30_20150417&until=now" > $tmp.png
 if [ -s $tmp.png ]; then
     echo unexpected png
-    _webapi_img_pretty $tmp.png
+    _filter_graphite_image $tmp.png
 else
     echo expected empty/absent png
 fi
 curl -L -s -S "http://localhost:$webport/graphite/render?width=999&height=999&target=*archive*20150417*.proc.nprocs&from=09:30_20150417&until=now" > $tmp.png
-_webapi_img_pretty $tmp.png
+_filter_graphite_image $tmp.png
 
 # tidy up
 cat $tmp.out >> $seq.full
@@ -126,7 +147,7 @@ _wait_for_pmwebd_logfile $tmp.out $webport
 
 echo
 echo "metric value dump 1 without -X"
-curl -s -S "http://localhost:$webport/graphite/render?format=json&target=*node_archive*.proc.psinfo.pid.*&from=15:50_20131127&until=1385585880&maxDataPoints=100" | _webapi_json_pretty
+curl -s -S "http://localhost:$webport/graphite/render?format=json&target=*node_archive*.proc.psinfo.pid.*&from=15:50_20131127&until=1385585880&maxDataPoints=100" | pmjson --pretty | tee -a $here/$seq.full
 
 status=0
 exit

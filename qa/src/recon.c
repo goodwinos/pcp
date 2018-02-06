@@ -11,7 +11,7 @@
 
 #include <ctype.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include "libpcp.h"
 
 #define MAX_LOOP 1000
 
@@ -39,7 +39,7 @@ main(int argc, char **argv)
      * 10 msec
      */
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     while ((c = getopt(argc, argv, "D:")) != EOF) {
 	switch (c) {
@@ -47,7 +47,7 @@ main(int argc, char **argv)
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
@@ -65,7 +65,7 @@ main(int argc, char **argv)
 \n\
 Options:\n\
   -D debugspec		set PCP debugging options\n",
-		pmProgname);
+		pmGetProgname());
 	exit(1);
     }
 
@@ -116,7 +116,7 @@ Options:\n\
 	    fprintf(stderr, "pmReconnectContext: success\n");
 	    gettimeofday(&now, (struct timezone *)0);
 	    /* roundup to the nearest second, now that pmcd stop is much quicker */
-	    fprintf(stderr, "delay: %.0f secs\n", __pmtimevalSub(&now, &then) + 0.5);
+	    fprintf(stderr, "delay: %.0f secs\n", pmtimevalSub(&now, &then) + 0.5);
 	    break;
 	}
 	__pmtimevalSleep(delay);

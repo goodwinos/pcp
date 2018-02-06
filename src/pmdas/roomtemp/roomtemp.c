@@ -15,7 +15,6 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
 #include "pmda.h"
 #include "domain.h"
 #include "dsread.h"
@@ -80,14 +79,13 @@ static pmdaMetric metrictab[] = {
 static int
 roomtemp_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 {
-    __pmID_int		*idp = (__pmID_int *)&(mdesc->m_desc.pmid);
     char		return_msg[128];
     int			numval = 0;
 
-    if (idp->cluster == 0) {
+    if (pmID_cluster(mdesc->m_desc.pmid) == 0) {
 	if (inst >= indomtab[DEVICE].it_numinst)
 	    return PM_ERR_INST;
-	switch (idp->item) {
+	switch (pmID_item(mdesc->m_desc.pmid)) {
 	    case 0:		/* roomtemp.celsius */
 	    case 1:		/* roomtemp.fahrenheit */
 		if (!Aquire1WireNet(tty, return_msg, sizeof(return_msg))) {
@@ -97,7 +95,7 @@ roomtemp_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 		if (ReadTemperature(sntab[inst].sn, &atom->f))
 		    numval = 1;
 		Release1WireNet(return_msg, sizeof(return_msg));
-		if (idp->item == 1)
+		if (pmID_item(mdesc->m_desc.pmid) == 1)
 		    /* convert to fahrenheit */
 		    atom->f = atom->f * 9 / 5 + 32;
 		break;
@@ -135,13 +133,13 @@ roomtemp_init(pmdaInterface *dp)
 	if ((p = nextsensor()) == NULL)
 	    break;
 	if ((sntab = (sn_t *)realloc(sntab, (i+1) * sizeof(sn_t))) == NULL) {
-	    __pmNoMem("roomtemp_init: realloc sntab", (i+1) * sizeof(sn_t), PM_FATAL_ERR);
+	    pmNoMem("roomtemp_init: realloc sntab", (i+1) * sizeof(sn_t), PM_FATAL_ERR);
 	}
 	if ((device = (pmdaInstid *)realloc(device, (i+1) * sizeof(pmdaInstid))) == NULL) {
-	    __pmNoMem("roomtemp_init: realloc device", (i+1) * sizeof(pmdaInstid), PM_FATAL_ERR);
+	    pmNoMem("roomtemp_init: realloc device", (i+1) * sizeof(pmdaInstid), PM_FATAL_ERR);
 	}
 	if ((device[i].i_name = (char *)malloc(17)) == NULL) {
-	    __pmNoMem("roomtemp_init: malloc name", 17, PM_FATAL_ERR);
+	    pmNoMem("roomtemp_init: malloc name", 17, PM_FATAL_ERR);
 	}
 	memcpy(sntab[i].sn, p, 8);	/* SN for later fetch */
 	device[i].i_inst = i;		/* internal name is ordinal number */
@@ -162,7 +160,7 @@ roomtemp_init(pmdaInterface *dp)
 static void
 usage(void)
 {
-    fprintf(stderr, "Usage: %s [options] tty ...\n\n", pmProgname);
+    fprintf(stderr, "Usage: %s [options] tty ...\n\n", pmGetProgname());
     fputs("Options:\n"
 	  "  -d domain    use domain (numeric) for metrics domain of PMDA\n"
 	  "  -l logfile   write log into logfile rather than using default log name\n"
@@ -179,15 +177,15 @@ int
 main(int argc, char **argv)
 {
     int			err = 0;
-    int			sep = __pmPathSeparator();
+    int			sep = pmPathSeparator();
     pmdaInterface	dispatch;
     char		mypath[MAXPATHLEN];
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     pmsprintf(mypath, sizeof(mypath), "%s%c" "roomtemp" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
-    pmdaDaemon(&dispatch, PMDA_INTERFACE_3, pmProgname, ROOMTEMP,
+    pmdaDaemon(&dispatch, PMDA_INTERFACE_3, pmGetProgname(), ROOMTEMP,
 		"roomtemp.log", mypath);
 
     if (pmdaGetOpt(argc, argv, "D:d:i:l:pu:6:?", &dispatch, &err) != EOF)

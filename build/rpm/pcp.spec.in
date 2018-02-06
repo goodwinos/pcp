@@ -11,13 +11,27 @@ Distribution: @package_distribution@
 BuildRequires: procps bison flex
 BuildRequires: ncurses-devel
 BuildRequires: readline-devel
+%if 0%{?fedora} >= 26 || 0%{?rhel} > 7
+%global __python2 python2
+%else
+%global __python2 python
+%endif
 %if 0%{?sles_version} == 11
 # rpmbuild is in the rpm (not rpm-build) package for SLES11
 %else
 BuildRequires: rpm-build
 %endif
+%if "@have_boost@" == "true"
+# boost c++ library, widely available
+%global disable_boost 0
+%else
+%global disable_boost 1
+%endif
 %if "@enable_avahi@" == "true"
 BuildRequires: avahi-devel
+%endif
+%if "@enable_lzma@" == "true"
+BuildRequires: xz-devel
 %endif
 BuildRequires: zlib-devel
 %if "@enable_secure@" == "true"
@@ -126,7 +140,7 @@ Requires: initscripts
 %define __find_requires %{_builddir}/%{?buildsubdir}/build/rpm/filter-requires -v %{_vendor} -f 0%{?fedora} -r 0%{?rhel} %{__find_requires_save}
 
 %global pmda_remove() %{expand:
-if [ "%1" -eq 0 ]
+if [ %1 -eq 0 ]
 then
     PCP_PMDAS_DIR=@pcp_pmdas_dir@
     PCP_ETC_DIR=@pcp_etc_dir@
@@ -138,36 +152,44 @@ fi
 }
 
 %global selinux_handle_policy() %{expand:
-if [ "%1" -eq 1 ]
+if [ -e /usr/sbin/selinuxenabled ] && /usr/sbin/selinuxenabled
 then
-    PCP_SELINUX_DIR=@pcp_selinux_dir@
-    if [ -f "$PCP_SELINUX_DIR/%2" ]
+    if [ %1 -ge 1 ]
     then
-	%if 0%{?fedora} >= 24 || 0%{?rhel} > 6
-            (semodule -X 400 -i $PCP_SELINUX_DIR/%2)
-	%else
-            (semodule -i $PCP_SELINUX_DIR/%2)
-	%endif #distro version check
-    fi
-elif [ "%1" -eq 0 ]
-then
-    if semodule -l | grep %2 >/dev/null 2>&1
+	PCP_SELINUX_DIR=@pcp_selinux_dir@
+	if [ -f "$PCP_SELINUX_DIR/%2" ]
+	then
+	    if semodule -h | grep -q -- "-X" >/dev/null 2>&1
+	    then
+		(semodule -X 400 -i $PCP_SELINUX_DIR/%2)
+	    else
+		(semodule -i $PCP_SELINUX_DIR/%2)
+	    fi #semodule -X flag check
+	fi
+    elif [ %1 -eq 0 ]
     then
-	%if 0%{?fedora} >= 24 || 0%{?rhel} > 6
-	    (semodule -X 400 -r %2 >/dev/null)
-	%else
-	    (semodule -r %2 >/dev/null)
-	%endif #distro version check
+	if semodule -l | grep %2 >/dev/null 2>&1
+	then
+	    if semodule -h | grep -q -- "-X" >/dev/null 2>&1
+	    then
+		(semodule -X 400 -r %2 >/dev/null)
+	    else
+		(semodule -r %2 >/dev/null)
+	    fi #semodule -X flag check
+	fi
     fi
-fi
+fi # check for an active selinux install
 }
 
 Requires: pcp-libs = @package_version@
 %if "@enable_selinux@" == "true"
 Requires: pcp-selinux = @package_version@
 %endif
-Obsoletes: pcp-gui-debuginfo
 Obsoletes: pcp-compat
+%if 0%{?fedora} < 27
+# F27 re-introduced split-out debuginfo packages
+Obsoletes: pcp-gui-debuginfo
+%endif
 
 %description
 Performance Co-Pilot (PCP) provides a framework and services to support
@@ -214,9 +236,6 @@ License: GPLv2+ and LGPLv2.1+
 Group: Development/Libraries
 Summary: Performance Co-Pilot (PCP) development headers
 URL: http://www.pcp.io
-#Requires: pcp = @package_version@
-#Requires: pcp-libs = @package_version@
-#Requires: pcp-devel = @package_version@
 
 %description libs-devel
 Performance Co-Pilot (PCP) headers for development.
@@ -283,6 +302,9 @@ Group: Applications/System
 Summary: Performance Co-Pilot (PCP) web API service
 URL: http://www.pcp.io
 Requires: pcp-libs = @package_version@
+%if !%{disable_boost}
+BuildRequires: boost-devel
+%endif
 
 %description webapi
 Provides a daemon (pmwebd) that binds a large subset of the Performance
@@ -566,8 +588,8 @@ Requires: pcp-libs >= %{version}-%{release}
 Requires: python3-pcp = @package_version@
 Requires: python3-elasticsearch
 %else
-Requires: python-pcp = @package_version@
-Requires: python-elasticsearch
+Requires: %{__python2}-pcp = @package_version@
+Requires: %{__python2}-elasticsearch
 %endif
 
 %description export-pcp2elasticsearch
@@ -589,7 +611,7 @@ Requires: pcp-libs >= %{version}-%{release}
 %if "@enable_python3@" == "true"
 Requires: python3-pcp = @package_version@
 %else
-Requires: python-pcp = @package_version@
+Requires: %{__python2}-pcp = @package_version@
 %endif
 
 %description export-pcp2graphite
@@ -609,8 +631,8 @@ Requires: pcp-libs >= %{version}-%{release}
 Requires: python3-pcp = @package_version@
 Requires: python3-requests
 %else
-Requires: python-pcp = @package_version@
-Requires: python-requests
+Requires: %{__python2}-pcp = @package_version@
+Requires: %{__python2}-requests
 %endif
 
 %description export-pcp2influxdb
@@ -629,7 +651,7 @@ Requires: pcp-libs >= %{version}-%{release}
 %if "@enable_python3@" == "true"
 Requires: python3-pcp = @package_version@
 %else
-Requires: python-pcp = @package_version@
+Requires: %{__python2}-pcp = @package_version@
 %endif
 
 %description export-pcp2json
@@ -648,7 +670,7 @@ Requires: pcp-libs >= %{version}-%{release}
 %if "@enable_python3@" == "true"
 Requires: python3-pcp = @package_version@
 %else
-Requires: python-pcp = @package_version@
+Requires: %{__python2}-pcp = @package_version@
 %endif
 
 %description export-pcp2xml
@@ -667,7 +689,7 @@ Requires: pcp-libs >= %{version}-%{release}
 %if "@enable_python3@" == "true"
 Requires: python3-pcp = @package_version@
 %else
-Requires: python-pcp = @package_version@
+Requires: %{__python2}-pcp = @package_version@
 %endif
 
 %description export-pcp2zabbix
@@ -688,7 +710,7 @@ Requires: pcp-libs >= %{version}-%{release}
 %if "@enable_python3@" == "true"
 Requires: python3-pcp = @package_version@
 %else
-Requires: python-pcp = @package_version@
+Requires: %{__python2}-pcp = @package_version@
 %endif
 
 %description export-pcp2xlsx
@@ -698,21 +720,25 @@ in Excel spreadsheet format.
 
 %if "@enable_python2@" == "true"
 #
-# python-pcp. This is the PCP library bindings for python.
+# python2-pcp. This is the PCP library bindings for python.
 #
-%package -n python-pcp
+%package -n %{__python2}-pcp
 License: GPLv2+
 Group: Development/Libraries
 Summary: Performance Co-Pilot (PCP) Python bindings and documentation
 URL: http://www.pcp.io
-BuildRequires: python-devel
+BuildRequires: %{__python2}-devel
+%if 0%{?fedora} >= 26 || 0%{?rhel} > 7
+# on these platforms, python2-pcp replaces python-pcp
+Obsoletes: python-pcp
+%endif
 %if "%{_vendor}" == "redhat" && 0%{?rhel} <= 5 && 0%{?fedora} <= 25
-Requires: python-ctypes
+Requires: %{__python2}-ctypes
 %endif
 Requires: pcp-libs = @package_version@
-Requires: python
+Requires: %{__python2}
 
-%description -n python-pcp
+%description -n %{__python2}-pcp
 This python PCP module contains the language bindings for
 Performance Metric API (PMAPI) monitor tools and Performance
 Metric Domain Agents (PMDA) collector tools written in Python.
@@ -750,7 +776,7 @@ URL: http://www.pcp.io
 Requires: python3-pcp = @package_version@
 %endif
 %if "@enable_python2@" == "true"
-Requires: python-pcp = @package_version@
+Requires: %{__python2}-pcp = @package_version@
 %endif
 
 %description system-tools
@@ -1433,6 +1459,23 @@ This package contains the PCP Performance Metrics Domain Agent (PMDA) for
 collecting metrics about the Device Mapper Cache and Thin Client.
 # end pcp-pmda-dm
    
+%if "@enable_python3@" == "true"
+#
+# pcp-pmda-bcc
+#
+%package pmda-bcc
+License: ASL2.0 and GPLv2+
+Group: Applications/System
+Summary: Performance Co-Pilot (PCP) metrics from eBPF/BCC modules
+URL: http://www.pcp.io
+Requires: python3-bcc
+Requires: python3-pcp
+%description pmda-bcc
+This package contains the PCP Performance Metrics Domain Agent (PMDA) for
+extracting performance metrics from eBPF/BCC Python modules.
+# end pcp-pmda-bcc
+%endif
+
 %if "@have_python@" == "true"
 #
 # pcp-pmda-gluster
@@ -1445,7 +1488,7 @@ URL: http://www.pcp.io
 %if "@enable_python3@" == "true"
 Requires: python3-pcp
 %else
-Requires: python-pcp
+Requires: %{__python2}-pcp
 %endif
 %description pmda-gluster
 This package contains the PCP Performance Metrics Domain Agent (PMDA) for
@@ -1463,7 +1506,7 @@ URL: http://www.pcp.io
 %if "@enable_python3@" == "true"
 Requires: python3-pcp
 %else
-Requires: python-pcp
+Requires: %{__python2}-pcp
 %endif
 %description pmda-zswap
 This package contains the PCP Performance Metrics Domain Agent (PMDA) for
@@ -1481,7 +1524,7 @@ URL: http://www.pcp.io
 %if "@enable_python3@" == "true"
 Requires: python3-pcp
 %else
-Requires: python-pcp
+Requires: %{__python2}-pcp
 %endif
 %description pmda-unbound
 This package contains the PCP Performance Metrics Domain Agent (PMDA) for
@@ -1499,7 +1542,7 @@ URL: http://www.pcp.io
 %if "@enable_python3@" == "true"
 Requires: python3-pcp
 %else
-Requires: python-pcp
+Requires: %{__python2}-pcp
 %endif
 %description pmda-mic
 This package contains the PCP Performance Metrics Domain Agent (PMDA) for
@@ -1517,7 +1560,7 @@ URL: http://www.pcp.io
 %if "@enable_python3@" == "true"
 Requires: python3-pcp
 %else
-Requires: python-pcp
+Requires: %{__python2}-pcp
 %endif
 %description pmda-haproxy
 This package contains the PCP Performance Metrics Domain Agent (PMDA) for
@@ -1539,13 +1582,13 @@ Requires: pcp-libs = @package_version@
 %if "@enable_python3@" == "true"
 Requires: python3-pcp
 %if "%{_vendor}" == "suse"
-Requires: libvirt-python python-lxml
+Requires: libvirt-python %{__python2}-lxml
 %else
 Requires: libvirt-python3 python3-lxml
 %endif
 %else
-Requires: libvirt-python python-lxml
-Requires: python-pcp
+Requires: libvirt-python %{__python2}-lxml
+Requires: %{__python2}-pcp
 %endif
 
 %description pmda-libvirt
@@ -1568,8 +1611,8 @@ URL: http://www.pcp.io
 Requires: python3-pcp
 Requires: python3-rtslib
 %else
-Requires: python-rtslib
-Requires: python-pcp
+Requires: %{__python2}-rtslib
+Requires: %{__python2}-pcp
 %endif
 %description pmda-lio
 This package provides a PMDA to gather performance metrics from the kernels
@@ -1594,8 +1637,8 @@ Requires: pcp-libs = @package_version@
 Requires: python3-pcp = @package_version@
 Requires: python3-requests
 %else
-Requires: python-pcp = @package_version@
-Requires: python-requests
+Requires: %{__python2}-pcp = @package_version@
+Requires: %{__python2}-requests
 %endif
 
 %description pmda-prometheus
@@ -1616,15 +1659,15 @@ URL: http://www.pcp.io
 %if "@enable_python3@" == "true"
 Requires: python3-pcp
 %if "%{_vendor}" == "suse"
-Requires: python-jsonpointer
+Requires: %{__python2}-jsonpointer
 %else
 Requires: python3-jsonpointer
 %endif
 Requires: python3-six
 %else
-Requires: python-pcp
-Requires: python-jsonpointer
-Requires: python-six
+Requires: %{__python2}-pcp
+Requires: %{__python2}-jsonpointer
+Requires: %{__python2}-six
 %endif
 %description pmda-json
 This package contains the PCP Performance Metrics Domain Agent (PMDA) for
@@ -1908,6 +1951,9 @@ Requires: pcp-pmda-apache pcp-pmda-bash pcp-pmda-cisco pcp-pmda-dm pcp-pmda-gfs2
 Requires: pcp-pmda-lmsensors pcp-pmda-logger pcp-pmda-mailq pcp-pmda-mounts
 Requires: pcp-pmda-nvidia-gpu pcp-pmda-roomtemp pcp-pmda-sendmail pcp-pmda-shping
 Requires: pcp-pmda-lustrecomm pcp-pmda-redis pcp-pmda-docker
+%if "@enable_python3@" == "true"
+Requires: pcp-pmda-bcc
+%endif
 %if "@have_python@" == "true"
 Requires: pcp-pmda-gluster pcp-pmda-zswap pcp-pmda-unbound pcp-pmda-mic pcp-pmda-haproxy
 %endif
@@ -2028,8 +2074,11 @@ done
 %endif
 
 %if 0%{?fedora} > 26
+if [ "$1" -eq 1 ]
+then
 sed -i 's/^\#\ PMLOGGER_LOCAL.*/PMLOGGER_LOCAL=1/g' "$RPM_BUILD_ROOT/$PCP_SYSCONFIG_DIR/pmlogger"
 sed -i 's/^\#\ PMCD_LOCAL.*/PMCD_LOCAL=1/g' "$RPM_BUILD_ROOT/$PCP_SYSCONFIG_DIR/pmcd"
+fi
 %endif
 
 PCP_CONF=$BACKDIR/src/include/pcp.conf
@@ -2235,6 +2284,9 @@ awk '{print $NF}' $DIST_MANIFEST | egrep -e 'pmdas/lio' > pmda_lio_files
 %if "@pmda_prometheus@" == "true"
 awk '{print $NF}' $DIST_MANIFEST | egrep -e 'pmdas/prometheus' > pmda_prometheus_files
 %endif
+%if "@enable_python3@" == "true"
+awk '{print $NF}' $DIST_MANIFEST | egrep -e 'pmdas/bcc' > pmda_bcc_files
+%endif
 %if "@have_python@" == "true"
 awk '{print $NF}' $DIST_MANIFEST | egrep -e 'pmdas/gluster' > pmda_gluster_files
 awk '{print $NF}' $DIST_MANIFEST | egrep -e 'pmdas/zswap' > pmda_zswap_files
@@ -2283,6 +2335,9 @@ touch gui_files webapi_files manager_files pmda_infiniband_files pmda_papi_files
       pmda_trace_files pmda_weblog_files pmda_dm_files pmda_systemd_files \
       zeroconf_files
 
+%if "@enable_python3@" == "true"
+touch pmda_bcc_files
+%endif
 %if "@have_python@" == "true"
 touch pmda_gluster_files pmda_zswap_files pmda_unbound_files \
       pmda_mic_files pmda_haproxy_files system_tools_files
@@ -2398,6 +2453,9 @@ BEGIN {
     while( getline < "pmda_vmware_files") pmda_vmware[$0]=1;
     while( getline < "pmda_zimbra_files") pmda_zimbra[$0]=1;
     while( getline < "pmda_dm_files") pmda_dm[$0]=1;
+%if "@enable_python3@" == "true"
+    while( getline < "pmda_bcc_files") pmda_bcc[$0]=1;
+%endif
 %if "@have_python@" == "true"
     while( getline < "system_tools_files") system_tools[$0]=1;
     while( getline < "pmda_gluster_files") pmda_gluster[$0]=1;
@@ -2529,6 +2587,9 @@ BEGIN {
     else if (pmda_vmware[$NF]) f="pmda_vmware_files.rpm";
     else if (pmda_zimbra[$NF]) f="pmda_zimbra_files.rpm";
     else if (pmda_dm[$NF]) f="pmda_dm_files.rpm";
+%if "@enable_python3@" == "true"
+    else if (pmda_bcc[$NF]) f="pmda_bcc_files.rpm";
+%endif
 %if "@have_python@" == "true"
     else if (system_tools[$NF]) f="system_tools_files.rpm";
     else if (pmda_gluster[$NF]) f="pmda_gluster_files.rpm";
@@ -2590,7 +2651,7 @@ BEGIN {
 }
 $1 == "d" {
 	    if (match ($5, "'$PCP_RUN_DIR'")) {
-		printf ("%%%%ghost %s\n", $5) >> f;
+		printf ("%%%%ghost ") >> f;
 	    }
 	    printf ("%%%%dir %%%%attr(%s,%s,%s) %s\n", $2, $3, $4, $5) >> f
 	  }
@@ -2954,6 +3015,11 @@ pmieconf -c enable dmthin
 %preun pmda-dm
 %{pmda_remove "$1" "dm"}
 
+%if "@enable_python3@" == "true"
+%preun pmda-bcc
+%{pmda_remove "$1" "bcc"}
+%endif
+
 %if "@have_python@" == "true"
 %preun pmda-gluster
 %{pmda_remove "$1" "gluster"}
@@ -3059,30 +3125,6 @@ PCP_SYSCONFIG_DIR=@pcp_sysconfig_dir@
 test -s "$PCP_LOG_DIR/configs.sh" && source "$PCP_LOG_DIR/configs.sh"
 rm -f $PCP_LOG_DIR/configs.sh
 
-# migrate old to new temp dir locations within the same filesystem)
-migrate_tempdirs()
-{
-    _sub="$1"
-    _new_tmp_dir=%{_tmpdir}
-    _old_tmp_dir=%{_localstatedir}/tmp
-
-    for d in "$_old_tmp_dir/$_sub" ; do
-	test -d "$d" -a -k "$d" || continue
-	cd "$d" || continue
-	for f in * ; do
-	    [ "$f" != "*" ] || continue
-	    source="$d/$f"
-	    target="$_new_tmp_dir/$_sub/$f"
-            [ "$source" != "$target" ] || continue
-	    [ -f "$target" ] || mv -fu "$source" "$target"
-        done
-        cd && rmdir "$d" 2>/dev/null
-    done
-}
-for daemon in mmv pmdabash pmie pmlogger
-do
-    migrate_tempdirs $daemon
-done
 chown -R pcp:pcp "$PCP_LOG_DIR/pmcd" 2>/dev/null
 chown -R pcp:pcp "$PCP_LOG_DIR/pmlogger" 2>/dev/null
 chown -R pcp:pcp "$PCP_LOG_DIR/pmie" 2>/dev/null
@@ -3287,6 +3329,10 @@ cd
 
 %files pmda-dm -f pmda_dm_files.rpm
 
+%if "@enable_python3@" == "true"
+%files pmda-bcc -f pmda_bcc_files.rpm
+%endif
+
 %if "@have_python@" == "true"
 %files pmda-gluster -f pmda_gluster_files.rpm
 
@@ -3396,7 +3442,7 @@ cd
 %files -n perl-PCP-LogSummary -f perl-pcp-logsummary.list
 
 %if "@enable_python2@" == "true"
-%files -n python-pcp -f python-pcp.list.rpm
+%files -n %{__python2}-pcp -f python-pcp.list.rpm
 %endif
 
 %if "@enable_python3@" == "true"

@@ -15,14 +15,13 @@
 
 #include <math.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include "qed_app.h"
 #include "qed_console.h"
 
 QedApp::QedApp(int &argc, char **argv) : QApplication(argc, argv)
 {
     // TODO: rewrite with pmOptions
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
     my.argc = argc;
     my.argv = argv;
     my.pmnsfile = NULL;
@@ -36,7 +35,7 @@ QedApp::QedApp(int &argc, char **argv) : QApplication(argc, argv)
     my.port = -1;
 
     QCoreApplication::setOrganizationName("PCP");
-    QCoreApplication::setApplicationName(pmProgname);
+    QCoreApplication::setApplicationName(pmGetProgname());
     QCoreApplication::setApplicationVersion(pmGetConfig("PCP_VERSION"));
     QString confirm = pmGetConfig("PCP_BIN_DIR");
     confirm.prepend("PCP_XCONFIRM_PROG=");
@@ -84,7 +83,7 @@ int QedApp::getopts(const char *options)
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		pmprintf("%s: unrecognized debug options specification (%s)\n",
-			pmProgname, optarg);
+			pmGetProgname(), optarg);
 		errflg++;
 	    }
 	    break;
@@ -108,7 +107,7 @@ int QedApp::getopts(const char *options)
 	case 'p':		/* existing pmtime port */
 	    my.port = (int)strtol(optarg, &endnum, 10);
 	    if (*endnum != '\0' || c < 0) {
-		pmprintf("%s: -p requires a numeric argument\n", pmProgname);
+		pmprintf("%s: -p requires a numeric argument\n", pmGetProgname());
 		errflg++;
 	    }
 	    break;
@@ -119,7 +118,7 @@ int QedApp::getopts(const char *options)
 
 	case 't':		/* sampling interval */
 	    if (pmParseInterval(optarg, &my.delta, &msg) < 0) {
-		pmprintf("%s: cannot parse interval\n%s", pmProgname, msg);
+		pmprintf("%s: cannot parse interval\n%s", pmGetProgname(), msg);
 		free(msg);
 		errflg++;
 	    }
@@ -130,14 +129,15 @@ int QedApp::getopts(const char *options)
 	    break;
 
 	case 'V':		/* version */
-	    printf("%s %s\n", pmProgname, pmGetConfig("PCP_VERSION"));
+	    printf("%s %s\n", pmGetProgname(), pmGetConfig("PCP_VERSION"));
 	    exit(0);
 	    /*NOTREACHED*/
+	    break;
 
 	case 'z':		/* timezone from host */
 	    if (my.tz != NULL) {
 		pmprintf("%s: at most one of -Z and/or -z allowed\n",
-			pmProgname);
+			pmGetProgname());
 		errflg++;
 	    }
 	    my.zflag++;
@@ -146,7 +146,7 @@ int QedApp::getopts(const char *options)
 	case 'Z':		/* $TZ timezone */
 	    if (my.zflag) {
 		pmprintf("%s: at most one of -Z and/or -z allowed\n",
-			pmProgname);
+			pmGetProgname());
 		errflg++;
 	    }
 	    my.tz = optarg;
@@ -164,7 +164,7 @@ int QedApp::getopts(const char *options)
 // a := a + b for struct timevals
 void QedApp::timevalAdd(struct timeval *a, struct timeval *b)
 {
-    __pmtimevalInc(a, b);
+    pmtimevalInc(a, b);
 }
 
 //
@@ -181,13 +181,13 @@ int QedApp::timevalCmp(struct timeval *a, struct timeval *b)
 // convert timeval to seconds
 double QedApp::timevalToSeconds(struct timeval t)
 {
-    return __pmtimevalToReal(&t);
+    return pmtimevalToReal(&t);
 }
 
 // conversion from seconds (double precision) to struct timeval
 void QedApp::timevalFromSeconds(double value, struct timeval *tv)
 {
-    __pmtimevalFromReal(value, tv);
+    pmtimevalFromReal(value, tv);
 }
 
 // debugging, display seconds-since-epoch in human readable format

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Red Hat.
+ * Copyright (c) 2016-2018 Red Hat.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,7 +15,7 @@
 #define LINUX_PMDA_H
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "pmda.h"
 
 /*
@@ -94,8 +94,9 @@ enum {
 	CLUSTER_KSM_INFO,	/* 69 /sys/kernel/mm/ksm */
 	CLUSTER_ZONEINFO_PROTECTION,	/* 70 /proc/zoneinfo protection item */
 	CLUSTER_TAPEDEV,	/* 71 /sys/class/scsi_tape */
-	CLUSTER_RANDOM,		/* 72 /proc/sys/kernel/random entropy state */
+	CLUSTER_SYS_KERNEL,	/* 72 /proc/sys/kernel metrics */
 	CLUSTER_NET_SOCKSTAT6,	/* 73 /proc/net/sockstat6 */
+	CLUSTER_TTY,            /* 74 proc/tty/device/serial metrics */
 
 	NUM_CLUSTERS		/* one more than highest numbered cluster */
 };
@@ -105,10 +106,12 @@ enum {
  */
 enum {
 	REFRESH_NET_MTU = NUM_CLUSTERS,
+	REFRESH_NET_TYPE,
 	REFRESH_NET_SPEED,
 	REFRESH_NET_DUPLEX,
 	REFRESH_NET_LINKUP,
 	REFRESH_NET_RUNNING,
+	REFRESH_NET_WIRELESS,
 
 	REFRESH_NETADDR_INET,
 	REFRESH_NETADDR_IPV6,
@@ -156,6 +159,7 @@ enum {
 	ZONEINFO_INDOM,	        /* 32 - proc zoneinfo */
 	ZONEINFO_PROTECTION_INDOM,	/* 33 - proc zoneinfo protection item */
 	TAPEDEV_INDOM,		/* 34 - tape devices */
+	TTY_INDOM,              /* 35 - serial tty devices */
 
 	NUM_INDOMS		/* one more than highest numbered cluster */
 };

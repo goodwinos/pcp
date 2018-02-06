@@ -16,7 +16,7 @@
 #define _LOGGER_H
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include <assert.h>
 
 /*
@@ -42,6 +42,7 @@ typedef struct task_s {
 
 extern task_t		*tasklist;	/* master list of tasks */
 extern __pmLogCtl	logctl;		/* global log control */
+extern __pmArchCtl	archctl;	/* global archive control */
 extern int log_alarm;			/* set when log_callback() called for any task */
 
 /* config file parser states */
@@ -129,7 +130,8 @@ extern void validate_metrics(void);
 
 extern void disconnect(int);
 extern int reconnect(void);
-extern int do_preamble(void);
+extern int do_prologue(void);
+extern int do_epilogue(void);
 extern void run_done(int,char *);
 extern __pmPDU *rewrite_pdu(__pmPDU *, int);
 extern int putmark(void);
@@ -173,7 +175,7 @@ extern int		archive_version;
 extern int		parse_done;
 extern __int64_t	exit_bytes;
 extern __int64_t	vol_bytes;
-extern int		exit_code;
+extern int		sig_code;
 
 /* event record handling */
 extern int do_events(pmValueSet *);

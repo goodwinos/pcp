@@ -6,7 +6,7 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include "libpcp.h"
 #include <pcp/trace.h>
 #include <pcp/trace_dev.h>
 
@@ -305,7 +305,7 @@ decode_error(const char *name)
 static void
 decode_profile(const char *name)
 {
-    __pmProfile		*outprofs;
+    pmProfile		*outprofs;
     int			sts, ctxnum;
     struct profile {
 	__pmPDUHdr	hdr;
@@ -394,13 +394,13 @@ decode_profile(const char *name)
 static void
 decode_fetch(const char *name)
 {
-    __pmTimeval		when;
+    pmTimeval		when;
     pmID		*pmidlist;
     int			sts, ctx, count;
     struct fetch {
 	__pmPDUHdr	hdr;
 	int		ctxnum;
-	__pmTimeval	when;
+	pmTimeval	when;
 	int		numpmid;
 	pmID		pmidlist[0];
     } *fetch;
@@ -498,14 +498,14 @@ decode_desc(const char *name)
 static void
 decode_instance_req(const char *name)
 {
-    __pmTimeval		when;
+    pmTimeval		when;
     pmInDom		indom;
     int			inst, sts;
     char		*resname;
     struct instance_req {
 	__pmPDUHdr	hdr;
 	pmInDom		indom;
-	__pmTimeval	when;
+	pmTimeval	when;
 	int		inst;
 	int		namelen;
 	char		name[0];
@@ -563,7 +563,7 @@ decode_instance_req(const char *name)
 static void
 decode_instance(const char *name)
 {
-    __pmInResult	*inresult;
+    pmInResult	*inresult;
     int			sts;
     struct instance {
 	__pmPDUHdr	hdr;
@@ -1055,7 +1055,7 @@ decode_result(const char *name)
     pmResult		*resp;
     struct result {
 	__pmPDUHdr	hdr;
-	__pmTimeval	stamp;
+	pmTimeval	stamp;
 	int		numpmid;
 	__pmPDU		data[0];
     } *result;
@@ -1390,7 +1390,7 @@ main(int argc, char **argv)
     int		c, d;
     int		sts, errflag = 0;
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     while ((c = getopt(argc, argv, "D:?")) != EOF) {
 	switch (c) {
@@ -1398,7 +1398,7 @@ main(int argc, char **argv)
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
@@ -1411,7 +1411,7 @@ main(int argc, char **argv)
     }
 
     if (errflag || optind < argc-1) {
-	fprintf(stderr, "Usage: %s [-D debugspec]\n", pmProgname);
+	fprintf(stderr, "Usage: %s [-D debugspec]\n", pmGetProgname());
 	exit(1);
     }
 

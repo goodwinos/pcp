@@ -18,16 +18,18 @@ New log volume 3, via SIGHUP at DATE
 New log volume 4, via SIGHUP at DATE
 New log volume 5, via pmlc request at DATE
 New log volume 6, via pmlc request at DATE
+pmlogger: Caught signal 15, exiting
 
 Log finished DATE
 Created 9 archive pieces.
 
 Temporal Index
-             Log Vol    end(meta)     end(log)
+		Log Vol    end(meta)     end(log)
 TIMESTAMP       0       OFFSET       OFFSET
 TIMESTAMP       1       OFFSET       OFFSET
 TIMESTAMP       2       OFFSET       OFFSET
 TIMESTAMP       3       OFFSET       OFFSET
 TIMESTAMP       4       OFFSET       OFFSET
 TIMESTAMP       5       OFFSET       OFFSET
+TIMESTAMP       6       OFFSET       OFFSET
 TIMESTAMP       6       OFFSET       OFFSET

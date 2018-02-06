@@ -21,9 +21,6 @@
 #include "colorlist.h"
 #include "defaultobj.h"
 
-#include <iostream>
-using namespace std;
-
 StackObj::~StackObj()
 {
     delete _stack;
@@ -56,7 +53,7 @@ StackObj::finishedAdd()
 
     if (_metrics.numMetrics() == 0) {
 	pmprintf("%s: Error: Stack object has no metrics\n",
-		 pmProgname);
+		 pmGetProgname());
 	_length = 0;
     }
     else {
@@ -70,15 +67,13 @@ StackObj::finishedAdd()
 	    if (colSpec != NULL) {
 		if (colSpec->_scale)
 		    pmprintf("%s: Warning: Color scale ignored for stack object.\n",
-			     pmProgname);
+			     pmGetProgname());
 		else {
-#ifdef PCP_DEBUG
-		    if (pmDebug & DBG_TRACE_APPL0)
+		    if (pmDebugOptions.appl0)
 			cerr << "StackObj::finishedAdd: Adding " 
 			     << colSpec->_list.length()
 			     << " colors for " << _metrics.numMetrics() 
 			     << " metrics" << endl;
-#endif
 
 		    for (i = 0; i < colSpec->_list.size(); i++)
 			_metrics.add(*(colSpec->_list)[i]);
@@ -86,15 +81,13 @@ StackObj::finishedAdd()
 	    }
 	    else
 		pmprintf("%s: Warning: No colours specified for stack object, "
-			 "defaulting to blue.\n", pmProgname);
+			 "defaulting to blue.\n", pmGetProgname());
 
 	    _metrics.resolveColors(MetricList::perValue);
 
-#ifdef PCP_DEBUG
-	    if (pmDebug & DBG_TRACE_APPL0)
+	    if (pmDebugOptions.appl0)
 		cerr << "StackObj::finishedAdd: metrics: " << endl 
 		     << _metrics << endl;
-#endif
 
 	    _stack = new StackMod(&_metrics, ViewObj::object(_shape), _height);
 	    _root->addChild(_stack->root());
@@ -109,10 +102,8 @@ StackObj::finishedAdd()
 	    _length = 0;
     }
 
-#ifdef PCP_DEBUG
-    if (pmDebug & DBG_TRACE_APPL0)
+    if (pmDebugOptions.appl0)
 	cerr << name() << "has length " << _length << endl;
-#endif
 
     _width = baseWidth() + _length;
     _depth = baseDepth() + _length;

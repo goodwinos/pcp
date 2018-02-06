@@ -123,7 +123,7 @@ vnops_fetch(pmdaMetric *pm, int inst, pmAtomValue *av)
     kstat_t *k;
     char *stat = (char *)md->md_offset;
 
-    if (pmid_item(pm->m_desc.pmid) == 1023) { /* hinv.nfilesys */
+    if (pmID_item(pm->m_desc.pmid) == 1023) { /* hinv.nfilesys */
 	int	sts;
 	sts = pmdaCacheOp(indomtab[FILESYS_INDOM].it_indom, PMDA_CACHE_SIZE_ACTIVE);
 	if (sts < 0)
@@ -187,7 +187,7 @@ vnops_update_stats(int fetch)
 				(void **)&cached) != PMDA_CACHE_ACTIVE) {
 	    rv = pmdaCacheStore(indom, PMDA_CACHE_ADD, key, k);
 	    if (rv < 0) {
-		__pmNotifyErr(LOG_WARNING,
+		pmNotifyErr(LOG_WARNING,
 			      "Cannot create instance for "
 			      "filesystem '%s': %s\n",
 			      key, pmErrStr(rv));

@@ -13,7 +13,7 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include <ctype.h>
 #include <limits.h>
 #ifdef HAVE_VALUES_H

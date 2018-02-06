@@ -16,7 +16,7 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "logger.h"
 #include <assert.h>
 
@@ -192,7 +192,7 @@ change_inst_by_inst(pmInDom indom, int old, int new)
 
 typedef struct {
     __pmLogHdr	hdr;
-    __pmTimeval	stamp;
+    pmTimeval	stamp;
     pmInDom	indom;
     int		numinst;
     char	other[1];
@@ -202,7 +202,7 @@ typedef struct {
  * reverse the logic of __pmLogPutInDom()
  */
 static void
-_pmUnpackInDom(__pmPDU *pdubuf, pmInDom *indom, __pmTimeval *tp, int *numinst, int **instlist, char ***inamelist)
+_pmUnpackInDom(__pmPDU *pdubuf, pmInDom *indom, pmTimeval *tp, int *numinst, int **instlist, char ***inamelist)
 {
     indom_t	*idp;
     int		i;
@@ -305,7 +305,7 @@ do_indom(void)
 {
     long	out_offset;
     pmInDom	indom;
-    __pmTimeval	stamp;
+    pmTimeval	stamp;
     int		numinst;
     int		*instlist;
     char	**inamelist;
@@ -330,9 +330,9 @@ do_indom(void)
 	     * Save the old indom without changes, then operate on the
 	     * duplicate.
 	     */
-	    if ((sts = __pmLogPutInDom(&outarch.logctl, indom, &stamp, numinst, instlist, inamelist)) < 0) {
+	    if ((sts = __pmLogPutInDom(&outarch.archctl, indom, &stamp, numinst, instlist, inamelist)) < 0) {
 		fprintf(stderr, "%s: Error: __pmLogPutInDom: %s: %s\n",
-				pmProgname, pmInDomStr(indom), pmErrStr(sts));
+				pmGetProgname(), pmInDomStr(indom), pmErrStr(sts));
 		abandon();
 		/*NOTREACHED*/
 	    }
@@ -422,9 +422,9 @@ do_indom(void)
      * libpcp, via __pmLogPutInDom(), assumes control of the storage pointed
      * to by instlist and inamelist.
      */
-    if ((sts = __pmLogPutInDom(&outarch.logctl, indom, &stamp, numinst, instlist, inamelist)) < 0) {
+    if ((sts = __pmLogPutInDom(&outarch.archctl, indom, &stamp, numinst, instlist, inamelist)) < 0) {
 	fprintf(stderr, "%s: Error: __pmLogPutInDom: %s: %s\n",
-			pmProgname, pmInDomStr(indom), pmErrStr(sts));
+			pmGetProgname(), pmInDomStr(indom), pmErrStr(sts));
 	abandon();
 	/*NOTREACHED*/
     }

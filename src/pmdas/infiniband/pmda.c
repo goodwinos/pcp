@@ -322,7 +322,7 @@ void
 ibpmda_init(const char *confpath, int writeconf, pmdaInterface *dp)
 {
     char defconf[MAXPATHLEN];
-    int sep = __pmPathSeparator();
+    int sep = pmPathSeparator();
     int i;
 
     if (dp->status != 0)
@@ -335,8 +335,8 @@ ibpmda_init(const char *confpath, int writeconf, pmdaInterface *dp)
     }
 
     for (i=0; i < ARRAYSZ(indomtab); i++) {
-	__pmindom_int(&indomtab[i].it_indom)->domain = dp->domain;
-	if (IB_CNT_INDOM != __pmindom_int(&indomtab[i].it_indom)->serial) {
+	indomtab[i].it_indom = pmInDom_build(dp->domain, pmInDom_serial(indomtab[i].it_indom));
+	if (IB_CNT_INDOM != pmInDom_serial(indomtab[i].it_indom)) {
 	    pmdaCacheOp (indomtab[i].it_indom, PMDA_CACHE_LOAD);
 	}
     }
@@ -346,7 +346,7 @@ ibpmda_init(const char *confpath, int writeconf, pmdaInterface *dp)
 	return;
 
     for (i=0; i < ARRAYSZ(indomtab); i++) {
-	if (IB_CNT_INDOM != __pmindom_int(&indomtab[i].it_indom)->serial) {
+	if (IB_CNT_INDOM != pmInDom_serial(indomtab[i].it_indom)) {
 	    pmdaCacheOp (indomtab[i].it_indom, PMDA_CACHE_SAVE);
 	}
     }
@@ -361,7 +361,7 @@ ibpmda_init(const char *confpath, int writeconf, pmdaInterface *dp)
 static void
 usage(void)
 {
-    fprintf(stderr, "Usage: %s [options]\n\n", pmProgname);
+    fprintf(stderr, "Usage: %s [options]\n\n", pmGetProgname());
     fputs("Options:\n"
           "  -d domain  use domain (numeric) for metrics domain of PMDA\n"
 	  "  -l logfile write log into logfile rather than using default log name\n"
@@ -375,17 +375,17 @@ int
 main(int argc, char **argv)
 {
     int err = 0;
-    int sep = __pmPathSeparator();
+    int sep = pmPathSeparator();
     pmdaInterface dispatch;
     char helppath[MAXPATHLEN];
     char *confpath = NULL;
     int opt;
     int writeconf = 0;
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
     pmsprintf(helppath, sizeof(helppath), "%s%c" "infiniband" "%c" "help", 
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
-    pmdaDaemon(&dispatch, PMDA_INTERFACE_3, pmProgname, IB, "infiniband.log", helppath);
+    pmdaDaemon(&dispatch, PMDA_INTERFACE_3, pmGetProgname(), IB, "infiniband.log", helppath);
 
     while ((opt = pmdaGetOpt(argc, argv, "D:c:d:l:w?", &dispatch, &err)) != EOF) {
 	switch (opt) {

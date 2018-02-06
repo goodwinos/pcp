@@ -3,7 +3,7 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include "libpcp.h"
 
 /*
  * internal structs with field order reversed for the not network

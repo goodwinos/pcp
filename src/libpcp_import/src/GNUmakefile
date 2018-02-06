@@ -42,7 +42,6 @@ endif
 
 LCFLAGS = -DPMI_INTERNAL
 LLDLIBS = -lpcp
-LSRCFILES = $(VERSION_SCRIPT)
 LDIRT = $(SYMTARGET) domain.h $(LIBCONFIG)
 
 DOMAIN = PMI_DOMAIN
@@ -87,3 +86,5 @@ endif
 
 domain.h: $(TOPDIR)/src/pmns/stdpmid
 	$(DOMAIN_MAKERULE)
+
+$(OBJECTS):	$(TOPDIR)/src/include/pcp/libpcp.h

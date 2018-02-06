@@ -30,7 +30,7 @@ CheckError(AgentInfo *ap, int sts)
 
     if (sts == PM_ERR_PMDANOTREADY) {
 	if (pmDebugOptions.appl0)
-	    __pmNotifyErr(LOG_INFO, "%s agent (%s) sent NOT READY\n",
+	    pmNotifyErr(LOG_INFO, "%s agent (%s) sent NOT READY\n",
 			 ap->pmDomainLabel,
 			 ap->status.notReady ? "not ready" : "ready");
 	if (ap->status.notReady == 0) {
@@ -42,7 +42,7 @@ CheckError(AgentInfo *ap, int sts)
     }
     else if (sts == PM_ERR_PMDAREADY) {
 	if (pmDebugOptions.appl0)
-	    __pmNotifyErr(LOG_INFO, "%s agent (%s) sent unexpected READY\n",
+	    pmNotifyErr(LOG_INFO, "%s agent (%s) sent unexpected READY\n",
 			 ap->pmDomainLabel,
 			 ap->status.notReady ? "not ready" : "ready");
 	retSts = PM_ERR_IPC;
@@ -130,7 +130,7 @@ int
 DoProfile(ClientInfo *cp, __pmPDU *pb)
 {
     __pmHashCtl	*hcp;
-    __pmProfile	*newProf;
+    pmProfile	*newProf;
     int		ctxnum, sts, i;
 
     sts = __pmDecodeProfile(pb, &ctxnum, &newProf);
@@ -139,7 +139,7 @@ DoProfile(ClientInfo *cp, __pmPDU *pb)
 	hcp = &cp->profile;
 	if ((hp = __pmHashSearch(ctxnum, hcp)) != NULL) {
 	    /* seen this context slot before for this client */
-	    __pmProfile	*profile = (__pmProfile *)hp->data;
+	    pmProfile	*profile = (pmProfile *)hp->data;
 	    if (profile != NULL)
 		__pmFreeProfile(profile);
 	    hp->data = (void *)newProf;
@@ -243,11 +243,11 @@ int
 DoInstance(ClientInfo *cp, __pmPDU *pb)
 {
     int			sts, s;
-    __pmTimeval		when;
+    pmTimeval		when;
     pmInDom		indom;
     int			inst;
     char		*name;
-    __pmInResult	*inresult = NULL;
+    pmInResult	*inresult = NULL;
     AgentInfo		*ap;
     int			fdfail = -1;
 
@@ -331,6 +331,40 @@ DoInstance(ClientInfo *cp, __pmPDU *pb)
 }
 
 static int
+GetChangedContextLabels(pmLabelSet **sets, int *changed)
+{
+    int		sts;
+
+    *changed = 0;
+    if ((sts = __pmGetContextLabels(sets)) == 1) {
+	if (!pmcd_labels) {
+	    *changed = 1;
+	} else {
+	    if (strcmp(pmcd_labels, sets[0]->json) != 0)
+		*changed = 1;
+	    free(pmcd_labels);
+	}
+	pmcd_labels = strndup(sets[0]->json, sets[0]->jsonlen);
+    }
+    else if (pmcd_labels) {
+	free(pmcd_labels);
+	pmcd_labels = NULL;
+	*changed = 1;
+    }
+    return sts;
+}
+
+void
+CheckLabelChange(void)
+{
+    pmLabelSet	*sets = NULL;
+    int		nsets;
+
+    if ((nsets = GetChangedContextLabels(&sets, &labelChanged)) > 0)
+	pmFreeLabelSets(sets, nsets);
+}
+
+static int
 GetContextLabels(ClientInfo *cp, pmLabelSet **sets)
 {
     __pmHashNode	*node;
@@ -342,7 +376,7 @@ GetContextLabels(ClientInfo *cp, pmLabelSet **sets)
     char		*hostname;
     int			sts;
 
-    if ((sts = __pmGetContextLabels(sets)) >= 0) {
+    if ((sts = GetChangedContextLabels(sets, &labelChanged)) >= 0) {
 	if ((hostname = pmcd_hostname) == NULL) {
 	    (void)gethostname(host, MAXHOSTNAMELEN);
 	    hostname = pmcd_hostname = host;
@@ -465,6 +499,8 @@ DoLabel(ClientInfo *cp, __pmPDU *pb)
 response:
     if (sts >= 0) {
 	pmcd_trace(TR_XMIT_PDU, cp->fd, PDU_LABEL, (int)ident);
+	if (nsets > 1 && !(type & PM_LABEL_INSTANCES))
+	    nsets = 1;
 	sts = __pmSendLabel(cp->fd, FROM_ANON, ident, type, sets, nsets);
 	if (sts < 0) {
 	    pmcd_trace(TR_XMIT_ERR, cp->fd, PDU_LABEL, sts);
@@ -613,7 +649,7 @@ DoPMNSNames(ClientInfo *cp, __pmPDU *pb)
 	if (idlist[i] == PM_ID_NULL || !IS_DYNAMIC_ROOT(idlist[i]))
 	    continue;
 	lsts = 0;
-	domain = pmid_cluster(idlist[i]);
+	domain = pmID_cluster(idlist[i]);
 	/*
 	 * don't return <domain>.*.* ... all return paths from here
 	 * must either set a valid PMID in idlist[i] or indicate
@@ -739,7 +775,7 @@ DoPMNSChild(ClientInfo *cp, __pmPDU *pb)
     namelist[0] = name;
     sts = pmLookupName(1, namelist, idlist);
     if (sts == 1 && IS_DYNAMIC_ROOT(idlist[0])) {
-	int		domain = pmid_cluster(idlist[0]);
+	int		domain = pmID_cluster(idlist[0]);
 	AgentInfo	*ap = NULL;
 	if ((ap = FindDomainAgent(domain)) == NULL) {
 	    sts = PM_ERR_NOAGENT;
@@ -916,7 +952,7 @@ traverse_dynamic(ClientInfo *cp, char *start, int *num_names, char ***names)
 	if (sts < 1)
 	    continue;
 	if (IS_DYNAMIC_ROOT(idlist[0])) {
-	    int		domain = pmid_cluster(idlist[0]);
+	    int		domain = pmID_cluster(idlist[0]);
 	    AgentInfo	*ap;
 	    if ((ap = FindDomainAgent(domain)) == NULL)
 		continue;

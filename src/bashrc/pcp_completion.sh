@@ -12,8 +12,36 @@ _pcp_complete()
 
     # Register arguments
     case $cmd in
+    pcp2elasticsearch)
+        all_args="ahLKcCeVHGASTOstRrIijJ89nNvP0qQbByYgXx"
+        arg_regex="-[ahKceASTOstZiJ89NP0qQbByYgXx]"
+    ;;
+    pcp2graphite)
+        all_args="ahLKcCeVHGASTOstRrIijJ89nNvP0qQbByYgpXEx"
+        arg_regex="-[ahKceASTOstZiJ89NP0qQbByYgpXEx]"
+    ;;
+    pcp2influxdb)
+        all_args="ahLKcCeVHGASTOstRrIijJ89nNvP0qQbByYgxUEX"
+        arg_regex="-[ahKceASTOstZiJ89NP0qQbByYgxUEX]"
+    ;;
+    pcp2json)
+        all_args="ahLKcCeVHGASTOstRrZzrIijJ89nNvP0qQbByYFfxXE"
+        arg_regex="-[ahKceASTOstZiJ89NP0qQbByYgFf]"
+    ;;
+    pcp2xlsx)
+        all_args="ahLKcCeVHGASTOstRrZzrIivP0qQbByYFf"
+        arg_regex="-[ahKceASTOstZiP0qQbByYgFf]"
+    ;;
+    pcp2xml)
+        all_args="ahLKcCeVHGASTOstRrZzrIijJ89nNvP0qQbByYFfXx"
+        arg_regex="-[ahKceASTOstZiJ89NP0qQbByYgFf]"
+    ;;
+    pcp2zabbix)
+        all_args="ahLKcCeVHGASTOstRrIijJ89nNvP0qQbByYgpXEx"
+        arg_regex="-[ahKceASTOstZiJ89NP0qQbByYgpXEx]"
+    ;;
     pmdumplog)
-        all_args="adiLlmnrSsTtVvxZz"
+        all_args="adehiLlmnrSsTtVvxZz"
         arg_regex="-[nSTvZ]"
     ;;
     pmdumptext)
@@ -28,6 +56,14 @@ _pcp_complete()
         all_args="abcdFfhKLlMmNnOTtVvxZz"
         arg_regex="-[abchKNnOZ]"
     ;;
+    pmlogcheck)
+        all_args="lnSTvwZz"
+        arg_regex="-[nSTZ]"
+    ;;
+    pmlogextract)
+        all_args="cdfmSsTvwZz"
+        arg_regex="-[cSsTvZ]"
+    ;;
     pmlogsummary)
         all_args="aBbFfHIilMmNnpSTVvxZz"
         arg_regex="-[BnpSTZ]"
@@ -37,11 +73,11 @@ _pcp_complete()
         arg_regex="-[ahKnOZ]"
     ;;
     pmrep)
-        all_args="AabCcdEeFfGHhIiKkLlOoPpqrSsTtUuVvwXxyZz"
-        arg_regex="-[AabcEeFfhiKlOoPqSsTtwXyZ]"
+        all_args="012389AaBbCcdEeFfGgHhIiJjKkLlNnOoPpQqRrSsTtUuVvWwXxYyZz"
+        arg_regex="-[089ABabcEeFfhiJKlNOoPQqSsTtWwXYyZ]"
     ;;
     pmstore)
-        all_args="fhiKLnV"
+        all_args="FfhiKLnV"
         arg_regex="-[hiKn]"
     ;;
     pmval)
@@ -51,12 +87,14 @@ _pcp_complete()
     esac
 
     # Complete
+    pytool=0
+    [[ "pcp2elasticsearch pcp2graphite pcp2influxdb pcp2json pcp2xlsx pcp2xml pcp2zabbix pmrep" =~ $cmd ]] && pytool=1
     if [[ "$cur" == -* ]]; then
         # Arguments
         local comp=( $(echo $all_args | sed -e 's,.\{1\},-& ,g') )
         COMPREPLY=( $(compgen -W "${comp[*]}" -- "$cur") )
-    elif [[ $cmd == pmrep && ("$cur" == :* || ${COMP_WORDS[$((COMP_CWORD-1))]} == :) ]]; then
-        # pmrep(1) metricset
+    elif [[ $pytool -eq 1 && ("$cur" == :* || ${COMP_WORDS[$((COMP_CWORD-1))]} == :) ]]; then
+        # pmrep(1) style metricset
         local conf=""
         for i in $(seq 1 $COMP_CWORD); do
             if [[ "${COMP_WORDS[$i]}" == -c || "${COMP_WORDS[$i]}" == --config ]]; then
@@ -65,8 +103,8 @@ _pcp_complete()
             fi
         done
         if [[ -z $conf ]]; then
-            local sysconf=$(grep ^PCP_SYSCONF_DIR= /etc/pcp.conf 2> /dev/null | cut -d= -f2)/pmrep/pmrep.conf
-            for f in ./pmrep.conf $HOME/.pmrep.conf $HOME/.pcp/pmrep.conf $sysconf; do
+            local sysconf=$(grep ^PCP_SYSCONF_DIR= /etc/pcp.conf 2> /dev/null | cut -d= -f2)/$cmd/$cmd.conf
+            for f in ./$cmd.conf $HOME/.$cmd.conf $HOME/.pcp/$cmd.conf $sysconf; do
                 [[ -f $f ]] && conf=$f && break
             done
         fi
@@ -88,4 +126,4 @@ _pcp_complete()
         fi
     fi
 }
-complete -F _pcp_complete -o default pmdumplog pmdumptext pmevent pminfo pmlogsummary pmprobe pmrep pmstore pmval
+complete -F _pcp_complete -o default pcp2elasticsearch pcp2graphite pcp2influxdb pcp2json pcp2xlsx pcp2xml pcp2zabbix pmdumplog pmdumptext pmevent pminfo pmlogcheck pmlogextract pmlogsummary pmprobe pmrep pmstore pmval

@@ -15,7 +15,7 @@
 
 #include <math.h>
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "logcheck.h"
 
 typedef struct {
@@ -44,7 +44,7 @@ tsub(struct timeval *a, struct timeval *b)
 {
     if ((a == NULL) || (b == NULL))
 	return -1;
-    __pmtimevalDec(a, b);
+    pmtimevalDec(a, b);
     return 0;
 }
 
@@ -91,11 +91,11 @@ print_stamp(FILE *f, struct timeval *stamp)
 	ddmm[11] = '\0';
 	yr = &ddmm[20];
 	fprintf(f, "%s", ddmm);
-	__pmPrintStamp(f, stamp);
+	pmPrintStamp(f, stamp);
 	fprintf(f, " %4.4s", yr);
     }
     else
-	__pmPrintStamp(f, stamp);
+	pmPrintStamp(f, stamp);
 }
 
 static double
@@ -161,17 +161,17 @@ newHashInst(pmValue *vp,
 	fprintf(stderr, "] ");
 	print_metric(stderr, checkdata->desc.pmid);
 	fprintf(stderr, ": pmExtractValue failed: %s\n", pmErrStr(sts));
-	fprintf(stderr, "%s: possibly corrupt archive?\n", pmProgname);
+	fprintf(stderr, "%s: possibly corrupt archive?\n", pmGetProgname());
 	exit(EXIT_FAILURE);
     }
     size = (pos+1)*sizeof(instData*);
     checkdata->instlist = (instData**) realloc(checkdata->instlist, size);
     if (!checkdata->instlist)
-	__pmNoMem("newHashInst.instlist", size, PM_FATAL_ERR);
+	pmNoMem("newHashInst.instlist", size, PM_FATAL_ERR);
     size = sizeof(instData);
     checkdata->instlist[pos] = (instData*) malloc(size);
     if (!checkdata->instlist[pos])
-	__pmNoMem("newHashInst.instlist[pos]", size, PM_FATAL_ERR);
+	pmNoMem("newHashInst.instlist[pos]", size, PM_FATAL_ERR);
     checkdata->instlist[pos]->inst = vp->inst;
     checkdata->instlist[pos]->lastval = av.d;
     checkdata->instlist[pos]->lasttime = *timestamp;
@@ -375,7 +375,7 @@ docheck(pmResult *result)
 		    timediff.tv_sec = 0;
 		    timediff.tv_usec = 0;
 		}
-		diff = __pmtimevalToReal(&timediff);
+		diff = pmtimevalToReal(&timediff);
 		if ((sts = pmExtractValue(vsp->valfmt, vp, checkdata->desc.type, &av, PM_TYPE_DOUBLE)) < 0) {
 		    fprintf(stderr, "%s.%d:[", l_archname, l_ctxp->c_archctl->ac_vol);
 		    print_stamp(stderr, &result->timestamp);
@@ -484,7 +484,7 @@ pass3(__pmContext *ctxp, char *archname, pmOptions *opts)
 		else
 		    cnt_err++;
 	    }
-	    fprintf(stderr, "] delta(stamp)=%.3fsec", __pmtimevalToReal(&delta_stamp));
+	    fprintf(stderr, "] delta(stamp)=%.3fsec", pmtimevalToReal(&delta_stamp));
 	    fprintf(stderr, " numpmid=%d sum(numval)=%d", result->numpmid, sum_val);
 	    if (cnt_noval > 0)
 		fprintf(stderr, " count(numval=0)=%d", cnt_noval);

@@ -14,7 +14,7 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "internal.h"
 
 /*
@@ -43,6 +43,7 @@ __pmSendTextReq(int fd, int from, int ident, int type)
     else /* (type & PM_TEXT_INDOM) */
 	pp->ident = __htonpmInDom((pmInDom)ident);
 
+    type &= ~PM_TEXT_DIRECT;
     pp->type = htonl(type);
 
     sts = __pmXmitPDU(fd, (__pmPDU *)pp);

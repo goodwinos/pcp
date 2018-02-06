@@ -107,9 +107,8 @@
 */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include <pcp/libpcp.h>
 #include <sys/mman.h>
-#include <sys/stat.h>
 #include <sys/resource.h>
 #include <regex.h>
 
@@ -147,6 +146,7 @@ char		threadview = 0;	 /* boolean: show individual threads     */
 char      	calcpss    = 0;  /* boolean: read/calculate process PSS  */
 
 unsigned short	hertz;
+unsigned int	pidmax;
 unsigned int	pagesize;
 unsigned int	hinv_nrcpus;
 unsigned int	hinv_nrdisk;
@@ -296,7 +296,7 @@ main(int argc, char *argv[])
 	** check if we are supposed to behave as 'atopsar'
 	** i.e. system statistics only
 	*/
-	if (strcmp(pmProgname, "pcp-atopsar") == 0)
+	if (strcmp(pmGetProgname(), "pcp-atopsar") == 0)
 		return atopsar(argc, argv);
 
 	/* 
@@ -325,7 +325,7 @@ main(int argc, char *argv[])
 			switch (c)
 			{
 			   case '?':		/* usage wanted ?             */
-				prusage(pmProgname, &opts);
+				prusage(pmGetProgname(), &opts);
 				break;
 
 			   case 'V':		/* version wanted ?           */
@@ -364,14 +364,14 @@ main(int argc, char *argv[])
 
                            case 'P':		/* parseable output?          */
 				if ( !parsedef(opts.optarg) )
-					prusage(pmProgname, &opts);
+					prusage(pmGetProgname(), &opts);
 
 				vis.show_samp = parseout;
 				break;
 
                            case 'L':		/* line length                */
 				if ( !numeric(opts.optarg) )
-					prusage(pmProgname, &opts);
+					prusage(pmGetProgname(), &opts);
 
 				linelen = atoi(opts.optarg);
 				break;
@@ -393,7 +393,7 @@ main(int argc, char *argv[])
 			{
 				pmprintf(
 			"%s: %s option not in pmParseInterval(3) format:\n%s\n",
-					pmProgname, arg, endnum);
+					pmGetProgname(), arg, endnum);
 				free(endnum);
 				opts.errors++;
 			}
@@ -402,9 +402,9 @@ main(int argc, char *argv[])
 			{
 				arg = argv[opts.optind];
 				if (!numeric(arg))
-					prusage(pmProgname, &opts);
+					prusage(pmGetProgname(), &opts);
 				if ((opts.samples = atoi(arg)) < 1)
-					prusage(pmProgname, &opts);
+					prusage(pmGetProgname(), &opts);
 			}
 		}
 	}
@@ -415,7 +415,7 @@ main(int argc, char *argv[])
 	__pmEndOptions(&opts);
 
 	if (opts.errors)
-		prusage(pmProgname, &opts);
+		prusage(pmGetProgname(), &opts);
 
 	if (opts.samples)
 		nsamples = opts.samples;
@@ -475,7 +475,6 @@ main(int argc, char *argv[])
 void
 engine(void)
 {
-	int 			i, j;
 	struct sigaction 	sigact;
 	double 			timed, delta;
 	void			getusr1(int), getusr2(int);
@@ -493,20 +492,15 @@ engine(void)
 	*/
 	static struct tstat	*curtpres;	/* current present list      */
 	static int		 curtlen;	/* size of present list      */
-
 	struct tstat		*curpexit;	/* exited process list	     */
-	struct tstat		*devtstat;	/* deviation list	     */
-	struct tstat		**devpstat;	/* pointers to processes     */
-						/* in deviation list         */
+
+	static struct devtstat	devtstat;	/* deviation info	     */
 
 	unsigned int		ntaskpres;	/* number of tasks present   */
 	unsigned int		nprocexit;	/* number of exited procs    */
 	unsigned int		nprocexitnet;	/* number of exited procs    */
 						/* via netatopd daemon       */
-	unsigned int		ntaskdev;       /* nr of tasks deviated      */
-	unsigned int		nprocdev;       /* nr of procs deviated      */
-	int			nprocpres;	/* nr of procs present       */
-	int			totrun, totslpi, totslpu, totzombie;
+
 	unsigned int		noverflow;
 
 	/*
@@ -522,7 +516,7 @@ engine(void)
 
 	/*
 	** install the signal-handler for ALARM, USR1 and USR2 (triggers
-	** for the next sample)
+	* for the next sample)
 	*/
 	memset(&sigact, 0, sizeof sigact);
 	sigact.sa_handler = getusr1;
@@ -649,36 +643,13 @@ engine(void)
 		*/
 		pretime  = curtime;	/* timestamp for previous sample */
 		curtime  = cursstat->stamp; /* timestamp for this sample */
-		timed = __pmtimevalToReal(&curtime);
-		delta = timed - __pmtimevalToReal(&pretime);
+		timed = pmtimevalToReal(&curtime);
+		delta = timed - pmtimevalToReal(&pretime);
 
 		deviatsyst(cursstat, presstat, devsstat, delta);
 
-		devtstat = malloc((ntaskpres+nprocexit) * sizeof(struct tstat));
-
-		ptrverify(devtstat, "Malloc failed for %d modified tasks\n",
-			          			ntaskpres+nprocexit);
-
-		ntaskdev = deviattask(curtpres,  ntaskpres,
-		                      curpexit,  nprocexit, deviatonly,
-		                      devtstat,  devsstat,
-		                      &nprocdev, &nprocpres,
-		                      &totrun, &totslpi, &totslpu, &totzombie);
-
-  	      	/*
- 		** create list of pointers specifically to the process entries
-		** in the task list
-		*/
-       		devpstat = malloc(sizeof (struct tstat *) * nprocdev);
-
-		ptrverify(devpstat, "Malloc failed for %d process ptrs\n",
-			          				nprocdev);
-
-		for (i=0, j=0; i < ntaskdev; i++)
-		{
-			if ( (devtstat+i)->gen.isproc)
-				devpstat[j++] = devtstat+i;
-		}
+		deviattask(curtpres, ntaskpres, curpexit,  nprocexit,
+		           	     &devtstat, devsstat);
 
 		/*
 		** activate the installed print-function to visualize
@@ -686,13 +657,11 @@ engine(void)
 		*/
 		lastcmd = (vis.show_samp)(timed,
 				     delta > 1.0 ? delta : 1.0,
-		           	     devsstat,  devtstat, devpstat,
-		                     ntaskdev,  ntaskpres, nprocdev, nprocpres, 
-		                     totrun, totslpi, totslpu, totzombie, 
+		           	     &devtstat, devsstat,
 		                     nprocexit, noverflow, sampcnt==0);
 
 		if (rawreadflag)
-			__pmtimevalInc(&curtime, &interval);
+			pmtimevalInc(&curtime, &interval);
 
 		/*
 		** release dynamically allocated memory
@@ -702,9 +671,6 @@ engine(void)
 
 		if (nprocexitnet > 0)
 			netatop_exiterase();
-
-		free(devtstat);
-		free(devpstat);
 
 		if (lastcmd == 'r')	/* reset requested ? */
 		{
@@ -738,6 +704,7 @@ prusage(char *myname, pmOptions *opts)
 					myname);
 	printf("\n");
 	printf("\tgeneric flags:\n");
+	printf("\t  -%c  show version information\n", MVERSION);
 	printf("\t  -%c  show or log all processes (i.s.o. active processes "
 	                "only)\n", MALLPROC);
 	printf("\t  -%c  calculate proportional set size (PSS) per process\n", 
@@ -760,7 +727,7 @@ prusage(char *myname, pmOptions *opts)
 	printf("\t  -w  write raw data to PCP archive folio\n");
 	printf("\t  -r  read  raw data from PCP archive folio\n");
 	printf("\t  -S  finish %s automatically before midnight "
-	                "(i.s.o. #samples)\n", pmProgname);
+	                "(i.s.o. #samples)\n", pmGetProgname());
 	printf("\t  -b  begin showing data from specified time\n");
 	printf("\t  -e  finish showing data after specified time\n");
 	printf("\n");
@@ -769,10 +736,10 @@ prusage(char *myname, pmOptions *opts)
 	printf("\n");
 	printf("If the interval-value is zero, a new sample can be\n");
 	printf("forced manually by sending signal USR1"
-			" (kill -USR1 %s-pid)\n", pmProgname);
+			" (kill -USR1 %s-pid)\n", pmGetProgname());
 	printf("or with the keystroke '%c' in interactive mode.\n", MSAMPNEXT);
 	printf("\n");
-	printf("Please refer to the man-page of '%s' for more details.\n", pmProgname);
+	printf("Please refer to the man-page of '%s' for more details.\n", pmGetProgname());
 
 	cleanstop(1);
 }

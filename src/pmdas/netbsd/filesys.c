@@ -19,7 +19,6 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
 #include "pmda.h"
 #include "netbsd.h"
 #include <sys/statvfs.h>
@@ -62,7 +61,7 @@ refresh_filesys_metrics(void)
 	    free(stats);
 	stats = (struct statvfs *)malloc(nfilesys*sizeof(struct statvfs));
 	if (stats == NULL) {
-	    __pmNoMem("refresh_filesys_metrics: stats", nfilesys*sizeof(struct statvfs), PM_FATAL_ERR);
+	    pmNoMem("refresh_filesys_metrics: stats", nfilesys*sizeof(struct statvfs), PM_FATAL_ERR);
 	    /* NOTREACHED */
 	}
 	/* fetch all the available data */
@@ -123,7 +122,7 @@ do_filesys_metrics(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 	if (sts == PMDA_CACHE_ACTIVE) {
 	    sts = 1;
 	    /* cluster and domain already checked, just need item ... */
-	    switch (pmid_item(mdesc->m_desc.pmid)) {
+	    switch (pmID_item(mdesc->m_desc.pmid)) {
 
 		case 1:		/* filesys.capcity */
 		    atom->ull = ((uint64_t)sp->f_blocks*sp->f_frsize)/1024;
@@ -183,7 +182,7 @@ do_filesys_metrics(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 	 *
 	 * cluster and domain already checked, just need item ...
 	 */
-	switch (pmid_item(mdesc->m_desc.pmid)) {
+	switch (pmID_item(mdesc->m_desc.pmid)) {
 	    case 0:		/* hinv.nfilesys */
 		atom->ul = nfilesys - skipped_filesys;
 		sts = 1;

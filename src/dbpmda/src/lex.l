@@ -15,7 +15,6 @@
 
 %{
 #include "pmapi.h"
-#include "impl.h"
 
 static int lineno;
 static int using_readline;
@@ -68,7 +67,7 @@ attribute	{ return ATTR; }
 children	{ return PMNS_CHILDREN; }
 close		{ return CLOSE; }
 cluster		{ return CLUSTER; }
-context		{ return CONTEXT; }
+context		{ return CTXT; }
 debug		{ return DBG; }
 delete		{ return DEL; }
 desc		{ return DESC; }
@@ -335,7 +334,7 @@ dbpmdaFlexInput(char * inbuf, int ms)
     if (linepos == linelen) {
 	linelen = (linelen) ? linelen * 2 : 128;
 	if ((line = (char *)realloc(line, linelen * sizeof(char))) == NULL) {
-	    fprintf(stderr, "%s: Lexer internal error\n", pmProgname);
+	    fprintf(stderr, "%s: Lexer internal error\n", pmGetProgname());
 	    exit(1);
 	}
     }
@@ -501,7 +500,7 @@ locateError(void)
 
     if (mark < 0) {
 	fprintf(stderr, "%s: Unrecoverable internal error in locateError()\n",
-		pmProgname);
+		pmGetProgname());
 	exit(1);
     }
 

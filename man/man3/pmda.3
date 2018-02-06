@@ -33,8 +33,6 @@
 .ft 3
 #include <pcp/pmapi.h>
 .br
-#include <pcp/impl.h>
-.br
 #include <pcp/pmda.h>
 .sp
 cc ... \-lpcp_pmda \-lpcp
@@ -420,11 +418,9 @@ The macro
 is used to specify each metric's
 .I cluster
 and
-.I unit 
-number in the 
-.B __pmID_int
-structure defined in
-.IR /usr/include/pcp/impl.h .
+.I item 
+fields of the associated
+.BR pmID .
 As with instance domains, the
 .I domain
 field is set by

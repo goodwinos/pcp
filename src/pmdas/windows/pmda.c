@@ -1335,7 +1335,7 @@ pdh_metric_t metricdesc[] = {
 int metricdesc_sz = sizeof(metricdesc) / sizeof(metricdesc[0]);
 
 static int
-windows_instance(pmInDom indom, int inst, char *name, __pmInResult **result, pmdaExt *pmda)
+windows_instance(pmInDom indom, int inst, char *name, pmInResult **result, pmdaExt *pmda)
 {
     windows_instance_refresh(indom);
     return pmdaInstance(indom, inst, name, result, pmda);
@@ -1479,29 +1479,31 @@ memstat_fetch_callback(unsigned int item, unsigned int inst, pmAtomValue *atom)
 static int
 windows_fetch_callback(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 {
-    __pmID_int		*pmidp = (__pmID_int *)&mdesc->m_desc.pmid;
+    unsigned int	domain = pmID_domain(mdesc->m_desc.pmid);
+    unsigned int	cluster = pmID_cluster(mdesc->m_desc.pmid);
+    unsigned int	item = pmID_item(mdesc->m_desc.pmid);
     pdh_value_t		*vp;
 
-    if (pmidp->cluster == 1)
-	return memstat_fetch_callback(pmidp->item, inst, atom);
+    if (cluster == 1)
+	return memstat_fetch_callback(item, inst, atom);
 
-    if (pmidp->cluster != 0 || pmidp->item > metricdesc_sz ||
-	(pmidp->item == 120 || pmidp->item == 121)) /* dummies */
+    if (cluster != 0 || item > metricdesc_sz ||
+	(item == 120 || item == 121)) /* dummies */
 	return PM_ERR_PMID;
 
     /*
      * Check if its one of the derived metrics, or one that doesn't use PDH
      */
-    switch (pmidp->item) {
+    switch (item) {
     case 106:	/* hinv.physmem */
 	atom->ul = (windows_memstat.ullTotalPhys / (1024 * 1024));
 	return 1;
     case 107:	/* hinv.ncpu */
-	atom->ul = pmdaCacheOp(INDOM(pmidp->domain, CPU_INDOM),
+	atom->ul = pmdaCacheOp(INDOM(domain, CPU_INDOM),
 				PMDA_CACHE_SIZE_ACTIVE);
 	return 1;
     case 108:	/* hinv.ndisk */
-	atom->ul = pmdaCacheOp(INDOM(pmidp->domain, DISK_INDOM),
+	atom->ul = pmdaCacheOp(INDOM(domain, DISK_INDOM),
 				PMDA_CACHE_SIZE_ACTIVE);
 	return 1;
     case 109:	/* kernel.uname.distro */
@@ -1529,22 +1531,22 @@ windows_fetch_callback(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 	atom->cp = pmGetConfig("PCP_VERSION");
 	return 1;
     case 67: case 117: case 118: case 119:
-	return filesys_fetch_callback(pmidp->item, inst, atom);
+	return filesys_fetch_callback(item, inst, atom);
     case 232:	/* hinv.nfilesys */
-	atom->ul = pmdaCacheOp(INDOM(pmidp->domain, FILESYS_INDOM),
+	atom->ul = pmdaCacheOp(INDOM(domain, FILESYS_INDOM),
 				PMDA_CACHE_SIZE_ACTIVE);
 	return 1;
     case 233:	/* hinv.pagesize */
 	atom->ul = windows_pagesize;
 	return 1;
     case 236: case 237:
-	return network_fetch_callback(pmidp->item, inst, atom);
+	return network_fetch_callback(item, inst, atom);
     }
 
     /*
      * All other (most) metrics will go through this path
      */
-    vp = find_instance_value(pmidp->item, inst);
+    vp = find_instance_value(item, inst);
     if (!vp)
 	return 0;
     *atom = vp->atom;
@@ -1560,7 +1562,7 @@ windows_init(pmdaInterface *dp)
     static pmdaMetric	*metrictab;
     char		helppath[MAXPATHLEN];
     int			metrictab_sz = metricdesc_sz;
-    int			i, sep = __pmPathSeparator();
+    int			i, sep = pmPathSeparator();
 
     pmsprintf(helppath, sizeof(helppath), "%s%c" "windows" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
@@ -1572,7 +1574,7 @@ windows_init(pmdaInterface *dp)
     metrictab = (pmdaMetric *)malloc(metrictab_sz * sizeof(pmdaMetric));
     if (metrictab == NULL) {
 	fprintf(stderr, "Error: malloc metrictab [%d] failed: %s\n",
-		metrictab_sz * sizeof(pmdaMetric), osstrerror());
+		(int)(metrictab_sz * sizeof(pmdaMetric)), osstrerror());
 	return;
     }
 
@@ -1580,7 +1582,7 @@ windows_init(pmdaInterface *dp)
     for (i = 0; i < metrictab_sz; i++) {
 	pdh_metric_t *mp = &metricdesc[i];
 	pmID pmid = mp->desc.pmid;
-	mp->desc.pmid = pmid_build(dp->domain, pmid_cluster(pmid), pmid_item(pmid));
+	mp->desc.pmid = pmID_build(dp->domain, pmID_cluster(pmid), pmID_item(pmid));
 	if (mp->desc.indom != PM_INDOM_NULL)
 	    mp->desc.indom = INDOM(dp->domain, mp->desc.indom);
     }

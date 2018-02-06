@@ -33,7 +33,7 @@ void RecordDialog::languageChange()
 
 void RecordDialog::init(Tab *tab)
 {
-    QChar	sep(__pmPathSeparator());
+    QChar	sep(pmPathSeparator());
     QString	pmlogger = QDir::toNativeSeparators(QDir::homePath());
     QString	view, folio, archive;
 
@@ -76,7 +76,7 @@ void RecordDialog::allGadgetsRadioButton_clicked()
 
 void RecordDialog::deltaUnitsComboBox_activated(int value)
 {
-    double delta = __pmtimevalToReal(pmtime->liveInterval());
+    double delta = pmtimevalToReal(pmtime->liveInterval());
     my.units = (QmcTime::DeltaUnits)value;
     deltaLineEdit->setText(QmcTime::deltaString(delta, my.units));
 }
@@ -85,7 +85,7 @@ void RecordDialog::viewPushButton_clicked()
 {
     RecordFileDialog view(this);
 
-    QChar sep(__pmPathSeparator());
+    QChar sep(pmPathSeparator());
     QString pmlogger = QDir::toNativeSeparators(QDir::homePath());
     pmlogger.append(sep);
     pmlogger.append(".pcp");
@@ -102,7 +102,7 @@ void RecordDialog::folioPushButton_clicked()
 {
     RecordFileDialog folio(this);
 
-    QChar sep(__pmPathSeparator());
+    QChar sep(pmPathSeparator());
     QString pmlogger = QDir::toNativeSeparators(QDir::homePath());
     pmlogger.append(sep);
     pmlogger.append(".pcp");
@@ -119,7 +119,7 @@ void RecordDialog::archivePushButton_clicked()
 {
     RecordFileDialog archive(this);
 
-    QChar sep(__pmPathSeparator());
+    QChar sep(pmPathSeparator());
     QString pmlogger = QDir::toNativeSeparators(QDir::homePath());
     pmlogger.append(sep);
     pmlogger.append(".pcp");
@@ -141,7 +141,7 @@ bool RecordDialog::saveFolio(QString folioname, QString viewname)
 	msg.append(folioname);
 	msg.append("\n");
 	msg.append(folio.errorString());
-	QMessageBox::warning(this, pmProgname, msg);
+	QMessageBox::warning(this, pmGetProgname(), msg);
 	return false;
     }
 
@@ -177,7 +177,7 @@ bool RecordDialog::saveConfig(QString configfile, QString configdata)
 	msg.append(configfile);
 	msg.append("\n");
 	msg.append(config.errorString());
-	QMessageBox::warning(this, pmProgname, msg);
+	QMessageBox::warning(this, pmGetProgname(), msg);
 	return false;
     }
 
@@ -217,7 +217,7 @@ void PmLogger::finished(int, QProcess::ExitStatus)
 	msg.append(".\n\n");
 	msg.append("Additional diagnostics may be available in the log:\n");
 	msg.append(my.logfile);
-	QMessageBox::warning(pmchart, pmProgname, msg);
+	QMessageBox::warning(pmchart, pmGetProgname(), msg);
     }
 }
 
@@ -230,7 +230,7 @@ void RecordDialog::buttonOk_clicked()
 	    QString msg = tr("Record Sampling Interval is invalid.\n");
 	    msg.append(deltaLineEdit->text());
 	    msg.append(" is out of range (0.001 to 0x7fffffff seconds)\n");
-	    QMessageBox::warning(this, pmProgname, msg);
+	    QMessageBox::warning(this, pmGetProgname(), msg);
 	    return;
 	}
     }
@@ -247,7 +247,7 @@ void RecordDialog::buttonOk_clicked()
 	QString msg = tr("Failed to create path for view:\n");
 	msg.append(view);
 	msg.append("\n");
-	QMessageBox::warning(this, pmProgname, msg);
+	QMessageBox::warning(this, pmGetProgname(), msg);
 	return;
     }
 
@@ -261,7 +261,7 @@ void RecordDialog::buttonOk_clicked()
 	QString msg = tr("Failed to create path for folio:\n");
 	msg.append(folio);
 	msg.append("\n");
-	QMessageBox::warning(this, pmProgname, msg);
+	QMessageBox::warning(this, pmGetProgname(), msg);
 	return;
     }
 
@@ -306,7 +306,7 @@ void RecordDialog::buttonOk_clicked()
 void RecordDialog::startLoggers()
 {
     QString pmlogger = pmGetConfig("PCP_BINADM_DIR");
-    QChar sep(__pmPathSeparator());
+    QChar sep(pmPathSeparator());
     pmlogger.append(sep);
     pmlogger.append("pmlogger");
 

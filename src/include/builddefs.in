@@ -2,17 +2,17 @@
 # Copyright (c) 2012-2017 Red Hat.
 # Copyright (c) 2008 Aconex.  All Rights Reserved.
 # Copyright (c) 2000,2003,2004 Silicon Graphics, Inc.  All Rights Reserved.
-# 
+#
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
 # Free Software Foundation; either version 2 of the License, or (at your
 # option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful, but
 # WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
-# 
+#
 
 # Common gmake macros for building
 #
@@ -55,6 +55,7 @@ endif
 
 LIBPCP_ABIDIR ?= src
 PCPLIB_LDFLAGS = -L$(TOPDIR)/src/libpcp/$(LIBPCP_ABIDIR) \
+		 -L$(TOPDIR)/src/libpcp_web/$(LIBPCP_ABIDIR) \
 		 -L$(TOPDIR)/src/libpcp_pmda/$(LIBPCP_ABIDIR)
 # backward compatibility
 PCP_LIBS = $(PCPLIB_LDFLAGS)
@@ -130,6 +131,7 @@ CAIROCFLAGS = @cairo_CFLAGS@
 NCURSESCFLAGS = @ncurses_CFLAGS@
 LIBMICROHTTPDCFLAGS = @libmicrohttpd_CFLAGS@
 ZLIBCFLAGS = @zlib_CFLAGS@
+LZMACFLAGS = @lzma_CFLAGS@
 
 LDFLAGS += $(PLDFLAGS) $(WARN_OFF) $(PCP_LIBS) $(LLDFLAGS)
 
@@ -249,6 +251,8 @@ ENABLE_SYSTEMD = @enable_systemd@
 ENABLE_MANAGER = @enable_manager@
 ENABLE_WEBAPI = @enable_webapi@
 ENABLE_SELINUX = @enable_selinux@
+ENABLE_DECOMPRESSION = @enable_decompression@
+ENABLE_LZMA = @enable_lzma@
 
 # selinux configuration bits
 PCP_SELINUX_CLASS_STATUS = @pcp_selinux_class_status@
@@ -261,6 +265,10 @@ PCP_SELINUX_SYSTEMD_UNIT_FILE = @pcp_selinux_systemd_unit_file@
 PCP_SELINUX_SYSTEMD_EXEC = @pcp_selinux_systemd_exec@
 PCP_SELINUX_UNRESERVED_PORT = @pcp_selinux_unreserved_port@
 PCP_SELINUX_TRACEFS = @pcp_selinux_tracefs@
+PCP_SELINUX_SOCK_FILE_GETATTR = @pcp_selinux_sock_file_getattr@
+PCP_SELINUX_HOSTNAME_EXEC_MAP = @pcp_selinux_hostname_exec_map@
+PCP_SELINUX_MOCK = @pcp_selinux_mock@
+PCP_SELINUX_UNCONFINED = @pcp_selinux_unconfined@
 
 # for code supporting any modern version of perl
 HAVE_PERL = @have_perl@
@@ -298,6 +306,7 @@ LIB_FOR_SASL = @lib_for_sasl@
 LIB_FOR_SSL = @lib_for_ssl@
 LIB_FOR_AVAHI = @lib_for_avahi@
 LIB_FOR_ATOMIC = @lib_for_atomic@
+LIB_FOR_LZMA = @lib_for_lzma@
 
 HAVE_CAIRO = @HAVE_CAIRO@
 LIB_FOR_CAIRO = @cairo_LIBS@
@@ -311,6 +320,7 @@ HAVE_LIBMICROHTTPD = @HAVE_LIBMICROHTTPD@
 LIB_FOR_MICROHTTPD = @libmicrohttpd_LIBS@
 HAVE_ZLIB = @HAVE_ZLIB@
 LIB_FOR_ZLIB = @zlib_LIBS@
+HAVE_BOOST_FLYWEIGHT_HPP = @HAVE_BOOST_FLYWEIGHT_HPP@
 
 # configuration state for optional performance domains
 SYSTEMD_CFLAGS = @SYSTEMD_CFLAGS@
@@ -673,7 +683,7 @@ endif
 #
 # Python platform-specific installation quirks
 PYTHON_PREFIX=@python_prefix@
-SETUP_PY_BUILD_OPTIONS = --include-dirs=$(TOPDIR)/src/include
+SETUP_PY_BUILD_OPTIONS = --include-dirs=$(TOPDIR)/src/include:$(TOPDIR)/src/include/pcp$(EXTRA_PY_INCLUDES)
 SETUP_PY_BUILD_OPTIONS += --library-dirs=$(TOPDIR)/src/libpcp/src:$(TOPDIR)/src/libpcp_pmda/src:$(TOPDIR)/src/libpcp_gui/src:$(TOPDIR)/src/libpcp_import/src:$(TOPDIR)/src/libpcp_mmv/src
 SETUP_PY_INSTALL_OPTIONS = --skip-build
 SETUP_PY_INSTALL_OPTIONS += --root=$${DIST_ROOT-/}
@@ -777,7 +787,7 @@ PYTHON3_INSTALL = \
 	fi
 else
 # default case if all of the above tests fail
-PYTHON_INSTALL = 
+PYTHON_INSTALL =
 endif	# openbsd if
 endif	# cocoa ... freebsd if
 endif	# linux && !gentoo if
@@ -891,7 +901,7 @@ endif
 PCP_GUILIB = -lpcp_gui $(PCPLIB)
 PCP_PMDALIB = -lpcp_pmda $(PCPLIB)
 PCP_TRACELIB = -lpcp_trace $(PCPLIB)
-PCP_WEBLIB = -lpcp_web $(PCPLIB)
+PCP_WEBLIB = -lpcp_web $(PCP_PMDALIB)
 
 ifdef PCP_ALTLIBS
 ifeq ($(PCP_LIB_DIR),$(PCP_LIB32_DIR))
@@ -902,5 +912,9 @@ PCP_ALTLIBS =
 endif
 endif
 endif
+
+# libboost for pmwebapi?
+#
+HAVE_BOOST = @have_boost@
 
 endif # _BUILDDEFS_INCLUDED_

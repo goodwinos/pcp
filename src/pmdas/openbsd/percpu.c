@@ -28,7 +28,6 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
 #include "pmda.h"
 #include "openbsd.h"
 #include <sys/param.h>
@@ -54,7 +53,7 @@ refresh_percpu_metrics(void)
 	    fprintf(stderr, "Info: refresh_percpu_metrics: ncpu=%d\n", ncpu);
 	stats = (uint64_t *)malloc(buflen);
 	if (stats == NULL) {
-	    __pmNoMem("refresh_percpu_metrics: stats", buflen, PM_FATAL_ERR);
+	    pmNoMem("refresh_percpu_metrics: stats", buflen, PM_FATAL_ERR);
 	    /* NOTREACHED */
 	}
     }
@@ -85,7 +84,7 @@ do_percpu_metrics(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 	}
 	sts = 1;
 	/* cluster and domain already checked, just need item ... */
-	switch (pmid_item(mdesc->m_desc.pmid)) {
+	switch (pmID_item(mdesc->m_desc.pmid)) {
 
 	    case 3:		/* kernel.percpu.cpu.user */
 		atom->ull = 1000 * stats[inst*CPUSTATES+CP_USER] / cpuhz;

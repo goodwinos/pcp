@@ -26,9 +26,6 @@
 #include "text.h"
 #include "defaultobj.h"
 
-#include <iostream>
-using namespace std;
-
 BarObj::~BarObj()
 {
 }
@@ -92,15 +89,13 @@ BarObj::finishedAdd()
     int			numMetLabels = 0;
     int			numInstLabels = 0;
 
-#ifdef PCP_DEBUG
-    if (pmDebug & DBG_TRACE_APPL0)
+    if (pmDebugOptions.appl0)
 	cerr << "BarObj::finishedAdd:" << endl;
-#endif
 
     if (_metrics.numMetrics() == 0) {
 	BaseObj::addBase(_root);
 	pmprintf("%s: Error: Bar object has no metrics\n",
-		 pmProgname);
+		 pmGetProgname());
 	_length = 0;
 	_width = baseWidth();
 	_depth = baseDepth();
@@ -132,7 +127,7 @@ BarObj::finishedAdd()
         if (colSpec->_scale) {
 	    if (_mod == BarMod::yScale) {
 		pmprintf("%s: Warning: Color scale ignored for Y-Scale Bar object.\n",
-			 pmProgname);
+			 pmGetProgname());
 	    }
 	    else {
 		if (colSpec->_list.size() == 0)
@@ -147,7 +142,7 @@ BarObj::finishedAdd()
 	}
         else if (_mod == BarMod::color || _mod == BarMod::colYScale) {
 	    pmprintf("%s: Warning: Expected color scale for color modulated Bar object.\n",
-		     pmProgname);
+		     pmGetProgname());
 
 	    if (colSpec->_list.size() == 0)
 		colScale = new ColorScale(0.0, 0.0, 1.0);
@@ -157,7 +152,7 @@ BarObj::finishedAdd()
     }
     else {
         pmprintf("%s: Warning: No colours specified for Bar objects, defaulting to blue.\n",
-                 pmProgname);
+                 pmGetProgname());
 
 	if (_mod == BarMod::color || _mod == BarMod::colYScale)
 	    colScale = new ColorScale(0.0, 0.0, 1.0);
@@ -270,11 +265,9 @@ BarObj::finishedAdd()
 				  (BaseObj::state() ? baseHeight() : 0.0),
 				  0.0);
 
-#ifdef PCP_DEBUG
-    if (pmDebug & DBG_TRACE_APPL0)
+    if (pmDebugOptions.appl0)
 	cerr << "BarObj::finishedAdd: metric list = " << endl
 	     << _metrics << endl;
-#endif
 
     if (_metrics.numMetrics())
 	ViewObj::theNumModObjects++;
@@ -355,8 +348,7 @@ BarObj::calcLabels(const QStringList &labels, LabelSide side, int numLabels)
 
     text= new Text*[numLabels];
 
-#ifdef PCP_DEBUG
-    if (pmDebug & DBG_TRACE_APPL0) {
+    if (pmDebugOptions.appl0) {
 	cerr << "BarObj::calcLabels: " << numLabels << " labels on the ";
 	switch(side) {
 	case left:
@@ -371,10 +363,11 @@ BarObj::calcLabels(const QStringList &labels, LabelSide side, int numLabels)
 	case below:
 	    cerr << "below";
 	    break;
+	default:
+	    break;
 	}
 	cerr << " side" << endl;
     }
-#endif
 
     // Create the text objects so that we know how big they are
 
@@ -390,11 +383,9 @@ BarObj::calcLabels(const QStringList &labels, LabelSide side, int numLabels)
 	    maxDepth = text[i]->depth();
     }
 
-#ifdef PCP_DEBUG
-    if (pmDebug & DBG_TRACE_APPL0)
+    if (pmDebugOptions.appl0)
 	cerr << "BarObj::calcLabels: maxWidth = " << maxWidth
 	     << ", maxDepth = " << maxDepth << endl;
-#endif
 
     // Determine if the size of the bars will need to be increased
 
@@ -403,11 +394,9 @@ BarObj::calcLabels(const QStringList &labels, LabelSide side, int numLabels)
 	if (maxWidth > _length) {
 	    _length = maxWidth;
 
-#ifdef PCP_DEBUG
-	    if (pmDebug & DBG_TRACE_APPL0)
+	    if (pmDebugOptions.appl0)
 		cerr << "BarObj::calcLabels: length (width) increased to "
 		     << _length << endl;
-#endif
 
 	}
     }
@@ -416,12 +405,9 @@ BarObj::calcLabels(const QStringList &labels, LabelSide side, int numLabels)
 	if (maxDepth > _length) {
 	    _length = maxDepth;
 
-
-#ifdef PCP_DEBUG
-	    if (pmDebug & DBG_TRACE_APPL0)
+	    if (pmDebugOptions.appl0)
 		cerr << "BarObj::calcLabels: length (depth) increased to " 
 		     << _length << endl;
-#endif
 	}
     }
     return text;
@@ -436,8 +422,7 @@ BarObj::doLabels(Text **text, LabelSide side, int numLabels)
     int			maxWidth = 0;
     int			maxDepth = 0;
 
-#ifdef PCP_DEBUG
-    if (pmDebug & DBG_TRACE_APPL0) {
+    if (pmDebugOptions.appl0) {
 	cerr << "BarObj::doLabels: " << numLabels << " labels on the ";
 	switch(side) {
 	case left:
@@ -452,10 +437,11 @@ BarObj::doLabels(Text **text, LabelSide side, int numLabels)
 	case below:
 	    cerr << "below";
 	    break;
+	default:
+	    break;
 	}
 	cerr << " side" << endl;
     }
-#endif
 
     sep->addChild(tran);
 
@@ -487,14 +473,12 @@ BarObj::doLabels(Text **text, LabelSide side, int numLabels)
 	break;
     }
 
-#ifdef PCP_DEBUG
-    if (pmDebug & DBG_TRACE_APPL0) {
+    if (pmDebugOptions.appl0) {
 	float x, y, z;
 	tran->translation.getValue().getValue(x, y, z);
 	cerr << "BarObj::doLabels: translation set to " << x << ',' << y
 	     << ',' << z << endl;
     }
-#endif
 
     // Add each label to the scene graph
 

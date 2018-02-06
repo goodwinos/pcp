@@ -14,7 +14,7 @@
  */
 
 #include "pmcd.h"
-#include "impl.h"
+#include "libpcp.h"
 #include <sys/stat.h>
 #include <assert.h>
 
@@ -30,6 +30,7 @@ static void	ResetBadHosts(void);
 
 int		AgentDied;		/* for updating mapdom[] */
 int		AgentPendingRestart;	/* for automatic restart */
+int		labelChanged;		/* For SIGHUP labels check */
 static int	timeToDie;		/* For SIGINT handling */
 static int	restart;		/* For SIGHUP restart */
 static int	maxReqPortFd;		/* Largest request port fd */
@@ -58,7 +59,7 @@ DontStart(void)
     FILE	*tty;
     FILE	*log;
 
-    __pmNotifyErr(LOG_ERR, "pmcd not started due to errors!\n");
+    pmNotifyErr(LOG_ERR, "pmcd not started due to errors!\n");
 
     if ((tty = fopen(fatalfile, "w")) != NULL) {
 	fflush(stderr);
@@ -153,7 +154,7 @@ ParseOptions(int argc, char *argv[], int *nports)
 		sts = pmSetDebug(opts.optarg);
 		if (sts < 0) {
 		    pmprintf("%s: unrecognized debug options specification (%s)\n",
-			pmProgname, opts.optarg);
+			pmGetProgname(), opts.optarg);
 		    opts.errors++;
 		}
 		break;
@@ -181,7 +182,7 @@ ParseOptions(int argc, char *argv[], int *nports)
 	    case 'L': /* Maximum size for PDUs from clients */
 		val = (int)strtol(opts.optarg, NULL, 0);
 		if (val <= 0) {
-		    pmprintf("%s: -L requires a positive value\n", pmProgname);
+		    pmprintf("%s: -L requires a positive value\n", pmGetProgname());
 		    opts.errors++;
 		} else {
 		    __pmSetPDUCeiling(val);
@@ -203,7 +204,7 @@ ParseOptions(int argc, char *argv[], int *nports)
 	    case 'p':
 		if (__pmServerAddPorts(opts.optarg) < 0) {
 		    pmprintf("%s: -p requires a positive numeric argument (%s)\n",
-			pmProgname, opts.optarg);
+			pmGetProgname(), opts.optarg);
 		    opts.errors++;
 		} else {
 		    *nports += 1;
@@ -218,7 +219,7 @@ ParseOptions(int argc, char *argv[], int *nports)
 		val = (int)strtol(opts.optarg, &endptr, 10);
 		if (*endptr != '\0' || val <= 0.0) {
 		    pmprintf("%s: -q requires a positive numeric argument\n",
-			pmProgname);
+			pmGetProgname());
 		    opts.errors++;
 		} else {
 		    _creds_timeout = val;
@@ -241,7 +242,7 @@ ParseOptions(int argc, char *argv[], int *nports)
 		val = (int)strtol(opts.optarg, &endptr, 10);
 		if (*endptr != '\0' || val < 0.0) {
 		    pmprintf("%s: -t requires a positive numeric argument\n",
-			pmProgname);
+			pmGetProgname());
 		    opts.errors++;
 		} else {
 		    pmcd_timeout = val;
@@ -252,7 +253,7 @@ ParseOptions(int argc, char *argv[], int *nports)
 		val = (int)strtol(opts.optarg, &endptr, 10);
 		if (*endptr != '\0' || val < 0) {
 		    pmprintf("%s: -T requires a positive numeric argument\n",
-			pmProgname);
+			pmGetProgname());
 		    opts.errors++;
 		} else {
 		    pmcd_trace_mask = val;
@@ -408,7 +409,7 @@ HandleClientInput(__pmFdSet *fdsPtr)
 		pmcd_trace(TR_XMIT_PDU, cp->fd, PDU_ERROR, sts);
 		sts = __pmSendError(cp->fd, FROM_ANON, sts);
 		if (sts < 0)
-		    __pmNotifyErr(LOG_ERR, "HandleClientInput: "
+		    pmNotifyErr(LOG_ERR, "HandleClientInput: "
 			"error sending Error PDU to client[%d] %s\n", i, pmErrStr(sts));
 	    }
 	}
@@ -421,7 +422,7 @@ HandleClientInput(__pmFdSet *fdsPtr)
 	 */
 	if (client[i].status.attributes) {
 	    if (pmDebugOptions.appl1)
-		__pmNotifyErr(LOG_INFO, "Client idx=%d,seq=%d attrs reset\n",
+		pmNotifyErr(LOG_INFO, "Client idx=%d,seq=%d attrs reset\n",
 				i, client[i].seq);
 	    AgentsAttributes(i);
 	}
@@ -511,7 +512,7 @@ Shutdown(void)
     }
     __pmServerCloseRequestPorts();
     __pmSecureServerShutdown();
-    __pmNotifyErr(LOG_INFO, "pmcd Shutdown\n");
+    pmNotifyErr(LOG_INFO, "pmcd Shutdown\n");
     fflush(stderr);
 }
 
@@ -523,20 +524,20 @@ SignalShutdown(void)
     char	buf[256];
 #endif
     if (killer_pid != 0) {
-	__pmNotifyErr(LOG_INFO, "pmcd caught %s from pid=%" FMT_PID " uid=%d\n",
+	pmNotifyErr(LOG_INFO, "pmcd caught %s from pid=%" FMT_PID " uid=%d\n",
 	    killer_sig == SIGINT ? "SIGINT" : "SIGTERM", killer_pid, killer_uid);
 #if DESPERATE
-	__pmNotifyErr(LOG_INFO, "Try to find process in ps output ...\n");
+	pmNotifyErr(LOG_INFO, "Try to find process in ps output ...\n");
 	pmsprintf(buf, sizeof(buf), "sh -c \". \\$PCP_DIR/etc/pcp.env; ( \\$PCP_PS_PROG \\$PCP_PS_ALL_FLAGS | \\$PCP_AWK_PROG 'NR==1 {print} \\$2==%" FMT_PID " {print}' )\"", killer_pid);
 	system(buf);
 #endif
     }
     else {
-	__pmNotifyErr(LOG_INFO, "pmcd caught %s from unknown process\n",
+	pmNotifyErr(LOG_INFO, "pmcd caught %s from unknown process\n",
 			killer_sig == SIGINT ? "SIGINT" : "SIGTERM");
     }
 #else
-    __pmNotifyErr(LOG_INFO, "pmcd caught %s\n",
+    pmNotifyErr(LOG_INFO, "pmcd caught %s\n",
 		    killer_sig == SIGINT ? "SIGINT" : "SIGTERM");
 #endif
     Shutdown();
@@ -549,11 +550,19 @@ SignalRestart(void)
     time_t	now;
 
     time(&now);
-    __pmNotifyErr(LOG_INFO, "\n\npmcd RESTARTED at %s", ctime(&now));
+    pmNotifyErr(LOG_INFO, "\n\npmcd RESTARTED at %s", ctime(&now));
     fprintf(stderr, "\nCurrent PMCD clients ...\n");
     ShowClients(stderr);
     ResetBadHosts();
+    CheckLabelChange();
     ParseRestartAgents(configFileName);
+}
+
+static void
+SignalReloadLabels(void)
+{
+    /* Inform clients there's been a change in context label state */
+    MarkStateChanges(PMCD_LABEL_CHANGE);
 }
 
 static void
@@ -570,17 +579,17 @@ SignalReloadPMNS(void)
      * This caveat was allowed to make the code a lot simpler. 
      */
     if (__pmHasPMNSFileChanged(pmnsfile)) {
-	__pmNotifyErr(LOG_INFO, "Reloading PMNS \"%s\"",
+	pmNotifyErr(LOG_INFO, "Reloading PMNS \"%s\"",
 	   (pmnsfile==PM_NS_DEFAULT)?"DEFAULT":pmnsfile);
 	pmUnloadNameSpace();
 	sts = pmLoadASCIINameSpace(pmnsfile, dupok);
 	if (sts < 0) {
-	    __pmNotifyErr(LOG_ERR, "pmLoadASCIINameSpace(%s, %d): %s\n",
+	    pmNotifyErr(LOG_ERR, "pmLoadASCIINameSpace(%s, %d): %s\n",
 		(pmnsfile == PM_NS_DEFAULT) ? "DEFAULT" : pmnsfile, dupok, pmErrStr(sts));
 	}
     }
     else {
-	__pmNotifyErr(LOG_INFO, "PMNS file \"%s\" is unchanged",
+	pmNotifyErr(LOG_INFO, "PMNS file \"%s\" is unchanged",
 		(pmnsfile == PM_NS_DEFAULT) ? "DEFAULT" : pmnsfile);
     }
 }
@@ -619,7 +628,7 @@ HandleReadyAgents(__pmFdSet *readyFds)
 		    else {
 			/* sts is the status code from the error PDU */
 			if (pmDebugOptions.appl0)
-			    __pmNotifyErr(LOG_INFO,
+			    pmNotifyErr(LOG_INFO,
 				 "%s agent (not ready) sent %s status(%d)\n",
 				 ap->pmDomainLabel,
 				 sts == PM_ERR_PMDAREADY ?
@@ -668,7 +677,7 @@ CheckNewClient(__pmFdSet * fdset, int rfd, int family)
 #if defined(HAVE_STRUCT_SOCKADDR_UN)
 	if (sts >= 0 && family == AF_UNIX) {
 	    if ((sts = __pmServerSetLocalCreds(cp->fd, &cp->attrs)) < 0) {
-		__pmNotifyErr(LOG_ERR,
+		pmNotifyErr(LOG_ERR,
 			"ClientLoop: error extracting local credentials: %s",
 			pmErrStr(sts));
 	    }
@@ -713,7 +722,7 @@ CheckNewClient(__pmFdSet * fdset, int rfd, int family)
 	     * under debugging conditions.
 	     */
 	    if (pmDebugOptions.appl0)
-		__pmNotifyErr(LOG_INFO, "ClientLoop: "
+		pmNotifyErr(LOG_INFO, "ClientLoop: "
 			"error sending Conn ACK PDU to new client %s\n",
 			pmErrStr(s));
 	    if (sts >= 0)
@@ -737,7 +746,7 @@ ClientLoop(void)
     int		i, fd, sts;
     int		maxFd;
     int		checkAgents;
-    int		reload_ns = 0;
+    int		reload_namespace = 0;
     int		restartAgents = -1;	/* initial state unknown */
     __pmFdSet	readableFds;
 
@@ -763,7 +772,7 @@ ClientLoop(void)
 		    maxFd = fd + 1;
 		checkAgents = 1;
 		if (pmDebugOptions.appl0)
-		    __pmNotifyErr(LOG_INFO,
+		    pmNotifyErr(LOG_INFO,
 				 "not ready: check %s agent on fd %d (max = %d)\n",
 				 ap->pmDomainLabel, fd, maxFd);
 	    }
@@ -778,11 +787,11 @@ ClientLoop(void)
 				FdToString(i), i);
 	    __pmServerAddNewClients(&readableFds, CheckNewClient);
 	    if (checkAgents)
-		reload_ns = HandleReadyAgents(&readableFds);
+		reload_namespace = HandleReadyAgents(&readableFds);
 	    HandleClientInput(&readableFds);
 	}
 	else if (sts == -1 && neterror() != EINTR) {
-	    __pmNotifyErr(LOG_ERR, "ClientLoop select: %s\n", netstrerror());
+	    pmNotifyErr(LOG_ERR, "ClientLoop select: %s\n", netstrerror());
 	    break;
 	}
 	if (AgentDied) {
@@ -791,8 +800,10 @@ ClientLoop(void)
 
 		if ((args = getenv("PMCD_RESTART_AGENTS")) == NULL)
 		    restartAgents = 1;	/* unset, default to enabled */
-		else
+		else {
 		    restartAgents = (strcmp(args, "0") != 0);
+		    fprintf(stderr, "Warning: restartAgents=%d from PMCD_RESTART_AGENTS=%s in environment\n", restartAgents, args);
+		}
 	    }
 	    AgentPendingRestart = restartAgents;
 	}
@@ -803,18 +814,22 @@ ClientLoop(void)
 	    if ((now - last_restart) >= 60) {
 		AgentPendingRestart = 0;
 		last_restart = now;
-		__pmNotifyErr(LOG_INFO, "Auto-restarting agents.\n");
+		pmNotifyErr(LOG_INFO, "Auto-restarting agents.\n");
 		restart = 1;
 	    }
 	}
 	if (restart) {
 	    restart = 0;
-	    reload_ns = 1;
+	    reload_namespace = 1;
 	    SignalRestart();
 	}
-	if (reload_ns) {
-	    reload_ns = 0;
+	if (reload_namespace) {
+	    reload_namespace = 0;
 	    SignalReloadPMNS();
+	}
+	if (labelChanged) {
+	    labelChanged = 0;
+	    SignalReloadLabels();
 	}
 	if (timeToDie) {
 	    SignalShutdown();
@@ -865,6 +880,7 @@ SigHupProc(int sig)
     pmcd_sighups++;
     SignalRestart();
     SignalReloadPMNS();
+    SignalReloadLabels();
 }
 #else
 static void
@@ -880,7 +896,7 @@ static void
 SigBad(int sig)
 {
     if (pmDebugOptions.desperate) {
-	__pmNotifyErr(LOG_ERR, "Unexpected signal %d ...\n", sig);
+	pmNotifyErr(LOG_ERR, "Unexpected signal %d ...\n", sig);
 
 	/* -D desperate on the command line to enable traceback,
 	 * if we have platform support for it
@@ -892,6 +908,10 @@ SigBad(int sig)
     _exit(sig);
 }
 
+#define ENV_WARN_PORT	1
+#define ENV_WARN_LOCAL	2
+#define ENV_WARN_MAXPENDING	4
+
 int
 main(int argc, char *argv[])
 {
@@ -899,6 +919,7 @@ main(int argc, char *argv[])
     int		nport = 0;
     int		localhost = 0;
     int		maxpending = MAXPENDING;
+    int		env_warn = 0;
     char	*envstr;
 #ifdef HAVE_SA_SIGINFO
     static struct sigaction act;
@@ -908,18 +929,25 @@ main(int argc, char *argv[])
 
     umask(022);
     __pmProcessDataSize(NULL);
-    __pmGetUsername(&username);
+    pmGetUsername(&username);
     __pmSetInternalState(PM_STATE_PMCS);
     __pmServerSetFeature(PM_SERVER_FEATURE_DISCOVERY);
     __pmServerSetFeature(PM_SERVER_FEATURE_CONTAINERS);
 
-    if ((envstr = getenv("PMCD_PORT")) != NULL)
+    if ((envstr = getenv("PMCD_PORT")) != NULL) {
 	nport = __pmServerAddPorts(envstr);
-    if ((envstr = getenv("PMCD_LOCAL")) != NULL)
-	if ((localhost = atoi(envstr)) != 0)
+	env_warn |= ENV_WARN_PORT;
+    }
+    if ((envstr = getenv("PMCD_LOCAL")) != NULL) {
+	if ((localhost = atoi(envstr)) != 0) {
 	    __pmServerSetFeature(PM_SERVER_FEATURE_LOCAL);
-    if ((envstr = getenv("PMCD_MAXPENDING")) != NULL)
+	    env_warn |= ENV_WARN_LOCAL;
+	}
+    }
+    if ((envstr = getenv("PMCD_MAXPENDING")) != NULL) {
 	maxpending = atoi(envstr);
+	env_warn |= ENV_WARN_MAXPENDING;
+    }
     ParseOptions(argc, argv, &nport);
     if (localhost)
 	__pmServerAddInterface("INADDR_LOOPBACK");
@@ -967,13 +995,20 @@ main(int argc, char *argv[])
      * Note that if this fails don't worry as messages will still
      * go to stderr.
      */
-    __pmOpenLog(pmProgname, logfile, stderr, &sts);
+    pmOpenLog(pmGetProgname(), logfile, stderr, &sts);
     /* close old stdout, and force stdout into same stream as stderr */
     fflush(stdout);
     close(fileno(stdout));
     sts = dup(fileno(stderr));
     /* if this fails beware of the sky falling in */
     assert(sts >= 0);
+
+    if (env_warn & ENV_WARN_PORT)
+	fprintf(stderr, "Warning: nports=%d from PMCD_PORT=%s in environment\n", nport, getenv("PMCD_PORT"));
+    if (env_warn & ENV_WARN_LOCAL)
+	fprintf(stderr, "Warning: localhost only from PMCD_LOCAL=%s in environment\n", getenv("PMCD_LOCAL"));
+    if (env_warn & ENV_WARN_MAXPENDING)
+	fprintf(stderr, "Warning: maxpending=%d from PMCD_MAXPENDING=%s from environment\n", maxpending, getenv("PMCD_MAXPENDING"));
 
     sts = pmLoadASCIINameSpace(pmnsfile, dupok);
     if (sts < 0) {
@@ -996,7 +1031,7 @@ main(int argc, char *argv[])
     if (run_daemon) {
 	if (__pmServerCreatePIDFile(PM_SERVER_SERVICE_SPEC, PM_FATAL_ERR) < 0)
 	    DontStart();
-	if (__pmSetProcessIdentity(username) < 0)
+	if (pmSetProcessIdentity(username) < 0)
 	    DontStart();
     }
 
@@ -1044,7 +1079,7 @@ AddBadHost(struct __pmSockAddr *hostId)
 	szBadHosts += 8;
 	need = szBadHosts * (int)sizeof(badHost[0]);
 	if ((badHost = (__pmSockAddr **)realloc(badHost, need)) == NULL) {
-	    __pmNoMem("pmcd.AddBadHost", need, PM_FATAL_ERR);
+	    pmNoMem("pmcd.AddBadHost", need, PM_FATAL_ERR);
 	    /*NOTREACHED*/
 	}
     }

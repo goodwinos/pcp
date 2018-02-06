@@ -3,9 +3,9 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include <pcp/pmda.h>
 
+#include "libpcp.h"
 #include "localconfig.h"
 
 int

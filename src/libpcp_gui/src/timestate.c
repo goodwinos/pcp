@@ -16,7 +16,7 @@
  */
 #include "pmtime.h"
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 
 static enum {
     START	= -1,
@@ -44,7 +44,7 @@ __pmtimevalCmp(struct timeval *a, struct timeval *b)
 
 static void timeControlExited()
 {
-    fprintf(stderr, "\n%s: Time Control dialog exited, goodbye.\n", pmProgname);
+    fprintf(stderr, "\n%s: Time Control dialog exited, goodbye.\n", pmGetProgname());
 }
 
 static void timeControlRewind()
@@ -59,7 +59,7 @@ static void timeControlPosition(struct timeval position)
 
 static void timeControlInterval(struct timeval delta)
 {
-    printf("new interval:  %1.2f sec\n", __pmtimevalToReal(&delta));
+    printf("new interval:  %1.2f sec\n", pmtimevalToReal(&delta));
 }
 
 static void timeControlResume()
@@ -82,7 +82,7 @@ static void timeControlNewZone(char *timezone, char *label)
 
     if (sts < 0)
 	fprintf(stderr, "%s: Warning: cannot set timezone to \"%s\": %s\n",
-		pmProgname, timezone, pmErrStr(sts));
+		pmGetProgname(), timezone, pmErrStr(sts));
     else
 	printf("new timezone: %s (%s)\n", timezone, label);
 }
@@ -106,7 +106,7 @@ pmTimeStateMode(int mode, struct timeval delta, struct timeval *position)
     }
 
     if ((sts = pmSetMode(mode, position, step)) < 0) {
-	fprintf(stderr, "%s: pmSetMode: %s\n", pmProgname, pmErrStr(sts));
+	fprintf(stderr, "%s: pmSetMode: %s\n", pmGetProgname(), pmErrStr(sts));
 	exit(EXIT_FAILURE);
     }
 }
@@ -118,7 +118,13 @@ pmTimeStateSetup(
 	struct timeval first, struct timeval last, char *tz, char *tz_label)
 {
     pmTime	*pmtime = malloc(sizeof(pmTime));
+    pmTime	*pmtime_tmp;
     int		fd, sts, tzlen;
+
+    if (pmtime == NULL) {
+	fprintf(stderr, "%s: pmTimeConnect: malloc: %s\n", pmGetProgname(), osstrerror());
+	exit(EXIT_FAILURE);
+    }
 
     pmtime->magic = PMTIME_MAGIC;
     pmtime->length = sizeof(pmTime);
@@ -132,15 +138,15 @@ pmTimeStateSetup(
 	pmtime->end = last;
     } else {
 	pmtime->source = PM_SOURCE_HOST;
-	__pmtimevalNow(&pmtime->position);
+	pmtimevalNow(&pmtime->position);
     }
     if (tz == NULL) {
 	char	tzbuf[PM_TZ_MAXLEN];
 	tz = __pmTimezone_r(tzbuf, sizeof(tzbuf));
 	if (ctxt == PM_CONTEXT_ARCHIVE) {
 	    if ((sts = pmNewZone(tz)) < 0) {
-		fprintf(stderr, "%s: Cannot set timezone to \"%s\": %s\n",
-			pmProgname, tz, pmErrStr(sts));
+		fprintf(stderr, "%s: pmTimeConnect: Cannot set timezone to \"%s\": %s\n",
+			pmGetProgname(), tz, pmErrStr(sts));
 		exit(EXIT_FAILURE);
 	    }
 	}
@@ -149,15 +155,16 @@ pmTimeStateSetup(
     if (tz_label == NULL)
 	tz_label = "localhost";
     pmtime->length += tzlen + strlen(tz_label) + 1;
-    pmtime = realloc(pmtime, pmtime->length);
-    if (!pmtime) {
-	fprintf(stderr, "%s: realloc: %s\n", pmProgname, osstrerror());
+    pmtime_tmp = realloc(pmtime, pmtime->length);
+    if (pmtime_tmp == NULL) {
+	fprintf(stderr, "%s: pmTimeConnect: realloc: %s\n", pmGetProgname(), osstrerror());
 	exit(EXIT_FAILURE);
     }
+    pmtime = pmtime_tmp;
     strcpy(pmtime->data, tz);
     strcpy(pmtime->data + tzlen, tz_label);
     if ((fd = pmTimeConnect(port, pmtime)) < 0) {
-	fprintf(stderr, "%s: pmTimeConnect: %s\n", pmProgname, pmErrStr(fd));
+	fprintf(stderr, "%s: pmTimeConnect: %s\n", pmGetProgname(), pmErrStr(fd));
 	exit(EXIT_FAILURE);
     }
 
@@ -202,7 +209,7 @@ pmTimeStateAck(pmTimeControls *control, pmTime *pmtime)
 	    control->exited();
 	else
 	    fprintf(stderr, "\n%s: pmTimeSendAck: %s\n",
-			pmProgname, pmErrStr(sts));
+			pmGetProgname(), pmErrStr(sts));
 	exit(EXIT_FAILURE);
     }
 }

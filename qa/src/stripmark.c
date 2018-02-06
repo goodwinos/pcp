@@ -5,10 +5,12 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include "libpcp.h"
 
 /*
  * filter to copy archive.0 and strip mark records
+ *
+ * Copyright (c) 2017 Ken McDonell.  All Rights Reserved.
  */
 
 int
@@ -64,7 +66,7 @@ main(int argc, char *argv[])
 			(int)(htonl(*len)-sizeof(*len)), nb);
 	    exit(1);
 	}
-	if (htonl(*len) > sizeof(__pmPDUHdr) - sizeof(*len) + sizeof(__pmTimeval) + sizeof(int)) {
+	if (htonl(*len) > sizeof(__pmPDUHdr) - sizeof(*len) + sizeof(pmTimeval) + sizeof(int)) {
 	    sts = write(out, buf, htonl(*len));
 	    if (sts != htonl(*len)) {
 		fprintf(stderr, "Error: write %d returns %d\n", htonl(*len), sts);

@@ -21,7 +21,7 @@
 #define _WEBLOG_H
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "pmda.h"
 #include <regex.h>
 #include <sys/stat.h>

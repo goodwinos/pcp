@@ -14,12 +14,13 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 
 static int gold;	/* boolean flag - do we have a golden label yet? */
 static char *goldfile;
 static __pmLogLabel golden;
 static __pmLogCtl logctl;
+static __pmArchCtl archctl;
 static int status;
 
 /*
@@ -186,7 +187,7 @@ main(int argc, char *argv[])
 	    sts = pmSetDebug(opts.optarg);
 	    if (sts < 0) {
 		pmprintf("%s: unrecognized debug options specification (%s)\n",
-			pmProgname, opts.optarg);
+			pmGetProgname(), opts.optarg);
 		opts.errors++;
 	    }
 	    break;
@@ -221,7 +222,7 @@ main(int argc, char *argv[])
 	    version = atoi(opts.optarg);
 	    if (version != PM_LOG_VERS02) {
 		fprintf(stderr, "%s: unknown version number (%s)\n",
-			pmProgname, opts.optarg);
+			pmGetProgname(), opts.optarg);
 		opts.errors++;
 	    }
 	    readonly = 0;
@@ -240,7 +241,7 @@ main(int argc, char *argv[])
     }
 
     if (opts.optind != argc - 1 && opts.narchives == 0) {
-	pmprintf("%s: insufficient arguments\n", pmProgname);
+	pmprintf("%s: insufficient arguments\n", pmGetProgname());
 	opts.errors++;
     }
 
@@ -252,15 +253,17 @@ main(int argc, char *argv[])
     archive = opts.narchives > 0? opts.archives[0] : argv[opts.optind];
     warnings = (readonly || verbose);
 
+    archctl.ac_log = &logctl;
+
     if (verbose)
 	printf("Scanning for components of archive \"%s\"\n", archive);
-    if ((sts = __pmLogLoadLabel(&logctl, archive)) < 0) {
+    if ((sts = __pmLogLoadLabel(&archctl, archive)) < 0) {
 	fprintf(stderr, "%s: Cannot open archive \"%s\": %s\n",
-		pmProgname, archive, pmErrStr(sts));
+		pmGetProgname(), archive, pmErrStr(sts));
 	exit(1);
     }
 
-    logctl.l_curvol = -1;
+    archctl.ac_curvol = -1;
     logctl.l_physend = -1;
 
     /*
@@ -269,18 +272,18 @@ main(int argc, char *argv[])
     for (c = logctl.l_minvol; c <= logctl.l_maxvol; c++) {
 	if (verbose)
 	    printf("Checking label on data volume %d\n", c);
-	if ((sts = __pmLogChangeVol(&logctl, c)) < 0 && warnings) {
+	if ((sts = __pmLogChangeVol(&archctl, c)) < 0 && warnings) {
 	    fprintf(stderr, "Bad data volume %d label: %s\n", c, pmErrStr(sts));
 	    status = 2;
 	}
 	pmsprintf(buffer, sizeof(buffer), "data volume %d", c);
-	compare_golden(logctl.l_mfp, buffer, sts, warnings);
+	compare_golden(archctl.ac_mfp, buffer, sts, warnings);
     }
 
     if (logctl.l_tifp) {
 	if (verbose)
 	    printf("Checking label on temporal index\n");
-	if ((sts = __pmLogChkLabel(&logctl, logctl.l_tifp, &logctl.l_label,
+	if ((sts = __pmLogChkLabel(&archctl, logctl.l_tifp, &logctl.l_label,
 			           PM_LOG_VOL_TI)) < 0 && warnings) {
 	    fprintf(stderr, "Bad temporal index label: %s\n", pmErrStr(sts));
 	    status = 2;
@@ -293,7 +296,7 @@ main(int argc, char *argv[])
 
     if (verbose)
 	printf("Checking label on metadata volume\n");
-    if ((sts = __pmLogChkLabel(&logctl, logctl.l_mdfp, &logctl.l_label,
+    if ((sts = __pmLogChkLabel(&archctl, logctl.l_mdfp, &logctl.l_label,
 			       PM_LOG_VOL_META)) < 0 && warnings) {
 	fprintf(stderr, "Bad metadata volume label: %s\n", pmErrStr(sts));
 	status = 2;
@@ -319,30 +322,30 @@ main(int argc, char *argv[])
 	    golden.ill_tz[PM_TZ_MAXLEN-1] = '\0';
 	}
 
-	if (logctl.l_mfp)
-	    __pmFclose(logctl.l_mfp);
+	if (archctl.ac_mfp)
+	    __pmFclose(archctl.ac_mfp);
 	for (c = logctl.l_minvol; c <= logctl.l_maxvol; c++) {
 	    if (verbose)
 		printf("Writing label on data volume %d\n", c);
 	    golden.ill_vol = c;
 	    pmsprintf(buffer, sizeof(buffer), "%s.%d", logctl.l_name, c);
-	    if ((logctl.l_mfp = __pmFopen(buffer, "r+")) == NULL) {
+	    if ((archctl.ac_mfp = __pmFopen(buffer, "r+")) == NULL) {
 		fprintf(stderr, "Failed data volume %d open: %s\n",
 				c, osstrerror());
 		status = 3;
 	    }
-	    else if ((sts = __pmLogWriteLabel(logctl.l_mfp, &golden)) < 0) {
+	    else if ((sts = __pmLogWriteLabel(archctl.ac_mfp, &golden)) < 0) {
 		fprintf(stderr, "Failed data volume %d label write: %s\n",
 				c, pmErrStr(sts));
 		status = 3;
 	    }
-	    if (logctl.l_mfp)
-		__pmFclose(logctl.l_mfp);
+	    if (archctl.ac_mfp)
+		__pmFclose(archctl.ac_mfp);
 	}
 	/* Need to reset the data volume, for subsequent label read */
-	logctl.l_mfp = NULL;
-	logctl.l_curvol = -1;
-	__pmLogChangeVol(&logctl, logctl.l_minvol);
+	archctl.ac_mfp = NULL;
+	archctl.ac_curvol = -1;
+	__pmLogChangeVol(&archctl, logctl.l_minvol);
 
 	if (logctl.l_tifp) {
 	    __pmFclose(logctl.l_tifp);
@@ -397,18 +400,18 @@ main(int argc, char *argv[])
 	printf("  commencing %s ", ddmm);
 	tv.tv_sec = golden.ill_start.tv_sec;
 	tv.tv_usec = golden.ill_start.tv_usec;
-	__pmPrintStamp(stdout, &tv);
+	pmPrintStamp(stdout, &tv);
 	printf(" %4.4s\n", yr);
-	if (__pmLogChangeVol(&logctl, 0) < 0)
-	    printf("  ending     UNKNOWN\n");
-	else if (__pmGetArchiveEnd(&logctl, &tv) < 0)
-	    printf("  ending     UNKNOWN\n");
+	if ((sts = pmNewContext(PM_CONTEXT_ARCHIVE, archive)) < 0)
+	    printf("  ending     UNKNOWN (pmNewContext: %s)\n", pmErrStr(sts));
+	else if ((sts = pmGetArchiveEnd(&tv)) < 0)
+	    printf("  ending     UNKNOWN (pmGetArchiveEnd: %s)\n", pmErrStr(sts));
 	else {
 	    ddmm = pmCtime((const time_t *)&tv.tv_sec, buffer);
 	    ddmm[10] = '\0';
 	    yr = &ddmm[20];
 	    printf("  ending     %s ", ddmm);
-	    __pmPrintStamp(stdout, &tv);
+	    pmPrintStamp(stdout, &tv);
 	    printf(" %4.4s\n", yr);
 	}
 	if (Lflag) {

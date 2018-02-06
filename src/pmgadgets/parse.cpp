@@ -14,7 +14,6 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include <setjmp.h>
 #include <values.h>
 #include "global.h"
@@ -1329,7 +1328,7 @@ Parse(void)
     }
     if (nErrors) {
 	pmprintf("%s: configuration file has errors "
-		"(%d lines parsed, %d errors)\n", pmProgname, nLines, nErrors);
+		"(%d lines parsed, %d errors)\n", pmGetProgname(), nLines, nErrors);
 	pmflush();
 	return -1;
     }

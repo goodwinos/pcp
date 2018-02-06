@@ -226,7 +226,7 @@ void Tab::stopRecording(void)
     if (error) {
 	cleanupRecording();
 	pmchart->setRecordState(false);
-	QMessageBox::warning(this, pmProgname, errmsg,
+	QMessageBox::warning(this, pmGetProgname(), errmsg,
 		QMessageBox::Ok|QMessageBox::Default|QMessageBox::Escape,
 		QMessageBox::NoButton, QMessageBox::NoButton);
     }
@@ -236,8 +236,8 @@ void Tab::stopRecording(void)
 
 	Tab *tab = new Tab;
 	console->post("Tab::stopRecording creating tab: delta=%.2f pos=%.2f",
-			__pmtimevalToReal(pmtime->archiveInterval()),
-			__pmtimevalToReal(pmtime->archivePosition()));
+			pmtimevalToReal(pmtime->archiveInterval()),
+			pmtimevalToReal(pmtime->archivePosition()));
 	// TODO: may need to update archive samples/visible?
 	tab->init(pmchart->tabWidget(), archiveGroup, "Record");
 	pmchart->addActiveTab(tab);
@@ -279,7 +279,7 @@ void Tab::queryRecording(void)
 	    my.loggerList.at(i)->write(msg.toLatin1());
 	cleanupRecording();
 	pmchart->setRecordState(false);
-	QMessageBox::warning(this, pmProgname, errmsg,
+	QMessageBox::warning(this, pmGetProgname(), errmsg,
 		QMessageBox::Ok|QMessageBox::Default|QMessageBox::Escape,
 		QMessageBox::NoButton, QMessageBox::NoButton);
     }
@@ -306,7 +306,7 @@ void Tab::detachLoggers(void)
     if (error) {
 	cleanupRecording();
 	pmchart->setRecordState(false);
-	QMessageBox::warning(this, pmProgname, errmsg,
+	QMessageBox::warning(this, pmGetProgname(), errmsg,
 		QMessageBox::Ok|QMessageBox::Default|QMessageBox::Escape,
 		QMessageBox::NoButton, QMessageBox::NoButton);
     }

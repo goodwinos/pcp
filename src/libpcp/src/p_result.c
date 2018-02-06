@@ -34,7 +34,7 @@
 
 #include <ctype.h>
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "internal.h"
 
 /*
@@ -50,7 +50,7 @@ typedef struct {
 
 typedef struct {
     __pmPDUHdr		hdr;
-    __pmTimeval		timestamp;	/* when returned */
+    pmTimeval		timestamp;	/* when returned */
     int			numpmid;	/* no. of PMIDs to follow */
     __pmPDU		data[1];	/* zero or more */
 } result_t;
@@ -445,10 +445,10 @@ __pmDecodeResult_ctx(__pmContext *ctxp, __pmPDU *pdubuf, pmResult **result)
 		}
 		else if (nvsp->valfmt == PM_VAL_DPTR || nvsp->valfmt == PM_VAL_SPTR) {
 		    /*
-		     * in the input PDU buffer, pval is an index to the
+		     * in the input PDU buffer, lval is an index to the
 		     * start of the pmValueBlock, in units of __pmPDU
 		     */
-		    index = sizeof(__pmPDU) * ntohl(vp->value.pval) + offset;
+		    index = sizeof(__pmPDU) * ntohl(vp->value.lval) + offset;
 		    nvp->value.pval = (pmValueBlock *)&newbuf[index];
 		    if (pmDebugOptions.pdu && pmDebugOptions.desperate) {
 			int		k, len;

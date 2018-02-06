@@ -14,7 +14,7 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include <ctype.h>
 #include <limits.h>
 
@@ -149,8 +149,8 @@ lookup_cluster_labels(pmID pmid)
     static pmID		last = PM_ID_NULL;
     static pmLabelSet	*labels;
 
-    if (pmid_domain(pmid) != pmid_domain(last) ||
-	pmid_cluster(pmid) != pmid_cluster(last)) {
+    if (pmID_domain(pmid) != pmID_domain(last) ||
+	pmID_cluster(pmid) != pmID_cluster(last)) {
 	if (labels)
 	    pmFreeLabelSets(labels, 1);
 	labels = NULL;
@@ -286,7 +286,7 @@ setup_event_derived_metrics(void)
 	    fprintf(stderr, "Warning: cannot get PMID for %s: %s\n",
 			name_flags, pmErrStr(sts));
 	    /* avoid subsequent warnings ... */
-	    __pmid_int(&pmid_flags)->item = 1;
+	    pmid_flags = pmID_build(pmID_domain(pmid_flags), pmID_cluster(pmid_flags), 1);
 	}
 	sts = pmLookupName(1, &name_missed, &pmid_missed);
 	if (sts < 0) {
@@ -294,7 +294,7 @@ setup_event_derived_metrics(void)
 	    fprintf(stderr, "Warning: cannot get PMID for %s: %s\n",
 			name_missed, pmErrStr(sts));
 	    /* avoid subsequent warnings ... */
-	    __pmid_int(&pmid_missed)->item = 1;
+	    pmid_missed = pmID_build(pmID_domain(pmid_missed), pmID_cluster(pmid_missed), 1);
 	}
     }
 }
@@ -368,13 +368,13 @@ myeventdump(pmValueSet *vsp, int inst, int highres)
 
 	if ((nrecords = pmUnpackHighResEventRecords(vsp, inst, &hr)) < 0) {
 	    fprintf(stderr, "%s: pmUnpackHighResEventRecords: %s\n",
-		    pmProgname, pmErrStr(nrecords));
+		    pmGetProgname(), pmErrStr(nrecords));
 	    return;
 	}
 	setup_event_derived_metrics();
 	for (r = 0; r < nrecords; r++) {
 	    printf("    --- event record [%d] timestamp ", r);
-	    __pmPrintHighResStamp(stdout, &hr[r]->timestamp);
+	    pmPrintHighResStamp(stdout, &hr[r]->timestamp);
 	    if (dump_nparams(hr[r]->numpmid) < 0)
 		continue;
 	    flags = 0;
@@ -388,13 +388,13 @@ myeventdump(pmValueSet *vsp, int inst, int highres)
 
 	if ((nrecords = pmUnpackEventRecords(vsp, inst, &res)) < 0) {
 	    fprintf(stderr, "%s: pmUnpackEventRecords: %s\n",
-			pmProgname, pmErrStr(nrecords));
+			pmGetProgname(), pmErrStr(nrecords));
 	    return;
 	}
 	setup_event_derived_metrics();
 	for (r = 0; r < nrecords; r++) {
 	    printf("    --- event record [%d] timestamp ", r);
-	    __pmPrintStamp(stdout, &res[r]->timestamp);
+	    pmPrintStamp(stdout, &res[r]->timestamp);
 	    if (dump_nparams(res[r]->numpmid) < 0)
 		continue;
 	    flags = 0;
@@ -471,7 +471,7 @@ myindomlabels(pmInDom indom)
 	printf("    labels %s\n", buf);
     else if (sts < 0)
 	fprintf(stderr, "%s: indom %s labels merge failed: %s\n",
-		pmProgname, pmInDomStr(indom), pmErrStr(sts));
+		pmGetProgname(), pmInDomStr(indom), pmErrStr(sts));
 }
 
 static void
@@ -493,12 +493,12 @@ myinstslabels(pmDesc *dp, pmLabelSet **sets, int nsets, char *buffer, int buflen
 			ilabels[i].inst, iname, buffer);
 	    else if (sts < 0)
 		fprintf(stderr, "%s: %s instances labels merge failed: %s\n",
-			pmProgname, pmInDomStr(dp->indom), pmErrStr(sts));
+			pmGetProgname(), pmInDomStr(dp->indom), pmErrStr(sts));
 	}
 	pmFreeLabelSets(ilabels, n);
     } else if (sts < 0) {
 	fprintf(stderr, "%s: pmGetInstancesLabels[%s] failed: %s\n",
-		pmProgname, pmInDomStr(dp->indom), pmErrStr(sts));
+		pmGetProgname(), pmInDomStr(dp->indom), pmErrStr(sts));
     }
 }
 
@@ -510,7 +510,7 @@ mylabels(pmDesc *dp)
     int		sts = 0;
 
     labels[0] = lookup_context_labels();
-    labels[1] = lookup_domain_labels(pmid_domain(dp->pmid));
+    labels[1] = lookup_domain_labels(pmID_domain(dp->pmid));
     labels[2] = lookup_indom_labels(dp->indom);
     labels[3] = lookup_cluster_labels(dp->pmid);
     labels[4] = lookup_item_labels(dp->pmid);
@@ -523,7 +523,7 @@ mylabels(pmDesc *dp)
 	printf("    labels %s\n", buf);
     else if (sts < 0)
 	fprintf(stderr, "%s: metric %s labels merge failed: %s\n",
-		pmProgname, pmIDStr(dp->pmid), pmErrStr(sts));
+		pmGetProgname(), pmIDStr(dp->pmid), pmErrStr(sts));
 }
 
 static void
@@ -568,7 +568,7 @@ report(void)
     if (p_value || p_label || verify) {
 	if (opts.context == PM_CONTEXT_ARCHIVE) {
 	    if ((sts = pmSetMode(PM_MODE_FORW, &opts.origin, 0)) < 0) {
-		fprintf(stderr, "%s: pmSetMode failed: %s\n", pmProgname, pmErrStr(sts));
+		fprintf(stderr, "%s: pmSetMode failed: %s\n", pmGetProgname(), pmErrStr(sts));
 		exit(1);
 	    }
 	}
@@ -607,7 +607,7 @@ report(void)
 			}
 			if (opts.context == PM_CONTEXT_ARCHIVE) {
 			    if ((sts = pmSetMode(PM_MODE_FORW, &opts.origin, 0)) < 0) {
-				fprintf(stderr, "%s: pmSetMode failed: %s\n", pmProgname, pmErrStr(sts));
+				fprintf(stderr, "%s: pmSetMode failed: %s\n", pmGetProgname(), pmErrStr(sts));
 				exit(1);
 			    }
 			}
@@ -654,7 +654,7 @@ report(void)
 	    myoneline(pmidlist[i], PM_TEXT_PMID);
 	putchar('\n');
 	if (p_desc)
-	    __pmPrintDesc(stdout, &desc);
+	    pmPrintDesc(stdout, &desc);
 	if (p_help)
 	    myhelptext(pmidlist[i], PM_TEXT_PMID);
 	if (p_value)
@@ -688,7 +688,7 @@ dometric(const char *name)
 
     namelist[batchidx]= strdup(name);
     if (namelist[batchidx] == NULL) {
-	fprintf(stderr, "%s: namelist string malloc: %s\n", pmProgname, osstrerror());
+	fprintf(stderr, "%s: namelist string malloc: %s\n", pmGetProgname(), osstrerror());
 	exit(1);
     }
 
@@ -733,7 +733,7 @@ dodigit(const char *arg)
     int		domain, cluster, item, serial;
 
     if (sscanf(arg, "%u.%u.%u", &domain, &cluster, &item) == 3)
-	return dopmid(pmid_build(domain, cluster, item));
+	return dopmid(pmID_build(domain, cluster, item));
     if (sscanf(arg, "%u.%u", &domain, &serial) == 2)
 	return doindom(pmInDom_build(domain, serial));
     return PM_ERR_NAME;
@@ -753,7 +753,7 @@ main(int argc, char **argv)
 	    case 'b':		/* batchsize */
 		batchsize = (int)strtol(opts.optarg, &endnum, 10);
 		if (*endnum != '\0') {
-		    pmprintf("%s: -b requires numeric argument\n", pmProgname);
+		    pmprintf("%s: -b requires numeric argument\n", pmGetProgname());
 		    opts.errors++;
 		}
 		break;
@@ -762,7 +762,7 @@ main(int argc, char **argv)
 		sts = pmLoadDerivedConfig(opts.optarg);
 		if (sts < 0) {
 		    fprintf(stderr, "%s: derived configuration(s) error: %s\n",
-			    pmProgname, pmErrStr(sts));
+			    pmGetProgname(), pmErrStr(sts));
 		    /* errors are not necessarily fatal ... */
 		}
 		break;
@@ -849,12 +849,12 @@ main(int argc, char **argv)
 
 
     if ((namelist = (char **)malloc(batchsize * sizeof(char *))) == NULL) {
-	fprintf(stderr, "%s: namelist malloc: %s\n", pmProgname, osstrerror());
+	fprintf(stderr, "%s: namelist malloc: %s\n", pmGetProgname(), osstrerror());
 	exit(1);
     }
 
     if ((pmidlist = (pmID *)malloc(batchsize * sizeof(pmID))) == NULL) {
-	fprintf(stderr, "%s: pmidlist malloc: %s\n", pmProgname, osstrerror());
+	fprintf(stderr, "%s: pmidlist malloc: %s\n", pmGetProgname(), osstrerror());
 	exit(1);
     }
 
@@ -877,13 +877,13 @@ main(int argc, char **argv)
 	if ((sts = pmNewContext(opts.context, source)) < 0) {
 	    if (opts.context == PM_CONTEXT_HOST)
 		fprintf(stderr, "%s: Cannot connect to PMCD on host \"%s\": %s\n",
-			pmProgname, source, pmErrStr(sts));
+			pmGetProgname(), source, pmErrStr(sts));
 	    else if (opts.context == PM_CONTEXT_LOCAL)
 		fprintf(stderr, "%s: Cannot make standalone connection on localhost: %s\n",
-			pmProgname, pmErrStr(sts));
+			pmGetProgname(), pmErrStr(sts));
 	    else
 		fprintf(stderr, "%s: Cannot open archive \"%s\": %s\n",
-			pmProgname, source, pmErrStr(sts));
+			pmGetProgname(), source, pmErrStr(sts));
 	    exit(1);
 	}
 	ctxid = sts;

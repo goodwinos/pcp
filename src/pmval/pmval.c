@@ -120,7 +120,7 @@ initinsts(Context *x)
 	    np = x->inames;
 	    ip = (int *)malloc(n * sizeof(int));
 	    if (ip == NULL) {
-		__pmNoMem("pmval.ip", n * sizeof(int), PM_FATAL_ERR);
+		pmNoMem("pmval.ip", n * sizeof(int), PM_FATAL_ERR);
 	    }
 	    x->iids = ip;
 	    for (i = 0; i < n; i++) {
@@ -130,7 +130,7 @@ initinsts(Context *x)
 		    e = pmLookupInDom(x->desc.indom, *np);
 		if (e < 0) {
             	    fprintf(stderr, "%s: instance %s not available\n",
-			    pmProgname, *np);
+			    pmGetProgname(), *np);
             	    exit(EXIT_FAILURE);
 		}
 		*ip = e;
@@ -140,7 +140,7 @@ initinsts(Context *x)
 	    np = x->inames;
 	    if ((e = pmAddProfile(x->desc.indom, x->inum, x->iids)) < 0) {
 		fprintf(stderr, "%s: pmAddProfile: %s\n",
-			pmProgname, pmErrStr(e));
+			pmGetProgname(), pmErrStr(e));
 		exit(EXIT_FAILURE);
 	    }
 	}
@@ -153,7 +153,7 @@ initinsts(Context *x)
 		n = pmGetInDom(x->desc.indom, &ip, &np);
 	    if (n < 0) {
                 fprintf(stderr, "%s: pmGetInDom(%s): %s\n",
-			pmProgname, pmInDomStr(x->desc.indom), pmErrStr(n));
+			pmGetProgname(), pmInDomStr(x->desc.indom), pmErrStr(n));
                 exit(EXIT_FAILURE);
 	    }
             x->inum = n;
@@ -164,7 +164,7 @@ initinsts(Context *x)
 	/* build InstPair list and sort */
 	pp = (InstPair *)malloc(n * sizeof(InstPair));
 	if (pp == NULL) {
-	    __pmNoMem("pmval.pp", n * sizeof(InstPair), PM_FATAL_ERR);
+	    pmNoMem("pmval.pp", n * sizeof(InstPair), PM_FATAL_ERR);
 	}
 	x->ipairs = pp;
 	for (i = 0; i < n; i++) {
@@ -191,19 +191,19 @@ initapi(Context *x, pmMetricSpec *msp, int argc, char **argv)
     x->handle = pmWhichContext();
 
     if ((e = pmLookupName(1, &(x->metric), &(x->pmid))) < 0) {
-	fprintf(stderr, "%s: pmLookupName(%s): %s\n", pmProgname, x->metric,
+	fprintf(stderr, "%s: pmLookupName(%s): %s\n", pmGetProgname(), x->metric,
 		pmErrStr(e));
 	exit(EXIT_FAILURE);
     }
 
     if ((e = pmLookupDesc(x->pmid, &(x->desc))) < 0) {
-	fprintf(stderr, "%s: pmLookupDesc: %s\n", pmProgname, pmErrStr(e));
+	fprintf(stderr, "%s: pmLookupDesc: %s\n", pmGetProgname(), pmErrStr(e));
 	exit(EXIT_FAILURE);
     }
 
     if (x->desc.indom == PM_INDOM_NULL && msp->ninst > 0) {
 	fprintf(stderr, "%s: %s: singular metrics do not have instances\n",
-		pmProgname, msp->metric);
+		pmGetProgname(), msp->metric);
 	exit(EXIT_FAILURE);
     }
 
@@ -247,7 +247,7 @@ getvals(Context *x,		/* in - full pm description */
 
 	    if (r->numpmid == 0) {
 		if (opts.guiflag || opts.context == PM_CONTEXT_ARCHIVE)
-		    __pmPrintStamp(stdout, &r->timestamp);
+		    pmPrintStamp(stdout, &r->timestamp);
 		printf("  Archive logging suspended\n");
 		reporting = 0;
 		pmFreeResult(r);
@@ -277,16 +277,16 @@ getvals(Context *x,		/* in - full pm description */
 	    exit(EXIT_SUCCESS);
 	}
 	if (rawArchive)
-	    fprintf(stderr, "\n%s: pmFetchArchive: %s\n", pmProgname, pmErrStr(e));
+	    fprintf(stderr, "\n%s: pmFetchArchive: %s\n", pmGetProgname(), pmErrStr(e));
 	else
-	    fprintf(stderr, "\n%s: pmFetch: %s\n", pmProgname, pmErrStr(e));
+	    fprintf(stderr, "\n%s: pmFetch: %s\n", pmGetProgname(), pmErrStr(e));
 	exit(EXIT_FAILURE);
     }
 
     if (opts.guiflag)
 	pmTimeStateAck(&controls, pmtime);
 
-    if (__pmtimevalToReal(&r->timestamp) > __pmtimevalToReal(&opts.finish)) {
+    if (pmtimevalToReal(&r->timestamp) > pmtimevalToReal(&opts.finish)) {
 	pmFreeResult(r);
 	return -2;
     }
@@ -294,7 +294,7 @@ getvals(Context *x,		/* in - full pm description */
     e = r->vset[i]->numval;
     if (e == 0) {
 	if (opts.guiflag || opts.context == PM_CONTEXT_ARCHIVE) {
-	    __pmPrintStamp(stdout, &r->timestamp);
+	    pmPrintStamp(stdout, &r->timestamp);
 	    printf("  ");
 	}
 	if (!rawEvents)
@@ -311,10 +311,10 @@ getvals(Context *x,		/* in - full pm description */
 	}
 	else if (rawArchive) {
 	    fprintf(stderr, "\n%s: pmFetchArchive: %s\n",
-			pmProgname, pmErrStr(r->vset[i]->numval));
+			pmGetProgname(), pmErrStr(r->vset[i]->numval));
 	} else {
 	    fprintf(stderr, "\n%s: pmFetch: %s\n",
-			pmProgname, pmErrStr(r->vset[i]->numval));
+			pmGetProgname(), pmErrStr(r->vset[i]->numval));
 	}
 	pmFreeResult(r);
 	return -1;
@@ -422,7 +422,7 @@ footer:
     else printf("samples:   %d\n", opts.samples);
     if ((opts.samples > 1) &&
 	(opts.context != PM_CONTEXT_ARCHIVE || amode == PM_MODE_INTERP))
-	printf("interval:  %1.2f sec\n", __pmtimevalToReal(&opts.interval));
+	printf("interval:  %1.2f sec\n", pmtimevalToReal(&opts.interval));
 }
 
 /* Print instance identifier names as column labels. */
@@ -552,7 +552,7 @@ printvals(Context *x, pmValueSet *vset, int cols)
 		int	sts;
 		sts = pmExtractValue(vset->valfmt, &vset->vlist[0], x->desc.type, &av, PM_TYPE_DOUBLE);
 		if (sts < 0) {
-		    fprintf(stderr, "%s:printvals pmExtractValue: %s\n", pmProgname, pmErrStr(sts));
+		    fprintf(stderr, "%s:printvals pmExtractValue: %s\n", pmGetProgname(), pmErrStr(sts));
 		    exit(EXIT_FAILURE);
 		}
 		printreal(av.d, x->desc.sem, cols);
@@ -578,7 +578,7 @@ printvals(Context *x, pmValueSet *vset, int cols)
 		    int		sts;
 		    sts = pmExtractValue(vset->valfmt, &vset->vlist[j], x->desc.type, &av, PM_TYPE_DOUBLE);
 		    if (sts < 0) {
-			fprintf(stderr, "%s:printvals[%d] pmExtractValue: %s\n", pmProgname, j, pmErrStr(sts));
+			fprintf(stderr, "%s:printvals[%d] pmExtractValue: %s\n", pmGetProgname(), j, pmErrStr(sts));
 			exit(EXIT_FAILURE);
 		    }
 		    printreal(av.d, x->desc.sem, cols);
@@ -603,7 +603,7 @@ printvals(Context *x, pmValueSet *vset, int cols)
 		    int 	sts;
 		    sts = pmExtractValue(vset->valfmt, &vset->vlist[j], x->desc.type, &av, PM_TYPE_DOUBLE);
 		    if (sts < 0) {
-			fprintf(stderr, "%s:printvals[%d] pmExtractValue: %s\n", pmProgname, j, pmErrStr(sts));
+			fprintf(stderr, "%s:printvals[%d] pmExtractValue: %s\n", pmGetProgname(), j, pmErrStr(sts));
 			exit(EXIT_FAILURE);
 		    }
 		    printreal(av.d, x->desc.sem, 1);
@@ -632,12 +632,12 @@ printrate(int     valfmt,	/* from pmValueSet */
 
     sts = pmExtractValue(valfmt, val1, type, &a, PM_TYPE_DOUBLE);
     if (sts < 0) {
-	fprintf(stderr, "%s:printrate prev pmExtractValue: %s\n", pmProgname, pmErrStr(sts));
+	fprintf(stderr, "%s:printrate prev pmExtractValue: %s\n", pmGetProgname(), pmErrStr(sts));
 	exit(EXIT_FAILURE);
     }
     sts = pmExtractValue(valfmt, val2, type, &b, PM_TYPE_DOUBLE);
     if (sts < 0) {
-	fprintf(stderr, "%s:printrate this pmExtractValue: %s\n", pmProgname, pmErrStr(sts));
+	fprintf(stderr, "%s:printrate this pmExtractValue: %s\n", pmGetProgname(), pmErrStr(sts));
 	exit(EXIT_FAILURE);
     }
     v = a.d - b.d;
@@ -678,7 +678,7 @@ printrates(Context *x,
 
     /* compute delta from timestamps and convert units */
     delta = x->scale *
-	    (__pmtimevalToReal(&stamp1) - __pmtimevalToReal(&stamp2));
+	    (pmtimevalToReal(&stamp1) - pmtimevalToReal(&stamp2));
 
     /* null instance domain */
     if (x->desc.indom == PM_INDOM_NULL) {
@@ -837,10 +837,10 @@ initfilters(Context *x, int conntype)
     count = x->inum ? x->inum : 1;
     length = sizeof(pmValueSet) + sizeof(pmValue) * (count - 1);
     if ((vset = (pmValueSet *)calloc(1, length)) == NULL)
-	__pmNoMem("store vset", length, PM_FATAL_ERR);
+	pmNoMem("store vset", length, PM_FATAL_ERR);
     length = sizeof(pmResult);
     if ((result = (pmResult *)calloc(1, length)) == NULL)
-	__pmNoMem("store result", length, PM_FATAL_ERR);
+	pmNoMem("store result", length, PM_FATAL_ERR);
 
     result->vset[0] = vset;
     result->numpmid = 1;
@@ -855,18 +855,18 @@ initfilters(Context *x, int conntype)
 	if (sts == PM_ERR_TYPE) {
 	    fprintf(stderr, "%s: filter \"%s\" incompatible with metric "
 			"type (PM_TYPE_%s)\n",
-			pmProgname, x->filter, pmTypeStr(type));
+			pmGetProgname(), x->filter, pmTypeStr(type));
 	    exit(EXIT_FAILURE);
 	}
 	if (sts == -ERANGE) {
 	    fprintf(stderr, "%s: filter value \"%s\" is out of range for "
 			"metric data type (PM_TYPE_%s)\n",
-			pmProgname, x->filter, pmTypeStr(type));
+			pmGetProgname(), x->filter, pmTypeStr(type));
 	    exit(EXIT_FAILURE);
 	}
 	if (sts < 0) {
 	    fprintf(stderr, "%s: failed to convert value \"%s\": %s\n",
-			pmProgname, x->filter, pmErrStr(sts));
+			pmGetProgname(), x->filter, pmErrStr(sts));
 	    exit(EXIT_FAILURE);
 	}
     }
@@ -881,7 +881,7 @@ initfilters(Context *x, int conntype)
 	    vset->vlist[i].inst = PM_IN_NULL;
 	if ((sts = __pmStuffValue(&atom, &vset->vlist[i], type)) < 0) {
 	    fprintf(stderr, "%s: stuff value \"%s\" failed: %s\n",
-			pmProgname, x->filter, pmErrStr(sts));
+			pmGetProgname(), x->filter, pmErrStr(sts));
 	    exit(EXIT_FAILURE);
 	}
 	vset->valfmt = sts;
@@ -889,7 +889,7 @@ initfilters(Context *x, int conntype)
 
     if ((sts = pmStore(result)) < 0) {
 	fprintf(stderr, "%s: store value \"%s\" failed: %s\n",
-			pmProgname, x->filter, pmErrStr(sts));
+			pmGetProgname(), x->filter, pmErrStr(sts));
 	exit(EXIT_FAILURE);
     }
     pmFreeResult(result);
@@ -926,7 +926,7 @@ main(int argc, char *argv[])
 	case 'f':		/* fixed format count */
 	    fixed = (int)strtol(opts.optarg, &endnum, 10);
 	    if (*endnum != '\0' || fixed < 0) {
-		pmprintf("%s: -f requires +ve numeric argument\n", pmProgname);
+		pmprintf("%s: -f requires +ve numeric argument\n", pmGetProgname());
 		opts.errors++;
 	    }
 	    break;
@@ -940,7 +940,7 @@ main(int argc, char *argv[])
 		context.inames =
 		    (char **)realloc(context.inames, idx1 * (sizeof (char *)));
 		if (context.inames == NULL)
-		    __pmNoMem("pmval.ip", idx1 * sizeof(char *), PM_FATAL_ERR);
+		    pmNoMem("pmval.ip", idx1 * sizeof(char *), PM_FATAL_ERR);
 		*(context.inames + idx1 - 1) = subopt;
 		subopt = getinstance(NULL);
 	    }
@@ -964,7 +964,7 @@ main(int argc, char *argv[])
 	case 'w':		/* output column width */
 	    cols = (int)strtol(opts.optarg, &endnum, 10);
 	    if (*endnum != '\0' || cols < 1) {
-		pmprintf("%s: -w requires +ve numeric argument\n", pmProgname);
+		pmprintf("%s: -w requires +ve numeric argument\n", pmGetProgname());
 		opts.errors++;
 	    }
 	    break;
@@ -983,11 +983,11 @@ main(int argc, char *argv[])
 	exit(0);
     }
     if (!opts.errors && opts.optind >= argc) {
-	pmprintf("%s: error - no metricname specified\n", pmProgname);
+	pmprintf("%s: error - no metricname specified\n", pmGetProgname());
 	opts.errors++;
     }
     else if (!opts.errors && opts.optind < argc - 1) {
-	pmprintf("%s: error - too many arguments\n", pmProgname);
+	pmprintf("%s: error - too many arguments\n", pmGetProgname());
 	opts.errors++;
     }
 
@@ -1002,6 +1002,11 @@ main(int argc, char *argv[])
 	type = 0;
     }
     else if (opts.narchives > 0) {
+	source = opts.archives[0];
+	type = archive = 1;
+    }
+    else if (opts.origin_optarg) {
+	__pmAddOptArchivePath(&opts);
 	source = opts.archives[0];
 	type = archive = 1;
     }
@@ -1044,17 +1049,17 @@ main(int argc, char *argv[])
     if (opts.context != PM_CONTEXT_ARCHIVE) {
 	if (rawArchive) {
 	    pmprintf("%s: uninterpolated mode can only be used with archives",
-		    pmProgname);
+		    pmGetProgname());
 	    opts.errors++;
 	}
 	if (pauseFlag) {
-	    pmprintf("%s: delay can only be used with archives\n", pmProgname);
+	    pmprintf("%s: delay can only be used with archives\n", pmGetProgname());
 	    opts.errors++;
 	}
     }
     else {
 	if (opts.guiflag && pauseFlag) {
-	    pmprintf("%s: guiflag cannot be used with delay\n", pmProgname);
+	    pmprintf("%s: guiflag cannot be used with delay\n", pmGetProgname());
 	    opts.errors++;
 	}
     }
@@ -1067,13 +1072,13 @@ main(int argc, char *argv[])
     if ((sts = ctx = pmNewContext(opts.context, source)) < 0) {
 	if (opts.context == PM_CONTEXT_ARCHIVE)
 	    fprintf(stderr, "%s: Cannot open archive \"%s\": %s\n",
-		    pmProgname, source, pmErrStr(sts));
+		    pmGetProgname(), source, pmErrStr(sts));
 	else if (opts.context == PM_CONTEXT_HOST)
 	    fprintf(stderr, "%s: Cannot connect to PMCD on host \"%s\": %s\n",
-		    pmProgname, source, pmErrStr(sts));
+		    pmGetProgname(), source, pmErrStr(sts));
 	else
 	    fprintf(stderr, "%s: Cannot establish local context: %s\n",
-		    pmProgname, pmErrStr(sts));
+		    pmGetProgname(), pmErrStr(sts));
 	exit(EXIT_FAILURE);
     }
 
@@ -1083,7 +1088,7 @@ main(int argc, char *argv[])
     context.hostname = pmGetContextHostName(ctx);
     if (strlen(context.hostname) == 0) {
 	fprintf(stderr, "%s: Cannot evaluate context host name: %s\n",
-		    pmProgname, pmErrStr(sts));
+		    pmGetProgname(), pmErrStr(sts));
 	exit(EXIT_FAILURE);
     }
 
@@ -1110,10 +1115,10 @@ main(int argc, char *argv[])
 	amode != PM_MODE_FORW) {
 	double start, finish, origin, delta;
 
-	start  = __pmtimevalToReal(&opts.start);
-	finish = __pmtimevalToReal(&opts.finish);
-	origin = __pmtimevalToReal(&opts.origin);
-	delta  = __pmtimevalToReal(&opts.interval);
+	start  = pmtimevalToReal(&opts.start);
+	finish = pmtimevalToReal(&opts.finish);
+	origin = pmtimevalToReal(&opts.origin);
+	delta  = pmtimevalToReal(&opts.interval);
 
 	opts.samples = (int) ((finish - origin) / delta);
 	if (opts.samples < 0)
@@ -1174,7 +1179,7 @@ main(int argc, char *argv[])
 
     if ((fixed == 0 && fixed > cols) || (fixed > 0 && fixed > cols - 2)) {
 	fprintf(stderr, "%s: -f %d too large for column width %d\n",
-		pmProgname, fixed, cols);
+		pmGetProgname(), fixed, cols);
 	exit(EXIT_FAILURE);
     }
 
@@ -1202,7 +1207,7 @@ main(int argc, char *argv[])
 		    printlabels(&context);
 		if (rawEvents) {
 		    if (opts.guiflag || opts.context == PM_CONTEXT_ARCHIVE) {
-			__pmPrintStamp(stdout, &rslt2->timestamp);
+			pmPrintStamp(stdout, &rslt2->timestamp);
 			printf("  ");
 		    }
 		    printevents(&context, rslt2->vset[idx2], cols);
@@ -1212,14 +1217,14 @@ main(int argc, char *argv[])
 		else if (rawCounter || (context.desc.sem != PM_SEM_COUNTER)) {
 		    /* not doing rate conversion, report this value immediately */
 		    if (opts.guiflag || opts.context == PM_CONTEXT_ARCHIVE)
-			__pmPrintStamp(stdout, &rslt2->timestamp);
+			pmPrintStamp(stdout, &rslt2->timestamp);
 		    printvals(&context, rslt2->vset[idx2], cols);
 		    reporting = 1;
 		    continue;
 		}
 		else if (no_values || reporting) {
 		    if (opts.guiflag || opts.context == PM_CONTEXT_ARCHIVE) {
-			__pmPrintStamp(stdout, &rslt2->timestamp);
+			pmPrintStamp(stdout, &rslt2->timestamp);
 			printf("  ");
 		    }
 		    printf("No values available\n");
@@ -1269,7 +1274,7 @@ main(int argc, char *argv[])
 
 	/* print values */
 	if (opts.guiflag || opts.context == PM_CONTEXT_ARCHIVE) {
-	    __pmPrintStamp(stdout, &rslt1->timestamp);
+	    pmPrintStamp(stdout, &rslt1->timestamp);
 	    if (rawEvents)
 		printf("  ");
 	}

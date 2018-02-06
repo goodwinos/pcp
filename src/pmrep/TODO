@@ -1,35 +1,28 @@
--  opt to write cols per row with stdout output [-k]
--  -Q/-B/-Y to override per-metric settings unit/scale
--  shorten unit display count/s -> c/s if needed
--  opt to output in short format (see pmdumptext -F / pmNumberStr) [-m/-M]
--  opt to support pmdumptext -X like output (or shorten inst names if needed)
--  support rate display also for non-cumulative counters
--  support displaying raw/rate as per given unit
--  (re)add runtime directive to config file
--  add JSON output support
--  add XML output support (like sadf)
--  add XLS output support (like sar2xls)
--  add more test cases, both expected ok / fail cases
--  possibly add more command line switch sanity checking
--  modularize code to allow creating custom output plugins
--    (e.g. pcp2graphite type socket, top-like output, separate pcp2zabbix)
--  per-metric precision (?)
--  copy metric set spec support (?)
+-  comment, clean up, optimize code
+-  drop RHEL 6 / Python 2.6 support around RHEL 6 EOL (ca. 2020)
+-  drop RHEL 7 / Python 2.x support around RHEL 7 EOL (ca. 2024)
+
+-  add labels support [-m/-M]
+
+-  pmvis (or pmvisual) - report archive (or even live) metrics
+   visually as diagrams / histograms on text based terminals -
+   & pmrep style output with top-like (static) fields/columns.
+
+-  pmdiag (or pmdoctor) - inspect archives, report anomalies,
+   information, offer suggestions, send reports, build on top
+   of pmie/pmrep/pmlogsummary, allow using for automation.
+
 -  includedir config file support (?)
--  generalised daemon startup support (?)
--  multi-sheet support for xlsx output (?)
--  consider using the csv module for csv output (?)
--  add option to prevent truncating string output (?)
--  generalized zabbix_interval (limit writes to archive) (?)
--  support for concurrent output targets (e.g. archive+stdout) (?)
+-  copy directive conf file support (?)
+-  generalized zabbix_interval (write to target in batches) (?)
 
 -----
 
 In use / reserved cmd line options:
-AaBbCcDdEeFfGHhIiKLlOoPpQqrSsTtUuVvwXxYyZz
+012389AaBbCcDdEeFfGgHhIiJjKkLlNnOoPpQqRrSsTtUuVvWwXxYyZz
 
 Tentatively planned:
-kMmR
+Mm
 
 Available:
-gJjNnW
+4567

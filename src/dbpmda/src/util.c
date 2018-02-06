@@ -16,6 +16,7 @@
 #include "./dbpmda.h"
 #include "./lex.h"
 #include "./gram.h"
+#include <pcp/deprecated.h>
 
 /*
  * This works because ...
@@ -30,7 +31,7 @@ extern pmdaInterface	dispatch;
 extern int		infd;
 extern int		outfd;
 
-__pmProfile		*profile;
+pmProfile		*profile;
 int			profile_changed;
 int			timer;
 int			get_desc;
@@ -45,12 +46,12 @@ static int		argc;
 void
 reset_profile(void)
 {
-    if ((profile = (__pmProfile *)realloc(profile, sizeof(__pmProfile))) == NULL) {
-	__pmNoMem("reset_profile", sizeof(__pmProfile), PM_FATAL_ERR);
+    if ((profile = (pmProfile *)realloc(profile, sizeof(pmProfile))) == NULL) {
+	pmNoMem("reset_profile", sizeof(pmProfile), PM_FATAL_ERR);
 	exit(1);
     }
     ctxp->c_instprof = profile;
-    memset(profile, 0, sizeof(__pmProfile));
+    memset(profile, 0, sizeof(pmProfile));
     profile->state = PM_PROFILE_INCLUDE;        /* default global state */
     profile_changed = 1;
 }
@@ -67,7 +68,7 @@ setup_context(void)
      * we don't want or need any PMDAs to be loaded for this one
      * PM_CONTEXT_LOCAL context
      */
-    __pmSpecLocalPMDA("clear");
+    pmSpecLocalPMDA("clear");
 
     if ((sts = pmNewContext(PM_CONTEXT_LOCAL, NULL)) < 0) {
 	fprintf(stderr, "setup_context: creation failed: %s\n", pmErrStr(sts));
@@ -193,7 +194,7 @@ addarglist(char *arg)
 
     if (param.argc >= argc) {
         argc = param.argc;
-	argv = (char **)realloc(argv, argc * sizeof(pmProgname));
+	argv = (char **)realloc(argv, argc * sizeof(char *));
 	if (argv == NULL) {
 	    fprintf(stderr, "addarglist: realloc failed: %s\n", osstrerror());
 	    exit(1);
@@ -222,7 +223,7 @@ watch(char *fname)
 }
 
 void
-printindom(FILE *f, __pmInResult *irp)
+printindom(FILE *f, pmInResult *irp)
 {
     int		i;
 
@@ -303,7 +304,7 @@ dohelp(int command, int full)
 	    puts("label indom indom#");
 	    puts("label cluster cluster#");
 	    puts("label item metric");
-	    puts("label instances metric");
+	    puts("label instances indom#");
 	    break;
 	case NAMESPACE:
 	    puts("namespace fname");
@@ -584,7 +585,7 @@ _dbDumpResult(FILE *f, pmResult *resp, pmDesc *desc_list)
 
     fprintf(f, "pmResult dump from " PRINTF_P_PFX "%p timestamp: %d.%06d ",
         resp, (int)resp->timestamp.tv_sec, (int)resp->timestamp.tv_usec);
-    __pmPrintStamp(f, &resp->timestamp);
+    pmPrintStamp(f, &resp->timestamp);
     fprintf(f, " numpmid: %d\n", resp->numpmid);
     for (i = 0; i < resp->numpmid; i++) {
 	pmValueSet	*vsp = resp->vset[i];

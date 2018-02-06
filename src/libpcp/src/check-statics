@@ -157,7 +157,6 @@ discovery.o
     group			# single-threaded server scope
     done_default		# guarded by __pmLock_extcall mutex
     def_timeout			# guarded by __pmLock_extcall mutex
-checksum.o
 config.o
     ?__pmNativeConfig		# const
     config_lock		# local mutex
@@ -214,7 +213,7 @@ derive_parser.tab.o
     tokbuf			# guarded by registered.mutex
     tokbuflen			# guarded by registered.mutex
     string			# guarded by registered.mutex
-    this			# guarded by registered.mutex
+    lexicon			# guarded by registered.mutex
     lexpeek			# guarded by registered.mutex
     ?registered			# guarded by registered.mutex
     pmid			# guarded by registered.mutex
@@ -271,6 +270,8 @@ events.o
     ?pmUnpackHighResEventRecords.caller	# const
 exec.o
     exec_lock			# local mutex
+    map				# guarded by exec_lock mutex
+    nmap			# guarded by exec_lock mutex
 fault.o
 fetchlocal.o
     splitlist			# single-threaded PM_SCOPE_DSO_PMDA
@@ -307,10 +308,12 @@ interp.o
     ignore_mark_records		# no unsafe side-effects, see notes in util.c
     ignore_mark_gap		# no unsafe side-effects, see notes in util.c
 io.o
+    compress_ctl		# const
+    ?ncompress			# const
 io_stdio.o
      __pm_stdio			# file operations using stdio
-io_xz.o
-#    __pm_xz			# file operations using xz decompression
+?io_xz.o
+    __pm_xz			# file operations using xz decompression
 ipc.o
     ipc_lock			# local mutex
     __pmIPCTable		# guarded by ipc_lock mutex
@@ -346,8 +349,6 @@ logportmap.o
 logutil.o
     logutil_lock		# local mutex
     tbuf			# __pmLogName deprecated by __pmLogName_r
-    compress_ctl		# const
-    ?ncompress			# const
     ?__pmLogReads		# diag counter, no atomic updates
     pc_hc			# guarded by logutil_lock mutex
 secureserver.o
@@ -417,6 +418,7 @@ pmns.o
     ?curr_pmns			# thread private (no __thread symbols for Mac OS X)
     ?__emutls_t.curr_pmns	# thread private for OpenBSD
     locerr			# no unsafe side-effects, see notes in pmns.c
+    argp			# guarded by exec_lock
 p_pmns.o
 p_profile.o
 p_result.o
@@ -485,9 +487,6 @@ util.o
     fname			# guarded by __pmLock_libpcp mutex
     msgsize			# guarded by __pmLock_libpcp mutex
     ?base			# no unsafe side-effects, see notes in util.c
-    first			# __pmEventType deprecated by __pmEventType_r
-    last			# __pmEventType deprecated by __pmEventType_r
-    sum				# __pmEventType deprecated by __pmEventType_r
     ?bp				# const
     ?dp_h			# const
     ?dp_l			# const
@@ -495,6 +494,7 @@ util.o
     xconfirm			# no unsafe side-effects, see notes in util.c
     tmpdir_init			# no unsafe side-effects, see notes in util.c
     tmpdir			# no unsafe side-effects, see notes in util.c
+deprecated.o
 ?win32.o
 END				# this is magic, DO NOT DELETE THIS LINE
 End-of-File

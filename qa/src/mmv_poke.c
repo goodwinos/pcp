@@ -6,7 +6,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include "libpcp.h"
 #include <pcp/mmv_stats.h>
 #include <pcp/mmv_dev.h>
 
@@ -20,7 +20,7 @@ usage(void)
 	"Options:\n"
 	"  -f flag  set flag in header (none, noprefix, process, sentinel)\n"
 	"  -p pid   overwrite MMV file PID with given PID\n",
-	pmProgname);
+	pmGetProgname());
     exit(1);
 }
 
@@ -56,7 +56,7 @@ main(int argc, char **argv)
     char *file, *flags = NULL;
     int c, err = 0, pid = 0;
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
     while ((c = getopt(argc, argv, "f:p:")) != EOF) {
 	switch (c) {
 	case 'f':

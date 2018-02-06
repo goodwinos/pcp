@@ -319,9 +319,9 @@ pcp.preinst:	pcp.preinst.head $(SCRIPTS)/cleanconfigs configversions pcp.preinst
 	rm -f $@
 	cat pcp.preinst.head $(SCRIPTS)/cleanconfigs configversions pcp.preinst.tail > $@
 
-pcp.postinst:	pcp.postinst.head $(SCRIPTS)/cleantmpdirs configversions pcp.postinst.tail
+pcp.postinst:	pcp.postinst.head configversions pcp.postinst.tail
 	rm -f $@
-	cat pcp.postinst.head $(SCRIPTS)/cleantmpdirs configversions pcp.postinst.tail > $@
+	cat pcp.postinst.head configversions pcp.postinst.tail > $@
 
 pcp.postrm:	pcp.postrm.head configversions pcp.postrm.tail
 	rm -f $@
@@ -345,6 +345,12 @@ endif
 
 control:	control.master control.webapi control.pcpgui fixcontrol.master
 	./fixcontrol.master >control
+ifeq ($(ENABLE_PYTHON2), true)
+	cat control.python2 >>control
+endif
+ifeq ($(ENABLE_PYTHON3), true)
+	cat control.python3 >>control
+endif
 ifeq ($(HAVE_WEBAPPS), true)
 	cat control.vector >>control
 endif

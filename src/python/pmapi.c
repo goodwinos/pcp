@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2017 Red Hat.
+ * Copyright (C) 2012-2018 Red Hat.
  * Copyright (C) 2009-2012 Michael T. Werner
  *
  * This file is part of the "pcp" module, the python interfaces for the
@@ -26,7 +26,8 @@
 
 #include <Python.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include <pcp/libpcp.h>
+#include <pcp/deprecated.h>
 
 #if PY_MAJOR_VERSION >= 3
 #define MOD_ERROR_VAL NULL
@@ -136,14 +137,14 @@ timevalToReal(PyObject *self, PyObject *args, PyObject *keywords)
     struct timeval ctv;
     long seconds, useconds;
     char *keyword_list[] = {"seconds", "useconds", NULL};
-    extern double __pmtimevalToReal(const struct timeval *);
+    extern double pmtimevalToReal(const struct timeval *);
 
     if (!PyArg_ParseTupleAndKeywords(args, keywords,
                         "ll:pmtimevalToReal", keyword_list, &seconds, &useconds))
         return NULL;
     ctv.tv_sec = seconds;
     ctv.tv_usec = useconds;
-    return Py_BuildValue("d", __pmtimevalToReal(&ctv));
+    return Py_BuildValue("d", pmtimevalToReal(&ctv));
 }
 
 static PyObject *
@@ -151,19 +152,19 @@ setIdentity(PyObject *self, PyObject *args, PyObject *keywords)
 {
     char *name;
     char *keyword_list[] = {"name", NULL};
-    extern int __pmSetProcessIdentity(const char *);
+    extern int pmSetProcessIdentity(const char *);
 
     if (!PyArg_ParseTupleAndKeywords(args, keywords,
                         "s:pmSetProcessIdentity", keyword_list, &name))
         return NULL;
-    return Py_BuildValue("i", __pmSetProcessIdentity(name));
+    return Py_BuildValue("i", pmSetProcessIdentity(name));
 }
 
 static PyObject *
 makeTime(PyObject *self, PyObject *args, PyObject *keywords)
 {
     struct tm tm;
-    int gmtoff = 0;
+    long gmtoff = 0;
     char *zone = NULL;
     char *keyword_list[] = {"tm_sec", "tm_min", "tm_hour",
 			    "tm_mday", "tm_mon", "tm_year",
@@ -653,13 +654,13 @@ setOptionSamples(PyObject *self, PyObject *args, PyObject *keywords)
 
     if (options.finish_optarg) {
 	pmprintf("%s: at most one of finish time and sample count allowed\n",
-		pmProgname);
+		pmGetProgname());
 	options.errors++;
     } else {
 	options.samples = (int)strtol(count, &endnum, 10);
 	if (*endnum != '\0' || options.samples < 0) {
 	    pmprintf("%s: sample count must be a positive numeric argument\n",
-		pmProgname);
+		pmGetProgname());
 	    options.errors++;
 	}
     }
@@ -679,7 +680,7 @@ setOptionInterval(PyObject *self, PyObject *args, PyObject *keywords)
 
     if (pmParseInterval(delta, &options.interval, &errmsg) < 0) {
 	pmprintf("%s: interval argument not in pmParseInterval(3) format:\n",
-		pmProgname);
+		pmGetProgname());
 	pmprintf("%s\n", errmsg);
 	options.errors++;
 	free(errmsg);
@@ -843,7 +844,7 @@ getOptionsFromList(PyObject *self, PyObject *args, PyObject *keywords)
 #endif
 
 	/* All parameters may be referred back to later, e.g. via
-	 * pmProgname or getOperands (and others), so we need to
+	 * pmGetProgname() or getOperands (and others), so we need to
 	 * allocate the memory to hold these strings permanently.
          */
 	if ((string = strdup(string)) == NULL) {
@@ -913,7 +914,7 @@ setContextOptions(PyObject *self, PyObject *args, PyObject *keywords)
 	    mode |= PM_XTB_SET(PM_TIME_MSEC);
 	}
 	if ((sts = pmSetMode(mode, &position, step)) < 0) {
-	    pmprintf("%s: pmSetMode: %s\n", pmProgname, pmErrStr(sts));
+	    pmprintf("%s: pmSetMode: %s\n", pmGetProgname(), pmErrStr(sts));
 	    options.flags |= PM_OPTFLAG_RUNTIME_ERR;
 	    options.errors++;
 	}
@@ -1060,6 +1061,11 @@ getOptionArchives(PyObject *self, PyObject *args)
     PyObject	*result;
     int		i;
 
+    /* default to localhost archives with unqualified -O/--origin option */
+    if (options.origin_optarg != NULL &&
+	options.narchives <= 0 && options.nhosts <= 0 && !options.Lflag)
+	__pmAddOptArchivePath(&options);
+
     if (options.narchives > 0) {
 	if ((result = PyList_New(options.narchives)) == NULL)
 	    return PyErr_NoMemory();
@@ -1074,6 +1080,7 @@ getOptionArchives(PyObject *self, PyObject *args)
 	Py_INCREF(result);
 	return result;
     }
+
     Py_INCREF(Py_None);
     return Py_None;
 }
@@ -1533,6 +1540,7 @@ MOD_INIT(cpmapi)
     dict_add(dict, "PMCD_DROP_AGENT", PMCD_DROP_AGENT);
     dict_add(dict, "PMCD_AGENT_CHANGE", PMCD_AGENT_CHANGE);
     dict_add(dict, "PMCD_LABEL_CHANGE", PMCD_LABEL_CHANGE);
+    dict_add(dict, "PMCD_NAMES_CHANGE", PMCD_NAMES_CHANGE);
 
     dict_add(dict, "PM_MAXLABELS", PM_MAXLABELS);
     dict_add(dict, "PM_MAXLABELJSONLEN", PM_MAXLABELJSONLEN);

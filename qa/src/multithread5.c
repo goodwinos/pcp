@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include <pthread.h>
 
 #ifndef HAVE_PTHREAD_BARRIER_T
@@ -167,7 +166,7 @@ main(int argc, char **argv)
     int		errflag = 0;
     int		c;
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     while ((c = getopt(argc, argv, "D:")) != EOF) {
 	switch (c) {
@@ -176,7 +175,7 @@ main(int argc, char **argv)
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
@@ -189,7 +188,7 @@ main(int argc, char **argv)
     }
 
     if (errflag || optind == argc || argc-optind > 3) {
-	fprintf(stderr, "Usage: %s [-D...] host1 [host2 [host3]]\n", pmProgname);
+	fprintf(stderr, "Usage: %s [-D...] host1 [host2 [host3]]\n", pmGetProgname());
 	exit(1);
     }
 

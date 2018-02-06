@@ -17,7 +17,7 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "data.h"
 
 int
@@ -50,7 +50,7 @@ instprint(__pmHashTable *t, void *e)
 {
     instdata_t	*i = (instdata_t *)e;
 
-    __pmNotifyErr(LOG_DEBUG, "Instance history table entry\n"
+    pmNotifyErr(LOG_DEBUG, "Instance history table entry\n"
 	"Name:      '%s'\n type:     %d\n inst:     %d\n",
 	i->tag, i->type, i->instid);
 }
@@ -86,7 +86,7 @@ dataprint(__pmHashTable *t, void *e)
 {
     hashdata_t	*h = (hashdata_t *)e;
 
-    __pmNotifyErr(LOG_DEBUG, "PMDA hash table entry\n"
+    pmNotifyErr(LOG_DEBUG, "PMDA hash table entry\n"
 	"Name:      '%s'\n filedes:  %d\n"
 	" type:     %d\n length:   %d\n"
 	" padding:  %d\n count:    %d\n"
@@ -99,19 +99,19 @@ dataprint(__pmHashTable *t, void *e)
 
 
 void
-debuglibrary(int flag)
+debuglibrary(void)
 {
     extern int	__pmstate;
     int		state;
 
     state = pmtracestate(0);
-    if (flag & DBG_TRACE_APPL0)
+    if (pmDebugOptions.appl0)
 	state |= PMTRACE_STATE_COMMS;
-    if (flag & DBG_TRACE_PDU)
+    if (pmDebugOptions.pdu)
 	state |= PMTRACE_STATE_PDU;
-    if (flag & DBG_TRACE_PDUBUF)
+    if (pmDebugOptions.pdubuf)
 	state |= PMTRACE_STATE_PDUBUF;
-    if (flag == 0)
+    if (somedebug == 0)
 	__pmstate = 0;
     else
 	pmtracestate(state);

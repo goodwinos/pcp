@@ -1,0 +1,7 @@
+{
+    "directory_list" : [
+	"@PCP_TMP_DIR@/json"
+    ],
+    "trusted_directory_list" : [
+    ]
+}

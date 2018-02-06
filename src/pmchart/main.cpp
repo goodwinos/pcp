@@ -19,10 +19,12 @@
 #include <QDesktopWidget>
 #include "main.h"
 #include "openviewdialog.h"
+#include <pcp/libpcp.h>
 
 #define DESPERATE 0
 
 int Cflag;
+int Dflag;
 int Hflag;
 int Lflag;
 int Wflag;
@@ -85,7 +87,7 @@ int tcmp(struct timeval *a, struct timeval *b)
 // create a time range in seconds from (delta x points)
 double torange(struct timeval t, int points)
 {
-    return __pmtimevalToReal(&t) * points;
+    return pmtimevalToReal(&t) * points;
 }
 
 // debugging, display seconds-since-epoch in human readable format
@@ -126,7 +128,7 @@ void setupEnvironment(void)
     char *value;
     QString confirm = pmGetConfig("PCP_BIN_DIR");
     confirm.prepend("PCP_XCONFIRM_PROG=");
-    confirm.append(QChar(__pmPathSeparator()));
+    confirm.append(QChar(pmPathSeparator()));
     confirm.append("pmquery");
     if ((value = strdup((const char *)confirm.toLatin1())) != NULL)
 	putenv(value);
@@ -135,14 +137,14 @@ void setupEnvironment(void)
 	putenv(value);
 
     QCoreApplication::setOrganizationName("PCP");
-    QCoreApplication::setApplicationName(pmProgname);
+    QCoreApplication::setApplicationName(pmGetProgname());
 }
 
 void writeSettings(void)
 {
     QSettings userSettings;
 
-    userSettings.beginGroup(pmProgname);
+    userSettings.beginGroup(pmGetProgname());
     if (globalSettings.chartDeltaModified) {
 	globalSettings.chartDeltaModified = false;
 	userSettings.setValue("chartDelta", globalSettings.chartDelta);
@@ -263,7 +265,7 @@ void checkHistory(int samples, int visible)
 static void readSettings(void)
 {
     QSettings userSettings;
-    userSettings.beginGroup(pmProgname);
+    userSettings.beginGroup(pmGetProgname());
 
     //
     // Parameters related to sampling
@@ -375,7 +377,7 @@ static void readSettings(void)
 
 static void readSchemes(void)
 {
-    QChar sep(__pmPathSeparator());
+    QChar sep(pmPathSeparator());
     QString schemes = pmGetConfig("PCP_VAR_DIR");
     schemes.append(sep).append("config");
     schemes.append(sep).append("pmchart");
@@ -436,6 +438,8 @@ override(int opt, pmOptions *opts)
     (void)opts;
     if (opt == 'g')
 	return 1;
+    if (opt == 'D')
+	Dflag = 1;
     if (opt == 'H')
 	Hflag = 1;
     if (opt == 'L')
@@ -459,8 +463,8 @@ main(int argc, char ** argv)
     pmOptions		opts;
 
     memset(&opts, 0, sizeof(opts));
-    __pmtimevalNow(&opts.origin);
-    __pmSetProgname(argv[0]);
+    pmtimevalNow(&opts.origin);
+    pmSetProgname(argv[0]);
     QApplication a(argc, argv);
     setupEnvironment();
     readSettings();
@@ -489,7 +493,7 @@ main(int argc, char ** argv)
 	case 'F':
 	    sts = (int)strtol(opts.optarg, &endnum, 10);
 	    if (*endnum != '\0' || c < 0) {
-		pmprintf("%s: -F requires a numeric argument\n", pmProgname);
+		pmprintf("%s: -F requires a numeric argument\n", pmGetProgname());
 		opts.errors++;
 	    } else {
 		globalSettings.fontSize = sts;
@@ -512,7 +516,7 @@ main(int argc, char ** argv)
 	    vh = (int)strtol(opts.optarg, &endnum, 10);
 	    if (*endnum != '\0' || vh < 1) {
 		pmprintf("%s: -v requires a numeric argument, larger than 1\n",
-			 pmProgname);
+			 pmGetProgname());
 		opts.errors++;
 	    }
 	    break;
@@ -557,7 +561,7 @@ main(int argc, char ** argv)
 
     /* set initial sampling interval from command line, else global setting */
     if (opts.interval.tv_sec == 0 && opts.interval.tv_usec == 0)
-	__pmtimevalFromReal(globalSettings.chartDelta, &opts.interval);
+	pmtimevalFromReal(globalSettings.chartDelta, &opts.interval);
 
     console = new QedConsole(opts.origin);
 
@@ -576,7 +580,7 @@ main(int argc, char ** argv)
 	checkHistory(sh, vh);
 	if (globalSettings.sampleHistoryModified ||
 	    globalSettings.visibleHistoryModified) {
-	    pmprintf("%s: invalid sample/visible history\n", pmProgname);
+	    pmprintf("%s: invalid sample/visible history\n", pmGetProgname());
 	    pmflush();
 	    exit(1);
 	}
@@ -616,7 +620,7 @@ main(int argc, char ** argv)
 	    liveGroup->useTZ(QString(opts.timezone));
 	if ((sts = pmNewZone(opts.timezone)) < 0) {
 	    pmprintf("%s: cannot set timezone to \"%s\": %s\n",
-		    pmProgname, (char *)opts.timezone, pmErrStr(sts));
+		    pmGetProgname(), (char *)opts.timezone, pmErrStr(sts));
 	    pmflush();
 	    exit(1);
 	}
@@ -646,13 +650,13 @@ main(int argc, char ** argv)
 	// move position to account for initial visible points
 	if (tcmp(&opts.origin, &opts.start) <= 0)
 	    for (c = 0; c < globalSettings.visibleHistory - 2; c++)
-		__pmtimevalAdd(&opts.origin, &opts.interval);
+		pmtimevalAdd(&opts.origin, &opts.interval);
 	if (tcmp(&opts.origin, &opts.finish) > 0)
 	    opts.origin = opts.finish;
     }
     else {
 	liveGroup->defaultTZ(tzLabel, tzString);
-	__pmtimevalNow(&logStartTime);
+	pmtimevalNow(&logStartTime);
 	logEndTime.tv_sec = logEndTime.tv_usec = INT_MAX;
 	if ((sts = pmParseTimeWindow(opts.start_optarg, opts.finish_optarg,
 					opts.align_optarg, opts.origin_optarg,

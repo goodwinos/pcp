@@ -13,6 +13,10 @@ echo "QA output created by $seq"
 _check_pmwebd
 _check_requests_json
 
+_stop_auto_restart pmwebd # see GH #394
+_service pmwebd stop >/dev/null 2>&1
+$sudo $signal -a pmwebd >/dev/null 2>&1
+
 $sudo rm -f $tmp.* $seq.full
 
 pyscript=src/test_webapi.py
@@ -30,12 +34,14 @@ _cleanup()
 	$signal -s TERM $webpid
 	webpid=""
     fi
+    _restore_auto_restart pmwebd
+    _service pmwebd restart >/dev/null 2>&1
     $sudo rm -f $tmp.*
 }
 
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
-$PCP_BINADM_DIR/pmwebd $webargs -p $webport -l $tmp.out -v -t5 &
+$PCP_BINADM_DIR/pmwebd -l $tmp.out $webargs -p $webport -v -t5 &
 webpid=$!
 echo "pid=$webpid" >>$seq.full
 echo "webport=$webport" >>$seq.full

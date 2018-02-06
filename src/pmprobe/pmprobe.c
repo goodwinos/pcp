@@ -17,7 +17,7 @@
 
 #include <unistd.h>
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 
 static char	**namelist;
 static pmID	*pmidlist;
@@ -76,15 +76,15 @@ dometric(const char *name)
 	listsize = listsize == 0 ? 16 : listsize * 2;
 	size = listsize * sizeof(pmidlist[0]);
 	if ((pmidlist = (pmID *)realloc(pmidlist, size)) == NULL)
-	    __pmNoMem("realloc pmidlist", size, PM_FATAL_ERR);
+	    pmNoMem("realloc pmidlist", size, PM_FATAL_ERR);
 	size = listsize * sizeof(namelist[0]);
 	if ((namelist = (char **)realloc(namelist, size)) == NULL)
-	    __pmNoMem("realloc namelist", size, PM_FATAL_ERR);
+	    pmNoMem("realloc namelist", size, PM_FATAL_ERR);
     }
 
     namelist[numpmid]= strdup(name);
     if (namelist[numpmid] == NULL)
-	__pmNoMem("strdup name", strlen(name), PM_FATAL_ERR);
+	pmNoMem("strdup name", strlen(name), PM_FATAL_ERR);
 
     numpmid++;
 }
@@ -136,7 +136,7 @@ main(int argc, char **argv)
 
 	case 'i':	/* report internal instance numbers */
 	    if (vflag) {
-		pmprintf("%s: at most one of -i and -v allowed\n", pmProgname);
+		pmprintf("%s: at most one of -i and -v allowed\n", pmGetProgname());
 		opts.errors++;
 	    }
 	    iflag++;
@@ -144,7 +144,7 @@ main(int argc, char **argv)
 
 	case 'I':	/* report external instance names */
 	    if (vflag) {
-		pmprintf("%s: at most one of -I and -v allowed\n", pmProgname);
+		pmprintf("%s: at most one of -I and -v allowed\n", pmGetProgname());
 		opts.errors++;
 	    }
 	    Iflag++;
@@ -155,7 +155,7 @@ main(int argc, char **argv)
 	    break;
 
 	case 'd':	/* version (d'oh - 'V' already in use) */
-	    pmprintf("%s version %s\n", pmProgname, PCP_VERSION);
+	    pmprintf("%s version %s\n", pmGetProgname(), PCP_VERSION);
 	    opts.flags |= PM_OPTFLAG_EXIT;
 	    break;
 
@@ -165,7 +165,7 @@ main(int argc, char **argv)
 
 	case 'v':	/* cheap values */
 	    if (iflag || Iflag) {
-		pmprintf("%s: at most one of -v and (-i or -I) allowed\n", pmProgname);
+		pmprintf("%s: at most one of -v and (-i or -I) allowed\n", pmGetProgname());
 		opts.errors++;
 	    }
 	    vflag++;
@@ -197,13 +197,13 @@ main(int argc, char **argv)
     if ((sts = c = pmNewContext(opts.context, source)) < 0) {
 	if (opts.context == PM_CONTEXT_HOST)
 	    fprintf(stderr, "%s: Cannot connect to PMCD on host \"%s\": %s\n",
-		pmProgname, source, pmErrStr(sts));
+		pmGetProgname(), source, pmErrStr(sts));
 	else if (opts.context == PM_CONTEXT_LOCAL)
 	    fprintf(stderr, "%s: Cannot make standalone connection on localhost: %s\n",
-		    pmProgname, pmErrStr(sts));
+		    pmGetProgname(), pmErrStr(sts));
 	else
 	    fprintf(stderr, "%s: Cannot open archive \"%s\": %s\n",
-		pmProgname, source, pmErrStr(sts));
+		pmGetProgname(), source, pmErrStr(sts));
 	exit(1);
     }
 
@@ -295,7 +295,7 @@ main(int argc, char **argv)
 	     * merics from archives are fetched one at a time, otherwise
 	     * get them all at once
 	     */
-	    if ((sts = pmSetMode(PM_MODE_FORW, &opts.start, 0)) < 0) {
+	    if ((sts = pmSetMode(PM_MODE_FORW, &opts.origin, 0)) < 0) {
 		printf("%d %s (pmSetMode)\n", sts, pmErrStr(sts));
 		continue;
 	    }

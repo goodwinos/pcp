@@ -9,7 +9,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include "libpcp.h"
 
 int
 main(int argc, char **argv)
@@ -36,14 +36,14 @@ main(int argc, char **argv)
     pmDesc	desc;
     int		type[3];
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     while ((c = getopt(argc, argv, "a:D:n:s:t:?")) != EOF) {
 	switch (c) {
 
 	case 'a':	/* archive name */
 	    if (ahtype != 0) {
-		fprintf(stderr, "%s: at most one of -a and/or -h allowed\n", pmProgname);
+		fprintf(stderr, "%s: at most one of -a and/or -h allowed\n", pmGetProgname());
 		errflag++;
 	    }
 	    ahtype = PM_CONTEXT_ARCHIVE;
@@ -54,7 +54,7 @@ main(int argc, char **argv)
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
@@ -66,7 +66,7 @@ main(int argc, char **argv)
 	case 's':	/* sample count */
 	    samples = (int)strtol(optarg, &endnum, 10);
 	    if (*endnum != '\0' || samples < 0) {
-		fprintf(stderr, "%s: -s requires numeric argument\n", pmProgname);
+		fprintf(stderr, "%s: -s requires numeric argument\n", pmGetProgname());
 		errflag++;
 	    }
 	    break;
@@ -74,7 +74,7 @@ main(int argc, char **argv)
 	case 't':	/* delta seconds (double) */
 	    delta = strtod(optarg, &endnum);
 	    if (*endnum != '\0' || delta <= 0.0) {
-		fprintf(stderr, "%s: -t requires floating point argument\n", pmProgname);
+		fprintf(stderr, "%s: -t requires floating point argument\n", pmGetProgname());
 		errflag++;
 	    }
 	    break;
@@ -96,30 +96,30 @@ Options\n\
   -n   namespace  use an alternative PMNS\n\
   -s   samples	  terminate after this many iterations\n\
   -t   delta	  sample interval in seconds(float) [default 1.0]\n",
-		pmProgname);
+		pmGetProgname());
 	exit(1);
     }
 
     if (namespace != PM_NS_DEFAULT) {
 	if ((sts = pmLoadASCIINameSpace(namespace, 1)) < 0) {
-	    printf("%s: Cannot load namespace from \"%s\": %s\n", pmProgname, namespace, pmErrStr(sts));
+	    printf("%s: Cannot load namespace from \"%s\": %s\n", pmGetProgname(), namespace, pmErrStr(sts));
 	    exit(1);
 	}
     }
 
     if (ahtype != PM_CONTEXT_ARCHIVE) {
-	fprintf(stderr, "%s: -a is not optional!\n", pmProgname);
+	fprintf(stderr, "%s: -a is not optional!\n", pmGetProgname());
 	exit(1);
     }
     if ((sts = pmNewContext(ahtype, host)) < 0) {
 	fprintf(stderr, "%s: Cannot open archive \"%s\": %s\n",
-	    pmProgname, host, pmErrStr(sts));
+	    pmGetProgname(), host, pmErrStr(sts));
 	exit(1);
     }
 
     if ((sts = pmGetArchiveLabel(&label)) < 0) {
 	fprintf(stderr, "%s: Cannot get archive label record: %s\n",
-	    pmProgname, pmErrStr(sts));
+	    pmGetProgname(), pmErrStr(sts));
 	exit(1);
     }
 
@@ -184,8 +184,8 @@ Options\n\
 	}
 	if (prev) {
 	    struct timeval tmp = result->timestamp;
-	    __pmtimevalDec(&tmp, &prev->timestamp);
-	    tdiff = __pmtimevalToReal(&tmp);
+	    pmtimevalDec(&tmp, &prev->timestamp);
+	    tdiff = pmtimevalToReal(&tmp);
 	    printf("\nsample %d, delta time=%.3f secs\n", i, tdiff);
 	    for (j = 0; j < numpmid; j++) {
 		printf("%s: ", name[j]);
@@ -230,8 +230,8 @@ Options\n\
 			} else {
 			    for (r = 0; r < sts; r++) {
 				struct timeval tmp = records[r]->timestamp;
-				__pmtimevalDec(&tmp, &prev->timestamp);
-				tdiff = __pmtimevalToReal(&tmp);
+				pmtimevalDec(&tmp, &prev->timestamp);
+				tdiff = pmtimevalToReal(&tmp);
 				printf("\nevent %d, offset time=%.3f secs, param ids:", j+1, tdiff);
 				for (param = 0; param < records[r]->numpmid; param++)
 				    printf(" %s", pmIDStr(records[r]->vset[param]->pmid));

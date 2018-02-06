@@ -8,7 +8,7 @@
 #include <syslog.h>
 #include <errno.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include "libpcp.h"
 #include <pcp/pmda.h>
 #include "domain.h"
 
@@ -91,17 +91,18 @@ static pmdaMetric metrictab[] = {
 static int
 dynamic_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 {
-    __pmID_int		*idp = (__pmID_int *)&(mdesc->m_desc.pmid);
+    unsigned int	cluster = pmID_cluster(mdesc->m_desc.pmid);
+    unsigned int	item = pmID_item(mdesc->m_desc.pmid);
 
     if (inst != PM_IN_NULL &&
-	!(idp->cluster == 0 && idp->item >= 1 && idp->item <= 3))
+	!(cluster == 0 && item >= 1 && item <= 3))
 	return PM_ERR_INST;
 
-    __pmNotifyErr(LOG_DEBUG, "dynamic_fetch: %d.%d[%d]\n",
-		  idp->cluster, idp->item, inst);
+    pmNotifyErr(LOG_DEBUG, "dynamic_fetch: %d.%d[%d]\n",
+		  cluster, item, inst);
 
-    if (idp->cluster == 0) {
-	switch (idp->item) {
+    if (cluster == 0) {
+	switch (item) {
 	case 0:					/* numinst */
 	    atom->ul = numInsts;
 	    break;
@@ -140,8 +141,8 @@ dynamic_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 	    return PM_ERR_PMID;
 	}
     }
-    else if (idp->cluster == 1) {		/* dynamic.control */
-	switch(idp->item) {
+    else if (cluster == 1) {		/* dynamic.control */
+	switch(item) {
 	case 4:					/* add */
 	    atom->ul = sizeInsts;
 	    break;
@@ -188,15 +189,18 @@ dynamic_store(pmResult *result, pmdaExt *pmda)
     int		sts = 0;
     int		val;
     pmValueSet	*vsp = NULL;
-    __pmID_int	*pmidp = NULL;
 
     for (i = 0; i < result->numpmid; i++) {
+	unsigned int	cluster;
+	unsigned int	item;
+
 	vsp = result->vset[i];
-	pmidp = (__pmID_int *)&vsp->pmid;
+	cluster = pmID_cluster(vsp->pmid);
+	item = pmID_item(vsp->pmid);
 
-	if (pmidp->cluster == 1) {	/* all storable metrics are cluster 1 */
+	if (cluster == 1) {	/* all storable metrics are cluster 1 */
 
-	    switch (pmidp->item) {
+	    switch (item) {
 	    	case 4:					/* add */
 		    
 		    val = vsp->vlist[0].value.lval;
@@ -209,7 +213,7 @@ dynamic_store(pmResult *result, pmdaExt *pmda)
 			}
 			else {
 			    if (pmDebugOptions.appl0)
-				__pmNotifyErr(LOG_DEBUG, 
+				pmNotifyErr(LOG_DEBUG, 
 					      "dynamic_store: Adding instance %d (size = %d)\n",
 					      val, sizeInsts);
 
@@ -222,7 +226,7 @@ dynamic_store(pmResult *result, pmdaExt *pmda)
 		    else {
 			insts = (struct Dynamic*)realloc(insts, (val + 1) * sizeof(struct Dynamic));
 			if (insts == NULL) {
-			    __pmNotifyErr(LOG_ERR, 
+			    pmNotifyErr(LOG_ERR, 
 					  "dynamic_store: Unable to realloc %d bytes\n",
 					  (int)(val * sizeof(struct Dynamic)));
 			    sizeInsts = 0;
@@ -242,7 +246,7 @@ dynamic_store(pmResult *result, pmdaExt *pmda)
 			    numInsts++;
 
 			    if (pmDebugOptions.appl0)
-				__pmNotifyErr(LOG_DEBUG, 
+				pmNotifyErr(LOG_DEBUG, 
 					      "dynamic_store: Adding instance %d (size = %d)\n",
 					      val, sizeInsts);
 			}
@@ -253,7 +257,7 @@ dynamic_store(pmResult *result, pmdaExt *pmda)
 		    val = vsp->vlist[0].value.lval;
 		    if (val < 0) {			/* delete all */
 			    if (pmDebugOptions.appl0)
-				__pmNotifyErr(LOG_DEBUG, 
+				pmNotifyErr(LOG_DEBUG, 
 					      "dynamic_store: Removing all instances\n");
 
 			for (i = 0; i < sizeInsts; i++) {
@@ -269,7 +273,7 @@ dynamic_store(pmResult *result, pmdaExt *pmda)
 			}
 			else {
 			    if (pmDebugOptions.appl0)
-				__pmNotifyErr(LOG_DEBUG, 
+				pmNotifyErr(LOG_DEBUG, 
 					      "dynamic_store: Removing instance %d\n",
 					      val);
 			    insts[val].id = -1;
@@ -287,7 +291,7 @@ dynamic_store(pmResult *result, pmdaExt *pmda)
 		    break;
 	    }
 	}
-	else if (pmidp->cluster == 0 && pmidp->item <= 3) {
+	else if (cluster == 0 && item <= 3) {
 	    sts = -EACCES;
 	    break;
 	}
@@ -300,7 +304,7 @@ dynamic_store(pmResult *result, pmdaExt *pmda)
     if (changed) {
 
 	if (pmDebugOptions.appl0)
-	    __pmNotifyErr(LOG_DEBUG, 
+	    pmNotifyErr(LOG_DEBUG, 
 			  "dynamic_store: Resizing to %d instances\n",
 			  numInsts);
 
@@ -308,7 +312,7 @@ dynamic_store(pmResult *result, pmdaExt *pmda)
 	    instids = (pmdaInstid *)realloc(instids, 
 					    numInsts * sizeof(pmdaInstid));
 	    if (instids == NULL) {
-		__pmNotifyErr(LOG_ERR, 
+		pmNotifyErr(LOG_ERR, 
 			      "dynamic_store: Could not realloc %d bytes\n",
 			      (int)(numInsts * sizeof(pmdaInstid)));
 		sts = PM_ERR_TOOBIG;
@@ -320,7 +324,7 @@ dynamic_store(pmResult *result, pmdaExt *pmda)
 			instids[j].i_name = insts[i].name;
 
 			if (pmDebugOptions.appl1)
-			    __pmNotifyErr(LOG_DEBUG,
+			    pmNotifyErr(LOG_DEBUG,
 					  "dynamic_store: [%d] %d \"%s\"\n",
 					  j, instids[j].i_inst, 
 					  instids[j].i_name);
@@ -363,7 +367,7 @@ dynamic_init(pmdaInterface *dp)
 static void
 usage(void)
 {
-    fprintf(stderr, "Usage: %s [options]\n\n", pmProgname);
+    fprintf(stderr, "Usage: %s [options]\n\n", pmGetProgname());
     fputs("Options:\n"
 	  "  -d domain    use domain (numeric) for metrics domain of PMDA\n"
 	  "  -l logfile   write log into logfile rather than using default log name\n"
@@ -382,16 +386,16 @@ usage(void)
 int
 main(int argc, char **argv)
 {
-    int			sep = __pmPathSeparator();
+    int			sep = pmPathSeparator();
     int			err = 0;
     pmdaInterface	dispatch;
     char		helppath[MAXPATHLEN];
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
     pmsprintf(helppath, sizeof(helppath),
 		"%s%c" "testsuite" "%c" "pmdas" "%c" "dynamic" "%c" "help",
 		pmGetConfig("PCP_VAR_DIR"), sep, sep, sep, sep);
-    pmdaDaemon(&dispatch, PMDA_INTERFACE_4, pmProgname, DYNAMIC,
+    pmdaDaemon(&dispatch, PMDA_INTERFACE_4, pmGetProgname(), DYNAMIC,
 		"dynamic.log", helppath);
 
     if (pmdaGetOpt(argc, argv, "D:d:h:i:l:pu:6:?", &dispatch, &err) != EOF)

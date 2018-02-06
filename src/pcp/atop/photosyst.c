@@ -14,7 +14,6 @@
 */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 
 #include "atop.h"
 #include "photosyst.h"
@@ -56,7 +55,7 @@ sstat_alloc(const char *purpose)
 
 	ptr = calloc(1, sizeof(struct pernfsmount));
 	ptrverify(ptr, "Alloc failed for %s (NFS mounts)\n", purpose);
-	sstat->nfs.nfsmnt = (struct pernfsmount *)ptr;
+	sstat->nfs.nfsmounts.nfsmnt = (struct pernfsmount *)ptr;
 
 	return sstat;
 }
@@ -76,14 +75,14 @@ sstat_reset(struct sstat *sstat)
 	dsk = sstat->dsk.dsk;
 	lvm = sstat->dsk.lvm;
 	mdd = sstat->dsk.mdd;
-	nfs = sstat->nfs.nfsmnt;
+	nfs = sstat->nfs.nfsmounts.nfsmnt;
 
 	nrcpu = sstat->cpu.nrcpu;
 	nrintf = sstat->intf.nrintf;
 	nrdsk = sstat->dsk.ndsk;
 	nrlvm = sstat->dsk.nlvm;
 	nrmdd = sstat->dsk.nmdd;
-	nrnfs = sstat->nfs.nrmounts;
+	nrnfs = sstat->nfs.nfsmounts.nrmounts;
 
 	/* clear fixed portion now that pointers/sized are safe */
 	memset(sstat, 0, sizeof(struct sstat));
@@ -102,14 +101,14 @@ sstat_reset(struct sstat *sstat)
 	sstat->dsk.dsk = dsk;
 	sstat->dsk.lvm = lvm;
 	sstat->dsk.mdd = mdd;
-	sstat->nfs.nfsmnt = nfs;
+	sstat->nfs.nfsmounts.nfsmnt = nfs;
 
 	sstat->cpu.nrcpu = nrcpu;
 	sstat->intf.nrintf = nrintf;
 	sstat->dsk.ndsk = nrdsk;
 	sstat->dsk.nlvm = nrlvm;
 	sstat->dsk.nmdd = nrmdd;
-	sstat->nfs.nrmounts = nrnfs;
+	sstat->nfs.nfsmounts.nrmounts = nrnfs;
 }
 
 static void
@@ -246,7 +245,7 @@ photosyst(struct sstat *si)
 	onrdisk = si->dsk.ndsk;
 	onrlvm  = si->dsk.nlvm;
 	onrmdd  = si->dsk.nmdd;
-	onrnfs  = si->nfs.nrmounts;
+	onrnfs  = si->nfs.nfsmounts.nrmounts;
 
 	sstat_reset(si);
 	si->stamp = result->timestamp;
@@ -270,7 +269,11 @@ photosyst(struct sstat *si)
 
 	nrcpu = get_instances("processors", PERCPU_UTIME, descs, &ids, &insts);
 	if (nrcpu == 0)
-		nrcpu = hinv_nrcpus;
+	{
+		fprintf(stderr, "%s: no per-processor values available\n",
+			pmGetProgname());
+		cleanstop(0);
+	}
 	if (nrcpu > onrcpu)
 	{
 		size = nrcpu * sizeof(struct percpu);
@@ -281,7 +284,7 @@ photosyst(struct sstat *si)
 	{
 		if (pmDebugOptions.appl0)
 			fprintf(stderr, "%s: updating processor %d: %s\n",
-				pmProgname, ids[i], insts[i]);
+				pmGetProgname(), ids[i], insts[i]);
 		update_processor(&si->cpu.cpu[i], ids[i], result, descs);
 	}
 	si->cpu.nrcpu = nrcpu;
@@ -338,7 +341,11 @@ photosyst(struct sstat *si)
 	ids = NULL;
 	nrintf = get_instances("interfaces", PERINTF_RBYTE, descs, &ids, &insts);
 	if (nrintf == 0)
-		nrintf = hinv_nrintf;
+	{
+		fprintf(stderr, "%s: no per-interface values available\n",
+			pmGetProgname());
+		cleanstop(0);
+	}
 	if (nrintf > onrintf)
 	{
 		size = (nrintf + 1) * sizeof(struct perintf);
@@ -349,7 +356,7 @@ photosyst(struct sstat *si)
 	{
 		if (pmDebugOptions.appl0)
 			fprintf(stderr, "%s: updating interface %d: %s\n",
-				pmProgname, ids[i], insts[i]);
+				pmGetProgname(), ids[i], insts[i]);
 		update_interface(&si->intf.intf[i], ids[i], insts[i], result, descs);
 	}
 	si->intf.intf[nrintf].name[0] = '\0';
@@ -483,7 +490,11 @@ photosyst(struct sstat *si)
 	ids = NULL;
 	nrdisk = get_instances("disks", PERDISK_NREAD, descs, &ids, &insts);
 	if (nrdisk == 0)
-		nrdisk = hinv_nrdisk;
+	{
+		fprintf(stderr, "%s: no per-disk values available\n",
+			pmGetProgname());
+		cleanstop(0);
+	}
 	if (nrdisk > onrdisk)
 	{
 		size = (nrdisk + 1) * sizeof(struct perdsk);
@@ -494,7 +505,7 @@ photosyst(struct sstat *si)
 	{
 		if (pmDebugOptions.appl0)
 			fprintf(stderr, "%s: updating disk %d: %s\n",
-				pmProgname, ids[i], insts[i]);
+				pmGetProgname(), ids[i], insts[i]);
 		update_disk(&si->dsk.dsk[i], ids[i], insts[i], result, descs);
 	}
 	si->dsk.dsk[nrdisk].name[0] = '\0';
@@ -516,7 +527,7 @@ photosyst(struct sstat *si)
 	{
 		if (pmDebugOptions.appl0)
 			fprintf(stderr, "%s: updating lvm %d: %s\n",
-				pmProgname, ids[i], insts[i]);
+				pmGetProgname(), ids[i], insts[i]);
 		update_lvm(&si->dsk.lvm[i], ids[i], insts[i], result, descs);
 	}
 	si->dsk.lvm[nrlvm].name[0] = '\0'; 
@@ -539,7 +550,7 @@ photosyst(struct sstat *si)
 	{
 		if (pmDebugOptions.appl0)
 			fprintf(stderr, "%s: updating md %d: %s\n",
-				pmProgname, ids[i], insts[i]);
+				pmGetProgname(), ids[i], insts[i]);
 		update_mdd(&si->dsk.mdd[i], ids[i], insts[i], result, descs);
 	}
 	si->dsk.mdd[nrmdd].name[0] = '\0'; 
@@ -587,19 +598,19 @@ photosyst(struct sstat *si)
 	if (nrnfs > onrnfs)
 	{
 		size = (nrnfs + 1) * sizeof(struct pernfsmount);
-		si->nfs.nfsmnt = (struct pernfsmount *)realloc(si->nfs.nfsmnt, size);
-		ptrverify(si->nfs.nfsmnt, "photosyst nfs [%ld]\n", (long)size);
+		si->nfs.nfsmounts.nfsmnt = (struct pernfsmount *)realloc(si->nfs.nfsmounts.nfsmnt, size);
+		ptrverify(si->nfs.nfsmounts.nfsmnt, "photosyst nfs [%ld]\n", (long)size);
 	}
 
 	for (i=0; i < nrnfs; i++)
 	{
 		if (pmDebugOptions.appl0)
 			fprintf(stderr, "%s: updating nfsmnt %d: %s\n",
-				pmProgname, ids[i], insts[i]);
-		update_mnt(&si->nfs.nfsmnt[i], ids[i], insts[i], result, descs);
+				pmGetProgname(), ids[i], insts[i]);
+		update_mnt(&si->nfs.nfsmounts.nfsmnt[i], ids[i], insts[i], result, descs);
 	}
-	si->nfs.nfsmnt[nrnfs].mountdev[0] = '\0'; 
-	si->nfs.nrmounts = nrnfs;
+	si->nfs.nfsmounts.nfsmnt[nrnfs].mountdev[0] = '\0'; 
+	si->nfs.nfsmounts.nrmounts = nrnfs;
 	free(insts);
 	free(ids);
 

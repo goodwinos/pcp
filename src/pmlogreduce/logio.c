@@ -48,7 +48,7 @@ newlabel(void)
     /* check version number */
     if ((ilabel.ll_magic & 0xff) != PM_LOG_VERS02) {
 	fprintf(stderr,"%s: Error: version number %d (not %d as expected) in archive (%s)\n",
-		pmProgname, ilabel.ll_magic & 0xff, PM_LOG_VERS02, iname);
+		pmGetProgname(), ilabel.ll_magic & 0xff, PM_LOG_VERS02, iname);
 	exit(1);
     }
 
@@ -69,7 +69,7 @@ void
 writelabel(void)
 {
     logctl.l_label.ill_vol = 0;
-    __pmLogWriteLabel(logctl.l_mfp, &logctl.l_label);
+    __pmLogWriteLabel(archctl.ac_mfp, &logctl.l_label);
     logctl.l_label.ill_vol = PM_LOG_VOL_TI;
     __pmLogWriteLabel(logctl.l_tifp, &logctl.l_label);
     logctl.l_label.ill_vol = PM_LOG_VOL_META;
@@ -80,29 +80,29 @@ writelabel(void)
  *  switch output volumes
  */
 void
-newvolume(char *base, __pmTimeval *tvp)
+newvolume(char *base, pmTimeval *tvp)
 {
     __pmFILE		*newfp;
-    int			nextvol = logctl.l_curvol + 1;
+    int			nextvol = archctl.ac_curvol + 1;
     struct timeval	stamp;
 
     if ((newfp = __pmLogNewFile(base, nextvol)) != NULL) {
-	__pmFclose(logctl.l_mfp);
-	logctl.l_mfp = newfp;
-	logctl.l_label.ill_vol = logctl.l_curvol = nextvol;
-	__pmLogWriteLabel(logctl.l_mfp, &logctl.l_label);
-	__pmFflush(logctl.l_mfp);
+	__pmFclose(archctl.ac_mfp);
+	archctl.ac_mfp = newfp;
+	logctl.l_label.ill_vol = archctl.ac_curvol = nextvol;
+	__pmLogWriteLabel(archctl.ac_mfp, &logctl.l_label);
+	__pmFflush(archctl.ac_mfp);
 	stamp.tv_sec = tvp->tv_sec;
 	stamp.tv_usec = tvp->tv_usec;
 	fprintf(stderr, "%s: New log volume %d, at ",
-		pmProgname, nextvol);
-	__pmPrintStamp(stderr, &stamp);
+		pmGetProgname(), nextvol);
+	pmPrintStamp(stderr, &stamp);
 	fputc('\n', stderr);
 	return;
     }
     else {
 	fprintf(stderr, "%s: Error: volume %d: %s\n",
-		pmProgname, nextvol, pmErrStr(-oserror()));
+		pmGetProgname(), nextvol, pmErrStr(-oserror()));
 	exit(1);
     }
 }

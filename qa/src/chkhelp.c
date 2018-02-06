@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <pcp/pmapi.h>
+#include "libpcp.h"
 
 int
 main()

@@ -19,7 +19,6 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
 #include "pmda.h"
 #include "openbsd.h"
 #include <sys/swap.h>
@@ -42,7 +41,7 @@ refresh_swap_metrics(void)
 	    free(stats);
 	stats = (struct swapent *)malloc(sts*sizeof(stats[0]));
 	if (stats == NULL) {
-	    __pmNoMem("refresh_swap_metrics", sts*sizeof(stats[0]), PM_FATAL_ERR);
+	    pmNoMem("refresh_swap_metrics", sts*sizeof(stats[0]), PM_FATAL_ERR);
 	    /* NOTREACHED */
 	}
 	if (pmDebugOptions.appl0) {
@@ -74,7 +73,7 @@ do_swap_metrics(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 	atom->ull = 0;
 	sts = 1;
 	/* cluster and domain already checked, just need item ... */
-	switch (pmid_item(mdesc->m_desc.pmid)) {
+	switch (pmID_item(mdesc->m_desc.pmid)) {
 	    case 1:		/* swap.length */
 		atom->ull = 0;
 		for (i = 0; i < ndev; i++)

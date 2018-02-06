@@ -34,7 +34,7 @@ SaveViewDialog::SaveViewDialog(QWidget* parent) : QDialog(parent)
 	this, SLOT(dirListView_selectionChanged()));
 
     QDir dir;
-    QChar sep(__pmPathSeparator());
+    QChar sep(pmPathSeparator());
     QString home = my.userDir = QDir::toNativeSeparators(QDir::homePath());
     my.userDir.append(sep);
     my.userDir.append(".pcp");
@@ -160,7 +160,7 @@ void SaveViewDialog::dirListView_activated(const QModelIndex &index)
 	QString msg = fi.filePath();
 	msg.prepend(tr("View file "));
 	msg.append(tr(" exists.  Overwrite?\n"));
-	if (QMessageBox::question(this, pmProgname, msg,
+	if (QMessageBox::question(this, pmGetProgname(), msg,
 	    QMessageBox::Cancel|QMessageBox::Default|QMessageBox::Escape,
 	    QMessageBox::Ok, QMessageBox::NoButton) == QMessageBox::Ok)
 	    if (saveViewFile(fi.absoluteFilePath()) == true)
@@ -190,7 +190,7 @@ bool SaveViewDialog::saveViewFile(const QString &filename)
 void SaveViewDialog::savePushButton_clicked()
 {
     QString msg, filename;
-    QChar sep(__pmPathSeparator());
+    QChar sep(pmPathSeparator());
 
     if (fileNameLineEdit->isModified()) {
 	filename = fileNameLineEdit->text().trimmed();
@@ -213,7 +213,7 @@ void SaveViewDialog::savePushButton_clicked()
 	    msg = filename;
 	    msg.prepend(tr("View file "));
 	    msg.append(tr(" exists.  Overwrite?\n"));
-	    if (QMessageBox::question(this, pmProgname, msg,
+	    if (QMessageBox::question(this, pmGetProgname(), msg,
 		QMessageBox::Cancel|QMessageBox::Default|QMessageBox::Escape,
 		QMessageBox::Ok, QMessageBox::NoButton) == QMessageBox::Ok)
 		if (saveViewFile(fi.absoluteFilePath()) == true)
@@ -225,7 +225,7 @@ void SaveViewDialog::savePushButton_clicked()
     }
 
     if (msg.isEmpty() == false) {
-	QMessageBox::warning(this, pmProgname, msg,
+	QMessageBox::warning(this, pmGetProgname(), msg,
 	    QMessageBox::Ok|QMessageBox::Default|QMessageBox::Escape,
 	    QMessageBox::NoButton, QMessageBox::NoButton);
     }

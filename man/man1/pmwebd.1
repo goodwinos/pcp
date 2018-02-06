@@ -1,6 +1,6 @@
 '\"macro stdmacro
 .\"
-.\" Copyright (c) 2013-2017 Red Hat, Inc.  All Rights Reserved.
+.\" Copyright (c) 2013-2018 Red Hat.
 .\" 
 .\" This program is free software; you can redistribute it and/or modify it
 .\" under the terms of the GNU General Public License as published by the
@@ -32,7 +32,7 @@
 [\f3\-G\f1]
 [\f3\-X\f1]
 [\f3\-i\f1 \f2min-interval\f1]
-[\f3\-I\f1
+[\f3\-J\f1
 [\f3\-K\f1 \f2spec\f1]
 [\f3\-A\f1 \f2archivesdir\f1]
 [\f3\-S\f1]
@@ -127,17 +127,13 @@ necessarily accuracy) data, but may cost extra processing time at
 .B pmwebd
 or the web browser; and vice versa.
 .TP
-\f3\-I\f1
-Attempt to open an entire directory as an archive when traversing the
-\f3\-A\f1 DIR paths to serve graphite-api metrics.  If successful, it can make the
-metric names much shorter (omitting individual encoded file names) and span
-across time.  If the attempt fails,
-.B pmwebd
-will recurse to each individual
-archive file, just as though \f3\-I\f1 were not given.  The difference is that if
-the \f3\-I\f1 attempt succeeds, a subdirectory is not recursed further, so if any
-other archives or subdirectories are present, they won't be exposed to
-graphite-api clients.
+\f3\-J\f1
+When constructing graphite metric names, use the stored \f2hostname\f1
+instead of a archive pathname as the first component.  This virtually
+unifies \f2all\f1 archives found with the same hostname into a single
+time series.  The host name is canonicalized: any symbol
+characters other than _ (underscore), space, - (hyphen), and / (slash)
+are replaced by _ (underscore).
 .TP
 \f3\-t\f1 \f2timeout\f1
 Set the maximum timeout (in seconds) after the last operation on a pmapi web
@@ -194,7 +190,7 @@ option may be used to control the DSO PMDAs that should be
 made accessible.  The
 .I spec
 argument conforms to the syntax described in
-.BR __pmSpecLocalPMDA (3).
+.BR pmSpecLocalPMDA (3).
 More than one
 .B \-K
 option may be used.
@@ -236,9 +232,9 @@ but it may redirected to
 .IR file .
 .TP
 \f3\-v\f1
-Increase the verbosity of the
+Increase the verbosity of
 .B pmwebd
-program as it logs to its standard output/error.
+as it logs to its standard output/error.
 .TP
 \f3\-?\f1
 Show
@@ -246,20 +242,18 @@ Show
 invocation help and exit.
 .SH SECURITY
 .PP
-The current release of
 .B pmwebd
 is suitable for direct exposure to
 trusted networks only, due to several security limitations.  Most or
 all of these limitations may be worked around by use of a web
-application firewall (for example, an Apache HTTPD proxy), which would
+application firewall (for example, an Apache HTTP proxy), which would
 add the constraints and capabilities absent within
 .BR pmwebd .
 Such configuration is beyond the scope of this document.
 .TP
 encryption/confidentiality
-The
 .BR pmwebd
-program is does not currently support HTTPS (SSL/TLS), so
+does not currently support HTTPS (SSL/TLS), so
 the HTTP traffic is not protected against network-level attacks.
 .TP
 authentication
@@ -272,15 +266,13 @@ Use of resulting pmwebapi contexts later requires matching HTTP PLAIN
 authentication; see below.
 .TP
 inbound admission control
-The
 .B pmwebd
-program does not impose access control on the origin or rate of its
-incoming requests.  It may be possible for some clients to starve others.
+does not impose access control on the origin or rate of its incoming requests.
+It may be possible for some clients to starve others.
 .TP
 outbound admission control
-The
 .B pmwebd
-program does not impose access control on outbound connections
+does not impose access control on outbound connections
 when a new PMAPI context is created for a PMCD.
 (Without the
 .BR \-P
@@ -390,6 +382,7 @@ as described in
 .BR PCPIntro (1),
 .BR PMAPI (3),
 .BR PMWEBAPI (3),
+.BR pmSpecLocalPMDA (3),
 .BR pcp.conf (5),
 .BR pcp.env (5)
 .nh

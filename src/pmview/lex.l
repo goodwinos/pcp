@@ -62,7 +62,7 @@ extern FILE *theAltConfig;
 #define YYLMAX  2048
 
 #ifdef LEX_DEBUG
-#define RETURN(c) if (pmDebug & DBG_TRACE_APPL2) { pmprintf("Lex: %d\n", c); pmflush (); } return c
+#define RETURN(c) if (pmDebugOptions.appl2) { pmprintf("Lex: %d\n", c); pmflush (); } return c
 #else
 #define RETURN(c) if (theAltConfig) fprintf(theAltConfig, "%s", yytext); return c
 #endif
@@ -394,7 +394,7 @@ locateError(void)
 
     if (mark < 0) {
         pmprintf("%s: Unrecoverable internal error in locateError()\n",
-                pmProgname);
+                pmGetProgname());
         pmflush();
         exit(1);
     }
@@ -450,7 +450,7 @@ lexerror(const char * msg, const char * yytext)
     }
 
     pmprintf("%s: Fatal error in configuration file at line %d:\n\t%s\n", 
-	     pmProgname, lineNum + 1, msg);
+	     pmGetProgname(), lineNum + 1, msg);
 
     pmflush();
     exit(1);

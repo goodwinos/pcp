@@ -14,7 +14,7 @@
 
 #include <ctype.h>
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "pmhttp.h"
 #include "http_client.h"
 #include "http_parser.h"
@@ -98,7 +98,7 @@ http_client_connectunix(const char *path, struct timeval *timeout)
 
 #else
     if (pmDebugOptions.http)
-	__pmNotifyErr(LOG_ERR, "HTTP connect unix(%s) not supported\n", path);
+	pmNotifyErr(LOG_ERR, "HTTP connect unix(%s) not supported\n", path);
     return -EOPNOTSUPP;
 #endif
 }
@@ -310,7 +310,7 @@ http_client_get(http_client *cp)
 
     /* sanitize request parameters */
     if ((agent = cp->user_agent) == NULL)
-	agent = pmProgname;
+	agent = pmGetProgname();
     if ((version = cp->agent_vers) == NULL)
 	version = "1.0";
     if ((path = url + up->field_data[UF_PATH].off) == NULL ||
@@ -324,7 +324,7 @@ http_client_get(http_client *cp)
     //    strncpy(host, "localhost", sizeof("localhost"));
     //    host[sizeof("localhost")] = '\0';
     //    strncpy(path, "/containers/8d70f8a47a6b6e515fb8e40d31da7928de70e883c235ba16b132e6a3b4f8267d/json", sizeof("/containers/8d70f8a47a6b6e515fb8e40d31da7928de70e883c235ba16b132e6a3b4f8267d/json"));
-    //    __pmNotifyErr(LOG_DEBUG, "hit here: %s", cp->type_buffer);
+    //    pmNotifyErr(LOG_DEBUG, "hit here: %s", cp->type_buffer);
     
     protocol = url + up->field_data[UF_SCHEMA].off;
     length = up->field_data[UF_SCHEMA].len;
@@ -613,7 +613,7 @@ pmhttpNewClient(void)
     cp->timeout.tv_sec = DEFAULT_READ_TIMEOUT;
     cp->max_redirect = DEFAULT_MAX_REDIRECT;
     cp->http_version = PV_HTTP_1_1;
-    cp->user_agent = pmProgname;
+    cp->user_agent = pmGetProgname();
     cp->agent_vers = pmGetOptionalConfig("PCP_VERSION");
     cp->fd = -1;
     return cp;

@@ -19,7 +19,6 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
 
 #define usage "Usage: pmdate { +valueS | -valueS } ... format\n\
 \n\
@@ -41,7 +40,7 @@ main(int argc, char *argv[])
     int		mo_delta = 0;
     int		yr_delta = 0;
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     if (argc < 2) {
 	fprintf(stderr, usage);
@@ -63,7 +62,7 @@ main(int argc, char *argv[])
 	    sgn = -1;
 	else {
 	    fprintf(stderr, "%s: incorrect leading sign for offset (%s), must be \"+\" or \"-\"\n",
-		       pmProgname, argv[1]);
+		       pmGetProgname(), argv[1]);
 	    exit(1);
 	}
 	p++;
@@ -89,13 +88,13 @@ main(int argc, char *argv[])
 		yr_delta += sgn*val;
 		break;
 	    case '\0':
-		fprintf(stderr, "%s: missing scale after offset (%s)\n", pmProgname, argv[1]);
+		fprintf(stderr, "%s: missing scale after offset (%s)\n", pmGetProgname(), argv[1]);
 		exit(1);
 	    case '?':
 		fprintf(stderr, usage);
 		exit (1);
 	    default:
-		fprintf(stderr, "%s: unknown scale after offset (%s)\n", pmProgname, argv[1]);
+		fprintf(stderr, "%s: unknown scale after offset (%s)\n", pmGetProgname(), argv[1]);
 		exit(1);
 	}
 
@@ -132,7 +131,7 @@ main(int argc, char *argv[])
     }
 
     if ((check = mktime(tmp)) == -1) {
-	fprintf(stderr, "%s: impossible date conversion\n", pmProgname);
+	fprintf(stderr, "%s: impossible date conversion\n", pmGetProgname());
 	exit(1);
     }
 
@@ -142,12 +141,12 @@ main(int argc, char *argv[])
      */
     need = strlen(argv[1]) + 256;
     if ((buf = (char *)malloc(need)) == NULL) {
-	fprintf(stderr, "%s: malloc failed\n", pmProgname);
+	fprintf(stderr, "%s: malloc failed\n", pmGetProgname());
 	exit(1);
     }
 
     if (strftime(buf, need, argv[1], tmp) == 0) {
-	fprintf(stderr, "%s: format too long\n", pmProgname);
+	fprintf(stderr, "%s: format too long\n", pmGetProgname());
 	exit(1);
     }
     else {

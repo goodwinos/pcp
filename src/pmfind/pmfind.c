@@ -13,7 +13,7 @@
  */
 #include <signal.h>
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 
 static int	quiet;
 static char	*mechanism;
@@ -144,7 +144,7 @@ discovery(const char *spec)
 					  &discoveryFlags, &urls);
     if (sts < 0) {
 	fprintf(stderr, "%s: service %s discovery failure: %s\n",
-		pmProgname, spec, pmErrStr(sts));
+		pmGetProgname(), spec, pmErrStr(sts));
 	return 2;
     }
     if (sts == 0) {

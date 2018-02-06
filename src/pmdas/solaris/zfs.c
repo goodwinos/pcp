@@ -28,6 +28,14 @@ struct zfs_data {
     uint64_t nsnaps;
 };
 
+#if defined(HAVE_ZFS_ITER_SNAPSHOTS_4ARG)
+# define zfs_iter_snapshots3(a,b,c)	zfs_iter_snapshots(a,B_FALSE,b,c)
+#elif defined(HAVE_ZFS_ITER_SNAPSHOTS_3ARG)
+# define zfs_iter_snapshots3(a,b,c)	zfs_iter_snapshots(a,b,c)
+#else
+bozo!
+#endif
+
 /*
  * For each filesystem or snapshot check if the name is in the
  * corresponding instance cache.  If it's not there then add it to the
@@ -69,7 +77,7 @@ zfs_cache_inst(zfs_handle_t *zf, void *arg)
     } else if ((rv == PMDA_CACHE_INACTIVE) && zdata) {
 	rv = pmdaCacheStore(zfindom, PMDA_CACHE_ADD, fsname, zdata);
 	if (rv < 0) {
-	    __pmNotifyErr(LOG_WARNING,
+	    pmNotifyErr(LOG_WARNING,
 			  "Cannot reactivate cached data for '%s': %s\n",
 			  fsname, pmErrStr(rv));
 	    zfs_close(zf);
@@ -80,7 +88,7 @@ zfs_cache_inst(zfs_handle_t *zf, void *arg)
 	zf = zdata->zh;
     } else {
 	if ((zdata = calloc(1, sizeof(*zdata))) == NULL) {
-	    __pmNotifyErr(LOG_WARNING,
+	    pmNotifyErr(LOG_WARNING,
 			  "Out of memory for data of %s\n", fsname);
 	    zfs_close(zf);
 	    return 0;
@@ -88,7 +96,7 @@ zfs_cache_inst(zfs_handle_t *zf, void *arg)
 	zdata->zh = zf;
 	rv = pmdaCacheStore(zfindom, PMDA_CACHE_ADD, fsname, zdata);
 	if (rv < 0) {
-	    __pmNotifyErr(LOG_WARNING,
+	    pmNotifyErr(LOG_WARNING,
 			  "Cannot cache data for '%s': %s\n",
 			  fsname, pmErrStr(rv));
 	    zfs_close(zf);
@@ -100,7 +108,7 @@ zfs_cache_inst(zfs_handle_t *zf, void *arg)
     zfs_iter_filesystems(zf, zfs_cache_inst, NULL);
     if (zfs_get_type(zf) == ZFS_TYPE_FILESYSTEM) {
 	zdata->nsnaps = 0;
-	zfs_iter_snapshots(zf, zfs_cache_inst, &zdata->nsnaps);
+	zfs_iter_snapshots3(zf, zfs_cache_inst, &zdata->nsnaps);
     }
 
     return 0;

@@ -15,7 +15,6 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
 #include "pmda.h"
 #include "domain.h"
 #include "convert.h"
@@ -108,7 +107,7 @@ static pmdaMetric metrictab[] = {
 };
 
 static int
-jbd2_instance(pmInDom indom, int inst, char *name, __pmInResult **result, pmdaExt *pmda)
+jbd2_instance(pmInDom indom, int inst, char *name, pmInResult **result, pmdaExt *pmda)
 {
     refresh_jbd2(prefix, INDOM(JBD2_INDOM));
     return pmdaInstance(indom, inst, name, result, pmda);
@@ -124,13 +123,12 @@ jbd2_fetch(int numpmid, pmID pmidlist[], pmResult **resp, pmdaExt *pmda)
 static int
 jbd2_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 {
-    __pmID_int		*idp = (__pmID_int *)&(mdesc->m_desc.pmid);
     int			sts;
     proc_jbd2_t		*jbd2;
 
-    switch (idp->cluster) {
+    switch (pmID_cluster(mdesc->m_desc.pmid)) {
     case 0:
-	if (!idp->item) { /* jbd2.njournals */
+	if (!pmID_item(mdesc->m_desc.pmid)) { /* jbd2.njournals */
 	    atom->ul = pmdaCacheOp(INDOM(JBD2_INDOM), PMDA_CACHE_SIZE_ACTIVE);
 	    break;
 	}
@@ -144,7 +142,7 @@ jbd2_fetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 	if (jbd2->version < 2)
 	    return 0;
 
-	switch (idp->item) {
+	switch (pmID_item(mdesc->m_desc.pmid)) {
 
 	case 1:		/* transaction.count */
 	    _pm_assign_ulong(atom, jbd2->tid);
@@ -244,12 +242,12 @@ jbd2_init(pmdaInterface *dp)
 
     if (_isDSO) {
 	char helppath[MAXPATHLEN];
-	int sep = __pmPathSeparator();
+	int sep = pmPathSeparator();
 	pmsprintf(helppath, sizeof(helppath), "%s%c" "jbd2" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
 	pmdaDSO(dp, PMDA_INTERFACE_4, "jbd2 DSO", helppath);
     } else {
-	__pmSetProcessIdentity(username);
+	pmSetProcessIdentity(username);
     }
 
     if (dp->status != 0)
@@ -288,17 +286,17 @@ pmdaOptions     opts = {
 int
 main(int argc, char **argv)
 {
-    int			c, sep = __pmPathSeparator();
+    int			c, sep = pmPathSeparator();
     pmdaInterface	dispatch;
     char		help[MAXPATHLEN];
 
     _isDSO = 0;
-    __pmSetProgname(argv[0]);
-    __pmGetUsername(&username);
+    pmSetProgname(argv[0]);
+    pmGetUsername(&username);
 
     pmsprintf(help, sizeof(help), "%s%c" "jbd2" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
-    pmdaDaemon(&dispatch, PMDA_INTERFACE_4, pmProgname, JBD2, "jbd2.log", help);
+    pmdaDaemon(&dispatch, PMDA_INTERFACE_4, pmGetProgname(), JBD2, "jbd2.log", help);
 
     while ((c = pmdaGetOptions(argc, argv, &opts, &dispatch)) != EOF) {
 	switch(c) {

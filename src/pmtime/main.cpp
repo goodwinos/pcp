@@ -15,9 +15,10 @@
  */
 #include <QApplication>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include "timelord.h"
 #include "pmtime.h"
+
+static int Dflag;
 
 static pmOptions opts;
 static pmLongOptions longopts[] = {
@@ -33,7 +34,7 @@ static void setupEnvironment(void)
     char *value;
     QString confirm = pmGetConfig("PCP_BIN_DIR");
     confirm.prepend("PCP_XCONFIRM_PROG=");
-    confirm.append(QChar(__pmPathSeparator()));
+    confirm.append(QChar(pmPathSeparator()));
     confirm.append("pmquery");
     if ((value = strdup((const char *)confirm.toLatin1())) != NULL)
 	putenv(value);
@@ -43,6 +44,15 @@ static void setupEnvironment(void)
 
     QCoreApplication::setOrganizationName("PCP");
     QCoreApplication::setApplicationName("pmtime");
+}
+
+static int
+override(int opt, pmOptions *opts)
+{
+    (void)opts;
+    if (opt == 'D')
+	Dflag = 1;
+    return 0;
 }
 
 int main(int argc, char **argv)
@@ -55,6 +65,7 @@ int main(int argc, char **argv)
     /* -a/-h ignored, back-compat for time control from libpcp_gui */
     opts.short_options = "ahD:p:V?";
     opts.long_options = longopts;
+    opts.override = override;
     (void)pmGetOptions(argc, argv, &opts);
     if (opts.errors || (opts.flags & PM_OPTFLAG_EXIT) || opts.optind != argc) {
 	if ((opts.flags & PM_OPTFLAG_EXIT)) {
@@ -78,7 +89,7 @@ int main(int argc, char **argv)
 	    if (*endnum != '\0' || opts.guiport < 0) {
 		pmprintf(
 		    "%s: PMTIME_PORT must be a numeric port number (not %s)\n",
-			pmProgname, envstr);
+			pmGetProgname(), envstr);
 		pmflush();
 		exit(1);
 	    }
@@ -95,10 +106,10 @@ int main(int argc, char **argv)
 
     if (!opts.guiport || tl.isListening() == false) {
 	if (!autoport)
-	    pmprintf("%s: cannot find an available port\n", pmProgname);
+	    pmprintf("%s: cannot find an available port\n", pmGetProgname());
 	else
 	    pmprintf("%s: cannot connect to requested port (%d)\n",
-		    pmProgname, opts.guiport);
+		    pmGetProgname(), opts.guiport);
 	pmflush();
 	exit(1);
     } else if (autoport) {	/* write to stdout for client */
@@ -108,7 +119,7 @@ int main(int argc, char **argv)
 	if (write(fileno(stdout), name, sts + 1) < 0) {
 	    if (errno != EPIPE) {
 		pmprintf("%s: cannot write port for client: %s\n",
-		    pmProgname, strerror(errno));
+		    pmGetProgname(), strerror(errno));
 		pmflush();
 	    }
 	    exit(1);
@@ -120,11 +131,11 @@ int main(int argc, char **argv)
     tl.setContext(&hc, &ac);
 
     hc.init();
-    if (!pmDebug) hc.disableConsole();
+    if (!Dflag) hc.disableConsole();
     else hc.popup(1);
 
     ac.init();
-    if (!pmDebug) ac.disableConsole();
+    if (!Dflag) ac.disableConsole();
     else ac.popup(1);
 
     a.exec();

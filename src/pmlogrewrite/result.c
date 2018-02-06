@@ -40,7 +40,7 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "logger.h"
 #include <assert.h>
 
@@ -367,7 +367,7 @@ rescale(int i, metricspec_t *mp)
 	     * No type conversion here, so error not expected
 	     */
 	    fprintf(stderr, "%s: Botch: %s (%s): extracting value: %s\n",
-			pmProgname, mp->old_name, pmIDStr(mp->old_desc.pmid), pmErrStr(sts));
+			pmGetProgname(), mp->old_name, pmIDStr(mp->old_desc.pmid), pmErrStr(sts));
 	    inarch.rp->vset[i]->numval = j;
 	    __pmDumpResult(stderr, inarch.rp);
 	    abandon();
@@ -381,7 +381,7 @@ rescale(int i, metricspec_t *mp)
 	     * from pmConvScale()
 	     */
 	    fprintf(stderr, "%s: Botch: %s (%s): scale conversion from %s",
-			pmProgname, mp->old_name, pmIDStr(mp->old_desc.pmid), pmUnitsStr(&mp->old_desc.units));
+			pmGetProgname(), mp->old_name, pmIDStr(mp->old_desc.pmid), pmUnitsStr(&mp->old_desc.units));
 	    fprintf(stderr, " to %s failed: %s\n", pmUnitsStr(&mp->new_desc.units), pmErrStr(sts));
 	    inarch.rp->vset[i]->numval = j;
 	    __pmDumpResult(stderr, inarch.rp);
@@ -410,7 +410,7 @@ rescale(int i, metricspec_t *mp)
 	     * __pmStuffValue()
 	     */
 	    fprintf(stderr, "%s: Botch: %s (%s): stuffing value %s (type=%s) into rewritten pmResult: %s\n",
-			pmProgname, mp->old_name, pmIDStr(mp->old_desc.pmid), pmAtomStr(&oval, mp->old_desc.type), pmTypeStr(mp->old_desc.type), pmErrStr(sts));
+			pmGetProgname(), mp->old_name, pmIDStr(mp->old_desc.pmid), pmAtomStr(&oval, mp->old_desc.type), pmTypeStr(mp->old_desc.type), pmErrStr(sts));
 	    inarch.rp->vset[i]->numval = j;
 	    __pmDumpResult(stderr, inarch.rp);
 	    abandon();
@@ -445,7 +445,7 @@ retype(int i, metricspec_t *mp)
 	sts = pmExtractValue(old_valfmt, &vsp->vlist[j], mp->old_desc.type, &val, mp->new_desc.type);
 	if (sts < 0) {
 	    fprintf(stderr, "%s: Error: %s (%s): extracting value from type %s",
-			pmProgname, mp->old_name, pmIDStr(mp->old_desc.pmid), pmTypeStr(mp->old_desc.type));
+			pmGetProgname(), mp->old_name, pmIDStr(mp->old_desc.pmid), pmTypeStr(mp->old_desc.type));
 	    fprintf(stderr, " to %s: %s\n", pmTypeStr(mp->new_desc.type), pmErrStr(sts));
 	    inarch.rp->vset[i]->numval = j;
 	    __pmDumpResult(stderr, inarch.rp);
@@ -474,7 +474,7 @@ retype(int i, metricspec_t *mp)
 	     * __pmStuffValue()
 	     */
 	    fprintf(stderr, "%s: Botch: %s (%s): stuffing value %s (type=%s) into rewritten pmResult: %s\n",
-			pmProgname, mp->old_name, pmIDStr(mp->old_desc.pmid), pmAtomStr(&val, mp->new_desc.type), pmTypeStr(mp->new_desc.type), pmErrStr(sts));
+			pmGetProgname(), mp->old_name, pmIDStr(mp->old_desc.pmid), pmAtomStr(&val, mp->new_desc.type), pmTypeStr(mp->new_desc.type), pmErrStr(sts));
 	    inarch.rp->vset[i]->numval = j;
 	    __pmDumpResult(stderr, inarch.rp);
 	    abandon();
@@ -665,11 +665,11 @@ do_result(void)
     if (orig_numpmid == 0 || inarch.rp->numpmid > 0) {
 	unsigned long	out_offset;
 	unsigned long	peek_offset;
-	peek_offset = __pmFtell(outarch.logctl.l_mfp);
+	peek_offset = __pmFtell(outarch.archctl.ac_mfp);
 	sts = __pmEncodeResult(PDU_OVERRIDE2, inarch.rp, &inarch.logrec);
 	if (sts < 0) {
 	    fprintf(stderr, "%s: Error: __pmEncodeResult: %s\n",
-		    pmProgname, pmErrStr(sts));
+		    pmGetProgname(), pmErrStr(sts));
 	    abandon();
 	    /*NOTREACHED*/
 	}
@@ -679,12 +679,12 @@ do_result(void)
 	     * data file size will exceed 2^31-1 bytes, so force
 	     * volume switch
 	     */
-	    newvolume(outarch.logctl.l_curvol+1);
+	    newvolume(outarch.archctl.ac_curvol+1);
 	}
-	out_offset = __pmFtell(outarch.logctl.l_mfp);
-	if ((sts = __pmLogPutResult2(&outarch.logctl, inarch.logrec)) < 0) {
+	out_offset = __pmFtell(outarch.archctl.ac_mfp);
+	if ((sts = __pmLogPutResult2(&outarch.archctl, inarch.logrec)) < 0) {
 	    fprintf(stderr, "%s: Error: __pmLogPutResult2: log data: %s\n",
-		    pmProgname, pmErrStr(sts));
+		    pmGetProgname(), pmErrStr(sts));
 	    abandon();
 	    /*NOTREACHED*/
 	}
@@ -694,7 +694,7 @@ do_result(void)
 	    fprintf(stderr, "Log: write ");
 	    stamp.tv_sec = inarch.rp->timestamp.tv_sec;
 	    stamp.tv_usec = inarch.rp->timestamp.tv_usec;
-	    __pmPrintStamp(stderr, &stamp);
+	    pmPrintStamp(stderr, &stamp);
 	    fprintf(stderr, " numpmid=%d @ offset=%ld\n", inarch.rp->numpmid, out_offset);
 	}
     }

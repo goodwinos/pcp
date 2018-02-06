@@ -20,11 +20,10 @@
  * pmState - no side-effects, don't bother locking
  *
  * dosyslog - no side-effects, other than non-determinism with concurrent
- *	attempts to set/clear the state in __pmSyslog() which locking will
+ *	attempts to set/clear the state in pmSyslog() which locking will
  *	not avoid
  *
  * pmProgname - most likely set in main(), not worth protecting here
- * 	and impossible to capture all the read uses in other places
  *
  * base (in __pmProcessDataSize) - no real side-effects, don't bother
  *	locking
@@ -61,9 +60,11 @@
 #include <assert.h>
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
+#include "deprecated.h"
 #include "pmdbg.h"
 #include "internal.h"
+#include "deprecated.h"
 
 #if defined(HAVE_SYS_TIMES_H)
 #include <sys/times.h>
@@ -89,10 +90,10 @@ static int	dosyslog;
 static int	pmState = PM_STATE_APPL;
 static int	done_exit;
 #ifdef HAVE_ATEXIT
-static int	pmprintf_atexit_installed = 0;
+static int	pmprintf_atexit_installed;
 #endif
-static int	xconfirm_init = 0;
-static char 	*xconfirm = NULL;
+static int	xconfirm_init;
+static char 	*xconfirm;
 
 PCP_DATA char	*pmProgname = "pcp";		/* the real McCoy */
 
@@ -118,12 +119,18 @@ __pmIsUtilLock(void *lock)
 }
 #endif
 
+char *
+pmGetProgname(void)
+{
+    return pmProgname;
+}
+
 /*
  * if onoff == 1, logging is to syslog and stderr, else logging is
  * just to stderr (this is the default)
  */
 void
-__pmSyslog(int onoff)
+pmSyslog(int onoff)
 {
     dosyslog = onoff;
     if (dosyslog)
@@ -134,18 +141,26 @@ __pmSyslog(int onoff)
 
 /*
  * This is a wrapper around syslog(3) that writes similar messages to stderr,
- * but if __pmSyslog(1) is called, the messages will really go to syslog
+ * but if pmSyslog() is called, the messages will really go to syslog
  */
 void
-__pmNotifyErr(int priority, const char *message, ...)
+pmNotifyErr(int priority, const char *message, ...)
 {
     va_list		arg;
+
+    va_start(arg, message);
+    notifyerr(priority, message, arg);
+    va_end(arg);
+}
+
+void
+notifyerr(int priority, const char *message, va_list arg)
+{
     char		*p;
     char		*level;
     struct timeval	tv;
     char		ct_buf[26];
-
-    va_start(arg, message);
+    time_t		now;
 
     gettimeofday(&tv, NULL);
 
@@ -153,8 +168,6 @@ __pmNotifyErr(int priority, const char *message, ...)
 	char	syslogmsg[2048];
 
 	vsnprintf(syslogmsg, sizeof(syslogmsg), message, arg);
-	va_end(arg);
-	va_start(arg, message);
 	syslog(priority, "%s", syslogmsg);
     }
 
@@ -192,13 +205,13 @@ __pmNotifyErr(int priority, const char *message, ...)
 	    break;
     }
 
-    ctime_r(&tv.tv_sec, ct_buf);
+    now = tv.tv_sec;
+    ctime_r(&now, ct_buf);
     /* when profiling use "[%.19s.%lu]" for extra precision */
     pmprintf("[%.19s] %s(%" FMT_PID ") %s: ", ct_buf,
 		/* (unsigned long)tv.tv_usec, */
-		pmProgname, getpid(), level);
+		pmGetProgname(), (pid_t)getpid(), level);
     vpmprintf(message, arg);
-    va_end(arg);
     /* trailing \n if needed */
     for (p = (char *)message; *p; p++)
 	;
@@ -250,7 +263,7 @@ logonexit(void)
     PM_UNLOCK(util_lock);
 }
 
-/* common code shared by __pmRotateLog and __pmOpenLog */
+/* common code shared by __pmRotateLog and pmOpenLog */
 static FILE *
 logreopen(const char *progname, const char *logname, FILE *oldstream,
 	    int *status)
@@ -322,6 +335,7 @@ logreopen(const char *progname, const char *logname, FILE *oldstream,
 		p = strerror_r(save_error, errmsg, sizeof(errmsg));
 		if (p != errmsg)
 		    strncpy(errmsg, p, sizeof(errmsg));
+		errmsg[sizeof(errmsg)-1] = '\0';
 	    }
 #else
 	    /*
@@ -349,7 +363,7 @@ logreopen(const char *progname, const char *logname, FILE *oldstream,
 }
 
 FILE *
-__pmOpenLog(const char *progname, const char *logname, FILE *oldstream,
+pmOpenLog(const char *progname, const char *logname, FILE *oldstream,
 	    int *status)
 {
     oldstream = logreopen(progname, logname, oldstream, status);
@@ -363,7 +377,7 @@ __pmOpenLog(const char *progname, const char *logname, FILE *oldstream,
     filelog = (FILE **)realloc(filelog, nfilelog * sizeof(FILE *));
     if (filelog == NULL) {
 	PM_UNLOCK(util_lock);
-	__pmNoMem("__pmOpenLog", nfilelog * sizeof(FILE *), PM_FATAL_ERR);
+	pmNoMem("pmOpenLog", nfilelog * sizeof(FILE *), PM_FATAL_ERR);
 	/* NOTREACHED */
     }
     filelog[nfilelog-1] = oldstream;
@@ -415,9 +429,9 @@ pmIDStr_r(pmID pmid, char *buf, int buflen)
 	 * that can enumerate the subtree in the cluster field, while
 	 * the item field is zero
 	 */
-	pmsprintf(buf, buflen, "%d.*.*", pmid_cluster(pmid));
+	pmsprintf(buf, buflen, "%d.*.*", pmID_cluster(pmid));
     else
-	pmsprintf(buf, buflen, "%d.%d.%d", pmid_domain(pmid), pmid_cluster(pmid), pmid_item(pmid));
+	pmsprintf(buf, buflen, "%d.%d.%d", pmID_domain(pmid), pmID_cluster(pmid), pmID_item(pmid));
     return buf;
 }
 
@@ -615,7 +629,7 @@ __pmStringListAdd(char *item, int numElements, char ***list)
     newSize = ptrSize + sizeof(**list) + dataSize + strlen(item) + 1;
     newList = realloc(*list, newSize);
     if (newList == NULL) {
-	__pmNoMem("__pmStringListAdd", newSize, PM_FATAL_ERR);
+	pmNoMem("__pmStringListAdd", newSize, PM_FATAL_ERR);
 	/* NOTREACHED */
     }
 
@@ -775,7 +789,7 @@ __pmDumpResult_ctx(__pmContext *ctxp, FILE *f, const pmResult *resp)
     save_debug();
     fprintf(f, "pmResult dump from " PRINTF_P_PFX "%p timestamp: %d.%06d ",
 	resp, (int)resp->timestamp.tv_sec, (int)resp->timestamp.tv_usec);
-    __pmPrintStamp(f, &resp->timestamp);
+    pmPrintStamp(f, &resp->timestamp);
     fprintf(f, " numpmid: %d\n", resp->numpmid);
     for (i = 0; i < resp->numpmid; i++)
 	dump_valueset(ctxp, f, resp->vset[i]);
@@ -800,7 +814,7 @@ __pmDumpHighResResult_ctx(__pmContext *ctxp, FILE *f, const pmHighResResult *hre
     save_debug();
     fprintf(f, "pmHighResResult dump from " PRINTF_P_PFX "%p timestamp: %d.%09d ",
 	hresp, (int)hresp->timestamp.tv_sec, (int)hresp->timestamp.tv_nsec);
-    __pmPrintHighResStamp(f, &hresp->timestamp);
+    pmPrintHighResStamp(f, &hresp->timestamp);
     fprintf(f, " numpmid: %d\n", hresp->numpmid);
     for (i = 0; i < hresp->numpmid; i++)
 	dump_valueset(ctxp, f, hresp->vset[i]);
@@ -819,8 +833,8 @@ print_event_summary(FILE *f, const pmValue *val, int highres)
 {
     struct timespec	tsstamp;
     struct timeval	tvstamp;
-    __pmTimespec 	*tsp;
-    __pmTimeval 	*tvp;
+    pmTimespec 	*tsp;
+    pmTimeval 	*tvp;
     unsigned int	flags;
     size_t		size;
     char		*base;
@@ -834,7 +848,7 @@ print_event_summary(FILE *f, const pmValue *val, int highres)
 	pmHighResEventArray *hreap = (pmHighResEventArray *)val->value.pval;
 	nrecords = hreap->ea_nrecords;
 	base = (char *)&hreap->ea_record[0];
-	tsp = (__pmTimespec *)base;
+	tsp = (pmTimespec *)base;
 	tsstamp.tv_sec = tsp->tv_sec;
 	tsstamp.tv_nsec = tsp->tv_nsec;
     }
@@ -842,7 +856,7 @@ print_event_summary(FILE *f, const pmValue *val, int highres)
 	pmEventArray *eap = (pmEventArray *)val->value.pval;
 	nrecords = eap->ea_nrecords;
 	base = (char *)&eap->ea_record[0];
-	tvp = (__pmTimeval *)base;
+	tvp = (pmTimeval *)base;
 	tvstamp.tv_sec = tvp->tv_sec;
 	tvstamp.tv_usec = tvp->tv_usec;
     }
@@ -887,23 +901,23 @@ print_event_summary(FILE *f, const pmValue *val, int highres)
 	fputc(' ', f);
 
 	if (highres)
-	    __pmPrintHighResStamp(f, &tsstamp);
+	    pmPrintHighResStamp(f, &tsstamp);
 	else
-	    __pmPrintStamp(f, &tvstamp);
+	    pmPrintStamp(f, &tvstamp);
 
 	if (nrecords > 1) {
 	    fprintf(f, "...");
 	    if (highres) {
-		tsp = (__pmTimespec *)base;
+		tsp = (pmTimespec *)base;
 		tsstamp.tv_sec = tsp->tv_sec;
 		tsstamp.tv_nsec = tsp->tv_nsec;
-		__pmPrintHighResStamp(f, &tsstamp);
+		pmPrintHighResStamp(f, &tsstamp);
 	    }
 	    else {
-		tvp = (__pmTimeval *)base;
+		tvp = (pmTimeval *)base;
 		tvstamp.tv_sec = tvp->tv_sec;
 		tvstamp.tv_usec = tvp->tv_usec;
-		__pmPrintStamp(f, &tvstamp);
+		pmPrintStamp(f, &tvstamp);
 	    }
 	}
     }
@@ -1106,10 +1120,10 @@ pmPrintValue(FILE *f,			/* output stream */
 }
 
 void
-__pmNoMem(const char *where, size_t size, int fatal)
+pmNoMem(const char *where, size_t size, int fatal)
 {
     char	errmsg[PM_MAXERRMSGLEN];
-    __pmNotifyErr(fatal ? LOG_ERR : LOG_WARNING,
+    pmNotifyErr(fatal ? LOG_ERR : LOG_WARNING,
 			"%s: malloc(%d) failed: %s",
 			where, (int)size, osstrerror_r(errmsg, sizeof(errmsg)));
     if (fatal)
@@ -1161,10 +1175,10 @@ __pmGetTimespec(struct timespec *ts)
 }
 
 /*
- * a : b for __pmTimeval ... <0 for a<b, ==0 for a==b, >0 for a>b
+ * a : b for pmTimeval ... <0 for a<b, ==0 for a==b, >0 for a>b
  */
 int
-__pmTimevalCmp(const __pmTimeval *a, const __pmTimeval *b)
+__pmTimevalCmp(const pmTimeval *a, const pmTimeval *b)
 {
     int res = (int)(a->tv_sec - b->tv_sec);
 
@@ -1176,20 +1190,23 @@ __pmTimevalCmp(const __pmTimeval *a, const __pmTimeval *b)
 
 /*
  * Difference for two of the internal timestamps ...
- * Same as __pmtimevalSub() in tv.c, just with __pmTimeval args
+ * Same as pmtimevalSub() in tv.c, just with pmTimeval args
  * rather than struct timeval args.
  */
 double
-__pmTimevalSub(const __pmTimeval *ap, const __pmTimeval *bp)
+__pmTimevalSub(const pmTimeval *ap, const pmTimeval *bp)
 {
      return (double)(ap->tv_sec - bp->tv_sec + (long double)(ap->tv_usec - bp->tv_usec) / (long double)1000000);
 }
 
 /*
  * print timeval timestamp in HH:MM:SS.XXX format
+ * Note: to minimize ABI surprises, this one still reports to msec precision,
+ *       but the internal and diagnostic variant __pmPrintTimeval() reports
+ *       to usec precision.
  */
 void
-__pmPrintStamp(FILE *f, const struct timeval *tp)
+pmPrintStamp(FILE *f, const struct timeval *tp)
 {
     struct tm	tmp;
     time_t	now;
@@ -1203,7 +1220,7 @@ __pmPrintStamp(FILE *f, const struct timeval *tp)
  * print high resolution timestamp in HH:MM:SS.XXXXXXXXX format
  */
 void
-__pmPrintHighResStamp(FILE *f, const struct timespec *tp)
+pmPrintHighResStamp(FILE *f, const struct timespec *tp)
 {
     struct tm	tmp;
     time_t	now;
@@ -1214,40 +1231,25 @@ __pmPrintHighResStamp(FILE *f, const struct timespec *tp)
 }
 
 /*
- * print __pmTimeval timestamp in HH:MM:SS.XXX format
- * (__pmTimeval variant used in PDUs, archives and internally)
+ * print pmTimeval timestamp in HH:MM:SS.XXXXXX format (usec precision)
+ * (pmTimeval variant used in PDUs, archives and internally)
  */
 void
-__pmPrintTimeval(FILE *f, const __pmTimeval *tp)
+__pmPrintTimeval(FILE *f, const pmTimeval *tp)
 {
     struct tm	tmp;
     time_t	now;
 
     now = (time_t)tp->tv_sec;
     pmLocaltime(&now, &tmp);
-    fprintf(f, "%02d:%02d:%02d.%03d", tmp.tm_hour, tmp.tm_min, tmp.tm_sec, tp->tv_usec/1000);
-}
-
-/*
- * print __pmTimespec timestamp in HH:MM:SS.XXXXXXXXX format
- * (__pmTimespec variant used in events, archives and internally)
- */
-void
-__pmPrintTimespec(FILE *f, const __pmTimespec *tp)
-{
-    struct tm	tmp;
-    time_t	now;
-
-    now = (time_t)tp->tv_sec;
-    pmLocaltime(&now, &tmp);
-    fprintf(f, "%02d:%02d:%02d.%09ld", tmp.tm_hour, tmp.tm_min, tmp.tm_sec, (long)tp->tv_nsec);
+    fprintf(f, "%02d:%02d:%02d.%06d", tmp.tm_hour, tmp.tm_min, tmp.tm_sec, (int)tp->tv_usec);
 }
 
 /*
  * descriptor
  */
 void
-__pmPrintDesc(FILE *f, const pmDesc *desc)
+pmPrintDesc(FILE *f, const pmDesc *desc)
 {
     const char		*type;
     const char		*sem;
@@ -1315,38 +1317,6 @@ __pmPrintDesc(FILE *f, const pmDesc *desc)
 	fprintf(f, "none\n");
     else
 	fprintf(f, "%s\n", units);
-}
-
-/*
- * print times between events
- */
-void
-__pmEventTrace_r(const char *event, int *first, double *sum, double *last)
-{
-    struct timeval tv;
-    double now;
-
-    __pmtimevalNow(&tv);
-    now = __pmtimevalToReal(&tv);
-    if (*first) {
-	*first = 0;
-	*sum = 0;
-	*last = now;
-    }
-    *sum += now - *last;
-    fprintf(stderr, "%s: +%4.2f = %4.2f -> %s\n",
-			pmProgname, now-*last, *sum, event);
-    *last = now;
-}
-
-void
-__pmEventTrace(const char *event)
-{
-    static double last;
-    static double sum;
-    static int first = 1;
-
-    __pmEventTrace_r(event, &first, &sum, &last);
 }
 
 #define DEBUG_CLEAR 0
@@ -1590,10 +1560,10 @@ pmfstate(int state)
 	    if (strcasecmp(ferr, "DISPLAY") == 0) {
 		if (!xconfirm)
 		    fprintf(stderr, "%s: using stderr - no PCP_XCONFIRM_PROG\n",
-			    pmProgname);
+			    pmGetProgname());
 		else if (access(__pmNativePath(xconfirm), X_OK) < 0)
 		    fprintf(stderr, "%s: using stderr - cannot access %s: %s\n",
-			    pmProgname, xconfirm, osstrerror_r(errmsg, sizeof(errmsg)));
+			    pmGetProgname(), xconfirm, osstrerror_r(errmsg, sizeof(errmsg)));
 		else
 		    errtype = PM_USEDIALOG;
 	    }
@@ -1671,13 +1641,13 @@ vpmprintf(const char *msg, va_list arg)
 fail:
 		if (fname != NULL) {
 		    fprintf(stderr, "%s: vpmprintf: failed to create \"%s\": %s\n",
-			pmProgname, fname, osstrerror_r(errmsg, sizeof(errmsg)));
+			pmGetProgname(), fname, osstrerror_r(errmsg, sizeof(errmsg)));
 		    unlink(fname);
 		    free(fname);
 		}
 		else {
 		    fprintf(stderr, "%s: vpmprintf: failed to create temporary file: %s\n",
-			pmProgname, osstrerror_r(errmsg, sizeof(errmsg)));
+			pmGetProgname(), osstrerror_r(errmsg, sizeof(errmsg)));
 		}
 		fprintf(stderr, "vpmprintf msg:\n");
 		if (fd >= 0)
@@ -1722,7 +1692,6 @@ pmflush(void)
     int		state;
     FILE	*eptr = NULL;
     __pmExecCtl_t	*argp = NULL;
-    int		wait_status;
     char	outbuf[MSGBUFLEN];
     char	errmsg[PM_MAXERRMSGLEN];
 
@@ -1758,7 +1727,7 @@ pmflush(void)
 	case PM_USEDIALOG:
 	    /* If we're here, it means xconfirm has passed access test */
 	    if (xconfirm == NULL) {
-		fprintf(stderr, "%s: no PCP_XCONFIRM_PROG\n", pmProgname);
+		fprintf(stderr, "%s: no PCP_XCONFIRM_PROG\n", pmGetProgname());
 		sts = PM_ERR_GENERIC;
 		break;
 	    }
@@ -1791,22 +1760,15 @@ pmflush(void)
 		    __pmNativePath(xconfirm), fname,
 		    (msgsize > 80 ? "-useslider" : ""));
 	    /* no thread-safe issue here ... we're executing xconfirm */
-	    if ((sts = __pmProcessExec(&argp, PM_EXEC_TOSS_ALL, PM_EXEC_WAIT, &wait_status)) < 0) {
+	    if ((sts = __pmProcessExec(&argp, PM_EXEC_TOSS_ALL, PM_EXEC_WAIT)) < 0) {
 		fprintf(stderr, "%s: __pmProcessExec(%s, ...) failed: %s\n",
-		    pmProgname, __pmNativePath(xconfirm), 
+		    pmGetProgname(), __pmNativePath(xconfirm), 
 		    pmErrStr_r(sts, errmsg, sizeof(errmsg)));
 	    }
 	    /*
 	     * Note, we don't care about the wait exit status in this case
 	     */
 	    sts = 0;
-#if 0
-	    if (system(outbuf) < 0) {		/* THREADSAFE */
-		fprintf(stderr, "%s: system failed: %s\n", pmProgname,
-			osstrerror_r(errmsg, sizeof(errmsg)));
-		sts = -oserror();
-	    }
-#endif
 	    break;
 	case PM_USEFILE:
 	    rewind(fptr);
@@ -1948,7 +1910,7 @@ __pmSetClientId(const char *id)
     pmvb = (pmValueBlock *)calloc(1, PM_VAL_HDR_SIZE+vblen);
     if (pmvb == NULL) {
 	PM_UNLOCK(ctxp->c_lock);
-	__pmNoMem("__pmSetClientId", PM_VAL_HDR_SIZE+vblen, PM_RECOV_ERR);
+	pmNoMem("__pmSetClientId", PM_VAL_HDR_SIZE+vblen, PM_RECOV_ERR);
 	return -ENOMEM;
     }
     pmvb->vtype = PM_TYPE_STRING;
@@ -2066,10 +2028,10 @@ __pmMakePath(const char *dir, mode_t mode)
     path[sizeof(path)-1] = '\0';
 
     for (p = path+1; *p != '\0'; p++) {
-	if (*p == __pmPathSeparator()) {
+	if (*p == pmPathSeparator()) {
 	    *p = '\0';
 	    mkdir2(path, mode);
-	    *p = __pmPathSeparator();
+	    *p = pmPathSeparator();
 	}
     }
     return mkdir2(path, mode);
@@ -2641,19 +2603,21 @@ __pmSetSignalHandler(int sig, __pmSignalHandler func)
     return 0;
 }
 
-int
-__pmSetProgname(const char *program)
+void
+pmSetProgname(const char *program)
 {
-    char *p;
+    char	*p;
 
-    /* Trim command name of leading directory components */
-    if (program)
+    if (program == NULL) {
+	/* Restore the default application name */
+	pmProgname = "pcp";
+    } else {
+	/* Trim command name of leading directory components */
 	pmProgname = (char *)program;
-    for (p = pmProgname; pmProgname && *p; p++) {
-	if (*p == '/')
-	    pmProgname = p+1;
+	for (p = pmProgname; *p; p++)
+	    if (*p == '/')
+		pmProgname = p+1;
     }
-    return 0;
 }
 
 int
@@ -2685,6 +2649,7 @@ __pmMemoryUnmap(void *addr, size_t sz)
 {
     munmap(addr, sz);
 }
+#endif /* !IS_MINGW */
 
 #if HAVE_TRACE_BACK_STACK
 #include <libexc.h>
@@ -2744,4 +2709,68 @@ __pmDumpStack(FILE *f)
 }
 #endif /* HAVE_BACKTRACE */
 
-#endif /* !IS_MINGW */
+/*
+ * pmID helper functions
+ */
+
+unsigned int
+pmID_item(pmID pmid)
+{
+    __pmID_int	*idp = (__pmID_int *)&pmid;
+    return idp->item;
+}
+
+unsigned int 
+pmID_cluster(pmID pmid)
+{
+    __pmID_int	*idp = (__pmID_int *)&pmid;
+    return idp->cluster;
+}
+
+unsigned int 
+pmID_domain(pmID pmid)
+{
+    __pmID_int	*idp = (__pmID_int *)&pmid;
+    return idp->domain;
+}
+
+pmID
+pmID_build(unsigned int domain, unsigned int cluster, unsigned int item)
+{
+    pmID	pmid;
+    __pmID_int	pmid_int;
+
+    pmid_int.flag = 0;
+    pmid_int.domain = domain;
+    pmid_int.cluster = cluster;
+    pmid_int.item = item;
+    memcpy(&pmid, &pmid_int, sizeof(pmid));
+    return pmid;
+}
+
+unsigned int 
+pmInDom_domain(pmInDom indom)
+{
+    __pmInDom_int	*idp = (__pmInDom_int *)&indom;
+    return idp->domain;
+}
+
+unsigned int 
+pmInDom_serial(pmInDom indom)
+{
+    __pmInDom_int	*idp = (__pmInDom_int *)&indom;
+    return idp->serial;
+}
+
+pmInDom
+pmInDom_build(unsigned int domain, unsigned int serial)
+{
+    pmInDom		indom;
+    __pmInDom_int	indom_int;
+
+    indom_int.flag = 0;
+    indom_int.domain = domain;
+    indom_int.serial = serial;
+    memcpy(&indom, &indom_int, sizeof(indom));
+    return indom;
+}

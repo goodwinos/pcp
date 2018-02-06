@@ -6,7 +6,6 @@
 #include <time.h>
 #include <stdio.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 
 int
 main(int argc, char *argv[])
@@ -24,12 +23,11 @@ main(int argc, char *argv[])
     unsigned	pmcdTimeout;
     unsigned	oldTimeout;
     pmValueSet	*vsp;
-    __pmID_int	*pip;
     int		tElapsed;
     int		tMax;
     int		errflag = 0;
 
-    __pmSetProgname(pmProgname);
+    pmSetProgname(pmGetProgname());
 
     while ((c = getopt(argc, argv, "D:?")) != EOF) {
 	switch (c) {
@@ -38,7 +36,7 @@ main(int argc, char *argv[])
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
@@ -133,10 +131,7 @@ main(int argc, char *argv[])
     pmFreeResult(result);
     printf("    timeout is now %d seconds\n", pmcdTimeout);
 
-    pip = (__pmID_int *)&pmid;
-    pip->domain = domain;
-    pip->cluster = 0;
-    pip->item = 0;
+    pmid = pmID_build(domain, 0, 0);
     tBegin = time((time_t *)0);
     if ((sts = pmFetch(1, &pmid, &result)) < 0) {
 	fprintf(stderr, "fetch error = %s\n", pmErrStr(sts));

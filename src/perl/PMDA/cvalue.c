@@ -16,9 +16,8 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-#include <values.h>
+#include <limits.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include <pcp/pmda.h>
 
 void
@@ -31,16 +30,16 @@ ids(void)
 	{ 0, 0 },
 	{ 1, 1 },
 	{ 37, 13 },
-	{ MAXINT, 0 },
-	{ 0, MAXINT },
-	{ MAXINT, MAXINT }
+	{ INT_MAX, 0 },
+	{ 0, INT_MAX },
+	{ INT_MAX, INT_MAX }
     };
     int		i;
 
     for (i = 0; i < sizeof(data)/sizeof(data[0]); i++) {
-	if (PMDA_PMID(data[i].cluster,data[i].item) != pmid_build(0,data[i].cluster,data[i].item)) {
+	if (PMDA_PMID(data[i].cluster,data[i].item) != pmID_build(0,data[i].cluster,data[i].item)) {
 	    fprintf(stderr, "botch: PMDA_PMID(%d,%d) -> %x", data[i].cluster, data[i].item, PMDA_PMID(data[i].cluster,data[i].item));
-	    fprintf(stderr, " pmid_build(0,%d,%d) -> %x\n", data[i].cluster, data[i].item, pmid_build(0,data[i].cluster,data[i].item));
+	    fprintf(stderr, " pmID_build(0,%d,%d) -> %x\n", data[i].cluster, data[i].item, pmID_build(0,data[i].cluster,data[i].item));
 	}
 	printf("PMDA_PMID: %d,%d = %d\n", data[i].cluster, data[i].item, PMDA_PMID(data[i].cluster,data[i].item));
     }

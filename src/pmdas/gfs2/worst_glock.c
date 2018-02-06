@@ -15,7 +15,7 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "pmda.h"
 #include "pmdagfs2.h"
 
@@ -294,7 +294,7 @@ static void
 add_pmns_node(__pmnsTree *tree, int domain, int cluster, int lock, int stat)
 {
     char entry[64];
-    pmID pmid = pmid_build(domain, cluster, (lock * NUM_GLOCKSTATS) + stat);
+    pmID pmid = pmID_build(domain, cluster, (lock * NUM_GLOCKSTATS) + stat);
 
     pmsprintf(entry, sizeof(entry),
 	     "gfs2.worst_glock.%s.%s", topnum[lock], stattype[stat]);
@@ -313,8 +313,8 @@ refresh_worst_glock(pmdaExt *pmda, __pmnsTree **tree)
     if (worst_glock_tree) {
 	*tree = worst_glock_tree;
     } else if ((sts = __pmNewPMNS(&worst_glock_tree)) < 0) {
-	__pmNotifyErr(LOG_ERR, "%s: failed to create worst_glock names: %s\n",
-			pmProgname, pmErrStr(sts));
+	pmNotifyErr(LOG_ERR, "%s: failed to create worst_glock names: %s\n",
+			pmGetProgname(), pmErrStr(sts));
 	*tree = NULL;
     } else {
         for (t = 0; t < NUM_TOPNUM; t++)
@@ -334,19 +334,19 @@ refresh_worst_glock(pmdaExt *pmda, __pmnsTree **tree)
 static void
 refresh_metrictable(pmdaMetric *source, pmdaMetric *dest, int lock)
 {
-    int item = pmid_item(source->m_desc.pmid);
-    int domain = pmid_domain(source->m_desc.pmid);
-    int cluster = pmid_cluster(source->m_desc.pmid);
+    int item = pmID_item(source->m_desc.pmid);
+    int domain = pmID_domain(source->m_desc.pmid);
+    int cluster = pmID_cluster(source->m_desc.pmid);
 
     memcpy(dest, source, sizeof(pmdaMetric));
     item += lock * NUM_GLOCKSTATS;
-    dest->m_desc.pmid = pmid_build(domain, cluster, item);
+    dest->m_desc.pmid = pmID_build(domain, cluster, item);
 
     if (pmDebugOptions.appl0)
 	fprintf(stderr, "GFS2 worst_glock refresh_metrictable: (%p -> %p) "
 			"metric ID dup: %d.%d.%d -> %d.%d.%d\n",
 			source, dest, domain, cluster,
-			pmid_item(source->m_desc.pmid), domain, cluster, item);
+			pmID_item(source->m_desc.pmid), domain, cluster, item);
 }
 
 /*
@@ -364,10 +364,10 @@ size_metrictable(int *total, int *trees)
 static int
 worst_glock_text(pmdaExt *pmda, pmID pmid, int type, char **buf)
 {
-    int item = pmid_item(pmid);
+    int item = pmID_item(pmid);
     static char text[128];
 
-    if (pmid_cluster(pmid) != CLUSTER_WORSTGLOCK)
+    if (pmID_cluster(pmid) != CLUSTER_WORSTGLOCK)
 	return PM_ERR_PMID;
     if (item < 0 || item >= WORST_GLOCK_COUNT)
 	return PM_ERR_PMID;
@@ -380,13 +380,13 @@ worst_glock_text(pmdaExt *pmda, pmID pmid, int type, char **buf)
 }
 
 void
-gfs2_worst_glock_init(pmdaMetric *metrics, int nmetrics)
+gfs2_worst_glock_init(pmdaExt *pmda, pmdaMetric *metrics, int nmetrics)
 {
     int set[] = { CLUSTER_WORSTGLOCK };
 
-    pmdaDynamicPMNS("gfs2.worst_glock",
-		    set, sizeof(set)/sizeof(int),
-		    refresh_worst_glock, worst_glock_text,
-		    refresh_metrictable, size_metrictable,
-		    metrics, nmetrics);
+    pmdaExtDynamicPMNS("gfs2.worst_glock",
+			set, sizeof(set)/sizeof(int),
+			refresh_worst_glock, worst_glock_text,
+			refresh_metrictable, size_metrictable,
+			metrics, nmetrics, pmda);
 }

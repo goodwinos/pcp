@@ -40,7 +40,7 @@ unsigned exit_p;		/* counted by SIG* handler */
 static __pmServerPresence *presence;
 unsigned multithread = 0;       /* set by -M option */
 unsigned graphite_timestep = 60;  /* set by -i option */
-unsigned graphite_archivedir = 0; /* set by -I option */
+unsigned graphite_hostcache = 0; /* set by -J option */
 string logfile = "";		/* set by -l option */
 string fatalfile = "/dev/tty";	/* fatal messages at startup go here */
 
@@ -250,7 +250,7 @@ mhd_respond (void *cls, struct MHD_Connection *connection, const char *url0,
             return pmgraphite_respond (connection, mhd_cc->params, url_tokens, url);
         }
         // graphite dashboard idiosyncracy; note absence of /graphite top level
-        else if (graphite_p && (method == "GET" || method == "POST") && 
+        else if (graphite_p && (method == "GET" || method == "POST") &&
                  ((url1 == "metrics" && url2 == "find") ||
                   (url1 == "render"))) {
             url_tokens.insert (url_tokens.begin() + 1 /* empty #0 */,
@@ -350,7 +350,7 @@ server_dump_configuration ()
 {
     char *cwd;
     char cwdpath[MAXPATHLEN];
-    char sep = __pmPathSeparator ();
+    char sep = pmPathSeparator ();
 
     // Assume timestamp() already just called, so we
     // don't have to repeat.
@@ -389,6 +389,7 @@ server_dump_configuration ()
 
     clog << "\tGraphite API " << (graphite_p ? "enabled" : "disabled") << endl;
     clog << "\tGraphite API name encoding " << (graphite_encode ? "long" : "short") << endl;
+    clog << "\tGraphite API metric naming " << (graphite_hostcache ? "hostname-based" : "file-based") << endl;
     clog << "\tGraphite API Cairo graphics rendering "
 #ifdef HAVE_CAIRO
          << "compiled-in"
@@ -487,6 +488,7 @@ longopts[] = {
     {"graphite-noencode", 0, 'X', 0, "don't encode special characters that are now allowed by graphite"},
     {"graphite-timestamp", 1, 'i', "SEC", "minimum graphite timestep (s) [default 60]"},
     {"graphite-archivedir", 0, 'I', 0, "prefer archive directories [default OFF]"},
+    {"graphite-host", 0, 'J', 0, "prefer hostname as metric component [default OFF]"},
     PMAPI_OPTIONS_HEADER ("Context options"),
     {"timeout", 1, 't', "SEC", "max time (seconds) for PMAPI polling [default 300]"},
     {"context", 1, 'c', "NUM", "set next permanent-binding context number"},
@@ -538,10 +540,10 @@ main (int argc, char *argv[])
 
     umask (022);
     char * username_str;
-    __pmGetUsername (&username_str);
+    pmGetUsername (&username_str);
     __pmServerSetFeature (PM_SERVER_FEATURE_DISCOVERY);
 
-    opts.short_options = "A:a:c:CD:h:Ll:NM:Pp:R:Gi:It:U:vx:d:SX46?";
+    opts.short_options = "A:a:c:CD:h:Ll:NM:Pp:R:GJi:It:U:vx:d:SX46?";
     opts.long_options = longopts;
     opts.override = option_overrides;
 
@@ -554,7 +556,7 @@ main (int argc, char *argv[])
         case 'p':
             port = (int) strtol (opts.optarg, &endptr, 0);
             if (*endptr != '\0' || port < 0 || port > 65535) {
-                pmprintf ("%s: invalid port number %s\n", pmProgname, opts.optarg);
+                pmprintf ("%s: invalid port number %s\n", pmGetProgname(), opts.optarg);
                 opts.errors++;
             }
             break;
@@ -562,7 +564,7 @@ main (int argc, char *argv[])
         case 't':
             maxtimeout = strtoul (opts.optarg, &endptr, 0);
             if (*endptr != '\0') {
-                pmprintf ("%s: invalid timeout %s\n", pmProgname, opts.optarg);
+                pmprintf ("%s: invalid timeout %s\n", pmGetProgname(), opts.optarg);
                 opts.errors++;
             }
             break;
@@ -582,13 +584,18 @@ main (int argc, char *argv[])
         case 'i':
             graphite_timestep = atoi (opts.optarg);
             if (graphite_timestep <= 0) {
-                pmprintf ("%s: timestep too small %s\n", pmProgname, opts.optarg);
+                pmprintf ("%s: timestep too small %s\n", pmGetProgname(), opts.optarg);
                 opts.errors++;
             }
             break;
 
         case 'I':
-            graphite_archivedir = 1;
+            pmprintf ("%s: %s option ignored\n", pmGetProgname(), opts.optarg);
+            /* graphite_archivedir = 1; */
+            break;
+
+        case 'J':
+            graphite_hostcache = 1;
             break;
 
         case 'A':
@@ -619,7 +626,7 @@ main (int argc, char *argv[])
         case 'c':
             perm_context = strtoul (opts.optarg, &endptr, 0);
             if (*endptr != '\0' || perm_context >= INT_MAX) {
-                pmprintf ("%s: invalid context number %s\n", pmProgname, opts.optarg);
+                pmprintf ("%s: invalid context number %s\n", pmGetProgname(), opts.optarg);
                 opts.errors++;
             }
             break;
@@ -629,41 +636,40 @@ main (int argc, char *argv[])
                 strstr(opts.optarg, "local:") != NULL)
                 localmode = 1;	// complete this check after arg parsing
             if ((ctx = pmNewContext (PM_CONTEXT_HOST, opts.optarg)) < 0) {
-                __pmNotifyErr (LOG_ERR, "new context failed\n");
+                ctx = -1;
+            }
+            if ((sts = pmwebapi_bind_permanent (perm_context++, ctx, opts.optarg)) < 0) {
+                pmNotifyErr (LOG_ERR, "permanent bind failed\n");
                 exit (EXIT_FAILURE);
             }
-            if ((sts = pmwebapi_bind_permanent (perm_context++, ctx)) < 0) {
-                __pmNotifyErr (LOG_ERR, "permanent bind failed\n");
-                exit (EXIT_FAILURE);
-            }
-            __pmNotifyErr (LOG_INFO, "context (web%lu=pm%d) created, host %s, permanent\n",
+            pmNotifyErr (LOG_INFO, "context (web%lu=pm%d) created, host %s, permanent\n",
                            perm_context - 1, ctx, opts.optarg);
             break;
 
         case 'a':
             if ((ctx = pmNewContext (PM_CONTEXT_ARCHIVE, opts.optarg)) < 0) {
-                __pmNotifyErr (LOG_ERR, "new context failed\n");
+                pmNotifyErr (LOG_ERR, "new context failed\n");
                 exit (EXIT_FAILURE);
             }
-            if ((sts = pmwebapi_bind_permanent (perm_context++, ctx)) < 0) {
-                __pmNotifyErr (LOG_ERR, "permanent bind failed\n");
+            if ((sts = pmwebapi_bind_permanent (perm_context++, ctx, opts.optarg)) < 0) {
+                pmNotifyErr (LOG_ERR, "permanent bind failed\n");
                 exit (EXIT_FAILURE);
             }
-            __pmNotifyErr (LOG_INFO, "context (web%lu=pm%d) created, archive %s, permanent\n",
+            pmNotifyErr (LOG_INFO, "context (web%lu=pm%d) created, archive %s, permanent\n",
                            perm_context - 1, ctx, opts.optarg);
             break;
 
         case 'L':
             localmode = 1;	// complete this check after arg parsing
             if ((ctx = pmNewContext (PM_CONTEXT_LOCAL, NULL)) < 0) {
-                __pmNotifyErr (LOG_ERR, "new context failed\n");
+                pmNotifyErr (LOG_ERR, "new context failed\n");
                 exit (EXIT_FAILURE);
             }
-            if ((sts = pmwebapi_bind_permanent (perm_context++, ctx)) < 0) {
-                __pmNotifyErr (LOG_ERR, "permanent bind failed\n");
+            if ((sts = pmwebapi_bind_permanent (perm_context++, ctx, "")) < 0) {
+                pmNotifyErr (LOG_ERR, "permanent bind failed\n");
                 exit (EXIT_FAILURE);
             }
-            __pmNotifyErr (LOG_INFO, "context (web%lu=pm%d) created, local, permanent\n",
+            pmNotifyErr (LOG_INFO, "context (web%lu=pm%d) created, local, permanent\n",
                            perm_context - 1, ctx);
             break;
 
@@ -700,12 +706,12 @@ main (int argc, char *argv[])
     }
 
     if (!permissive && localmode) {
-        pmprintf ( "%s: non-permissive and local-context modes are mutually exclusive\n", pmProgname);
+        pmprintf ( "%s: non-permissive and local-context modes are mutually exclusive\n", pmGetProgname());
         opts.errors++;
     }
 
     if (permissive && __pmServerHasFeature (PM_SERVER_FEATURE_CREDS_REQD)) {
-        pmprintf ( "%s: permissive and mandatory authentication modes are mutually exclusive\n", pmProgname);
+        pmprintf ( "%s: permissive and mandatory authentication modes are mutually exclusive\n", pmGetProgname());
         opts.errors++;
     }
 
@@ -747,7 +753,7 @@ main (int argc, char *argv[])
     /* lose root privileges if we have them */
     if (geteuid () == 0)
 #endif
-        __pmSetProcessIdentity (username_str);
+        pmSetProcessIdentity (username_str);
 
     /* tell the world we have arrived */
     __pmServerCreatePIDFile (PM_SERVER_WEBD_SPEC, 0);
@@ -755,7 +761,7 @@ main (int argc, char *argv[])
         presence = __pmServerAdvertisePresence (PM_SERVER_WEBD_SPEC, port);
 
     // (re)create log file, redirect stdout/stderr
-    // NB: must be done after __pmSetProcessIdentity() for proper file permissions
+    // NB: must be done after pmSetProcessIdentity() for proper file permissions
     if (logfile != "") {
         int
         fd;
@@ -785,7 +791,7 @@ main (int argc, char *argv[])
         }
     }
 
-    timestamp (clog) << pmProgname << endl;
+    timestamp (clog) << pmGetProgname() << endl;
     server_dump_request_ports (d4 != NULL, d6 != NULL, port);
     server_dump_configuration ();
 
@@ -801,6 +807,10 @@ main (int argc, char *argv[])
 
     /* Setup randomness for calls to random() */
     pmweb_init_random_seed ();
+
+    /* Scan all of our graphite archives. */
+    if (graphite_p)
+        ac_refresh_all(0);
 
     // A place to track utilization
     /* Block indefinitely. */
@@ -874,5 +884,9 @@ main (int argc, char *argv[])
     }
 
     pmweb_shutdown (d4, d6);
+    // clean up graphite archive cache
+    if (graphite_p)
+        ac_refresh_all (0);
+    
     return 0;
 }

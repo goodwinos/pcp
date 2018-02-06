@@ -1,6 +1,5 @@
 #include <assert.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include <pcp/pmda.h>
 #include "./domain.h"
 
@@ -54,9 +53,9 @@ trivial_fetch(pmdaMetric * mdesc, unsigned int inst, pmAtomValue * atom)
 int
 main(int argc, char **argv)
 {
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
     pmdaInterface desc;
-    pmdaDaemon(&desc, PMDA_INTERFACE_4, pmProgname, TRIVIAL, NULL, NULL);
+    pmdaDaemon(&desc, PMDA_INTERFACE_4, pmGetProgname(), TRIVIAL, NULL, NULL);
     desc.version.four.children = trivial_children;
     pmdaSetFetchCallBack(&desc, trivial_fetch);
     pmdaInit(&desc, NULL, 0, NULL, 0);

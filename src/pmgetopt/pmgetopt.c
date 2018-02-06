@@ -13,7 +13,6 @@
  */
 #include <ctype.h>
 #include "pmapi.h"
-#include "impl.h"
 
 static int lineno;
 static int count;
@@ -60,28 +59,28 @@ command(pmOptions *opts, char *buffer)
 	finish = skip_nonwhitespace(start);
 	*finish = '\0';
 	if (pmDebugOptions.desperate)
-	    fprintf(stderr, "%s: getopt command: '%s'\n", pmProgname, start);
+	    fprintf(stderr, "%s: getopt command: '%s'\n", pmGetProgname(), start);
 	if ((opts->short_options = strdup(start)) == NULL)
-	    __pmNoMem("short_options", strlen(start), PM_FATAL_ERR);
+	    pmNoMem("short_options", strlen(start), PM_FATAL_ERR);
 	return 0;
     }
 
     if (strncasecmp(start, "usage", sizeof("usage")-1) == 0) {
 	start = skip_whitespace(skip_nonwhitespace(start));
 	if (pmDebugOptions.desperate)
-	    fprintf(stderr, "%s: usage command: '%s'\n", pmProgname, start);
+	    fprintf(stderr, "%s: usage command: '%s'\n", pmGetProgname(), start);
 	if ((opts->short_usage = strdup(start)) == NULL)
-	    __pmNoMem("short_usage", strlen(start), PM_FATAL_ERR);
+	    pmNoMem("short_usage", strlen(start), PM_FATAL_ERR);
 	return 0;
     }
 
     if (strncasecmp(start, "end", sizeof("end")-1) == 0) {
 	if (pmDebugOptions.desperate)
-	    fprintf(stderr, "%s: end command\n", pmProgname);
+	    fprintf(stderr, "%s: end command\n", pmGetProgname());
 	return 1;
     }
 
-    fprintf(stderr, "%s: unrecognized command: '%s'\n", pmProgname, buffer);
+    fprintf(stderr, "%s: unrecognized command: '%s'\n", pmGetProgname(), buffer);
     return 0;
 }
 
@@ -94,7 +93,7 @@ append_option(pmOptions *opts, pmLongOptions *longopt)
     /* space for existing entries, new entry and the sentinal */
     size = (count + 1) * sizeof(pmLongOptions) + sizeof(pmLongOptions);
     if ((entry = realloc(opts->long_options, size)) == NULL)
-	__pmNoMem("append", size, PM_FATAL_ERR);
+	pmNoMem("append", size, PM_FATAL_ERR);
     opts->long_options = entry;
     entry += count++;
     /* if not first entry: find current sentinal, overwrite with new option */
@@ -109,9 +108,9 @@ append_text(pmOptions *opts, char *buffer, size_t length)
     pmLongOptions text = PMAPI_OPTIONS_TEXT("");
 
     if (pmDebugOptions.desperate)
-	fprintf(stderr, "%s: append: '%s'\n", pmProgname, buffer);
+	fprintf(stderr, "%s: append: '%s'\n", pmGetProgname(), buffer);
     if ((text.message = strdup(buffer)) == NULL)
-	__pmNoMem("append_text", length, PM_FATAL_ERR);
+	pmNoMem("append_text", length, PM_FATAL_ERR);
     return append_option(opts, &text);
 }
 
@@ -159,7 +158,7 @@ standard_options(pmOptions *opts, char *start)
     if (entry)
 	return append_option(opts, entry);
     fprintf(stderr, "%s: cannot find PCP option \"%s\", line %d ignored\n",
-		    pmProgname, start, lineno);
+		    pmGetProgname(), start, lineno);
     return -EINVAL;
 }
 
@@ -182,7 +181,7 @@ options(pmOptions *opts, char *buffer, size_t length)
      *     -X=N                 offset resulting values by N units
      */
     if (pmDebugOptions.desperate)
-	fprintf(stderr, "%s: parsing option: '%s'", pmProgname, buffer);
+	fprintf(stderr, "%s: parsing option: '%s'", pmGetProgname(), buffer);
 
     start = skip_whitespace(skip_nonwhitespace(buffer));
     finish = skip_nonwhitespace(start);
@@ -207,14 +206,14 @@ options(pmOptions *opts, char *buffer, size_t length)
 	    finish = skip_nonwhitespace(token);
 	    *finish = '\0';
 	    if ((option.argname = strdup(token)) == NULL)
-		__pmNoMem("argname", strlen(token), PM_FATAL_ERR);
+		pmNoMem("argname", strlen(token), PM_FATAL_ERR);
 	    option.has_arg = 1;
 	} /* else e.g. --label  dump the archive label */
 	if ((option.long_opt = strdup(start + 2)) == NULL)
-	    __pmNoMem("longopt", strlen(start), PM_FATAL_ERR);
+	    pmNoMem("longopt", strlen(start), PM_FATAL_ERR);
 	token = skip_whitespace(finish + 1);
 	if ((option.message = strdup(token)) == NULL)
-	    __pmNoMem("message", strlen(token), PM_FATAL_ERR);
+	    pmNoMem("message", strlen(token), PM_FATAL_ERR);
 	return append_option(opts, &option);
     }
 
@@ -232,7 +231,7 @@ options(pmOptions *opts, char *buffer, size_t length)
 	if ((token = seek_character(token, '-')) == NULL ||
 	    (token - buffer >= length) || (token[1] != '-')) {
 	    fprintf(stderr, "%s: expected long option at \"%s\", line %d ignored\n",
-		    pmProgname, token, lineno);
+		    pmGetProgname(), token, lineno);
 	    return -EINVAL;
 	}
 	start = token + 2;	/* skip double-dash */
@@ -242,23 +241,23 @@ options(pmOptions *opts, char *buffer, size_t length)
 	    finish = skip_nonwhitespace(token);
 	    *finish = '\0';
 	    if ((option.argname = strdup(token)) == NULL)
-		__pmNoMem("argname", strlen(token), PM_FATAL_ERR);
+		pmNoMem("argname", strlen(token), PM_FATAL_ERR);
 	} else {
 	    finish = skip_nonwhitespace(start);
 	    *finish = '\0';
 	}
 	if ((option.long_opt = strdup(start)) == NULL)
-	    __pmNoMem("longopt", strlen(start), PM_FATAL_ERR);
+	    pmNoMem("longopt", strlen(start), PM_FATAL_ERR);
 	start = skip_whitespace(finish + 1);
 	if ((option.message = strdup(start)) == NULL)
-	    __pmNoMem("message", strlen(start), PM_FATAL_ERR);
+	    pmNoMem("message", strlen(start), PM_FATAL_ERR);
 	return append_option(opts, &option);
     }
 
     /* handle final two example cases above -- short options only */
     if (isspace((int)start[1])) {
 	fprintf(stderr, "%s: expected short option at \"%s\", line %d ignored\n",
-		pmProgname, start, lineno);
+		pmGetProgname(), start, lineno);
 	return -EINVAL;
     }
     option.long_opt = "";
@@ -269,7 +268,7 @@ options(pmOptions *opts, char *buffer, size_t length)
 	finish = skip_nonwhitespace(token);
 	*finish = '\0';
 	if ((option.argname = strdup(token)) == NULL)
-	    __pmNoMem("argname", strlen(token), PM_FATAL_ERR);
+	    pmNoMem("argname", strlen(token), PM_FATAL_ERR);
 	/* e.g. -X=N  offset resulting values by N units */
 	start = skip_whitespace(finish + 2);
     } else {
@@ -277,7 +276,7 @@ options(pmOptions *opts, char *buffer, size_t length)
 	start = skip_whitespace(start + 3);
     }
     if ((option.message = strdup(start)) == NULL)
-	__pmNoMem("message", strlen(start), PM_FATAL_ERR);
+	pmNoMem("message", strlen(start), PM_FATAL_ERR);
     return append_option(opts, &option);
 }
 
@@ -292,7 +291,7 @@ build_short_options(pmOptions *opts)
     /* allocate for maximal case - every entry has a short opt and an arg */
     size = 1 + sizeof(char) * 2 * count;
     if ((shortopts = malloc(size)) == NULL)
-	__pmNoMem("shortopts", size, PM_FATAL_ERR);
+	pmNoMem("shortopts", size, PM_FATAL_ERR);
 
     for (entry = opts->long_options; entry && entry->long_opt; entry++) {
 	if ((opt = entry->short_opt) == 0)
@@ -320,7 +319,7 @@ setup(char *filename, pmOptions *opts)
 	fp = fdopen(STDIN_FILENO, "r");
     if (!fp) {
 	fprintf(stderr, "%s: cannot open %s for reading configuration\n",
-		pmProgname, filename? filename : "<stdin>");
+		pmGetProgname(), filename? filename : "<stdin>");
 	return -oserror();
     }
 
@@ -407,7 +406,7 @@ main(int argc, char **argv)
 	case 'D':
 	    if ((c = pmSetDebug(localopts.optarg)) < 0) {
 		pmprintf("%s: unrecognized debug options specification (%s)\n",
-			pmProgname, localopts.optarg);
+			pmGetProgname(), localopts.optarg);
 		localopts.errors++;
 	    }
 	    break;
@@ -435,11 +434,11 @@ main(int argc, char **argv)
 	exit(1);
     argc -= (localopts.optind - 1);
     argv += (localopts.optind - 1);
-    argv[0] = progname ? progname : pmProgname;
+    argv[0] = progname ? progname : pmGetProgname();
 
     if (usage) {
 	if (progname)
-	    pmProgname = progname;
+	    pmSetProgname(progname);
 	pmUsageMessage(&opts);
 	exit(1);
     }

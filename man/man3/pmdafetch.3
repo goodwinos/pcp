@@ -21,8 +21,6 @@
 .ft 3
 #include <pcp/pmapi.h>
 .br
-#include <pcp/impl.h>
-.br
 #include <pcp/pmda.h>
 .sp
 .ad l
@@ -277,7 +275,7 @@ myFetchCallBack(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *avp)
   static char sbuf[20]; // reuse this buffer
   char        *dbuf;    // malloc'd
 .sp 0.5v
-  switch (pmid_item(mdesc->m_desc.pmid)) {
+  switch (pmID_item(mdesc->m_desc.pmid)) {
     case 0:
       /* assign some value for metric A */;
       avp->l = ...

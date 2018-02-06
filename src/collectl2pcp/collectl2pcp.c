@@ -15,7 +15,7 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include <pcp/libpcp.h>
 #include <pcp/pmda.h>
 #include <pcp/import.h>
 #include "metrics.h"
@@ -207,13 +207,29 @@ main(int argc, char *argv[])
 	infile = argv[opts.optind + filenum];
 	gzipped = strstr(infile, ".gz") != NULL;
 	if (gzipped) {
-	    pmsprintf(buf, BUFSIZE, "gzip -c -d %s", infile);
-	    if ((fp = popen(buf, "r")) == NULL)
-		perror(buf);
+	    int sts;
+	    __pmExecCtl_t *argp = NULL;
+	    sts = __pmProcessAddArg(&argp, "gzip");
+	    if (sts == 0) sts = __pmProcessAddArg(&argp, "-c");
+	    if (sts == 0) sts = __pmProcessAddArg(&argp, "-d");
+	    if (sts == 0) sts = __pmProcessAddArg(&argp, infile);
+	    if (sts < 0) {
+		fprintf(stderr, "Error: __pmProcessAddArg: gzip -c -d %s failed: %s\n",
+		    infile, pmErrStr(sts));
+		exit(1);
+	    }
+	    if ((sts = __pmProcessPipe(&argp, "r", PM_EXEC_TOSS_NONE, &fp)) < 0) {
+		fprintf(stderr, "Error: __pmProcessPipe: %s failed: %s\n",
+		    buf, pmErrStr(sts));
+		exit(1);
+	    }
 	}
-	else
-	if ((fp = fopen(infile, "r")) == NULL)
-	    perror(infile);
+	else {
+	    if ((fp = fopen(infile, "r")) == NULL) {
+		perror(infile);
+		exit(1);
+	    }
+	}
 
 	if (fp == NULL) {
 	    pmUsageMessage(&opts);
@@ -282,7 +298,7 @@ main(int argc, char *argv[])
 	}
 
 	if (gzipped)
-	    pclose(fp);
+	    __pmProcessPipeClose(fp);
 	else
 	    fclose(fp);
     }

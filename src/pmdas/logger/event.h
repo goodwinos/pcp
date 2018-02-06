@@ -18,7 +18,7 @@
 #define _EVENT_H
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include <sys/stat.h>
 
 typedef struct event_logfile {

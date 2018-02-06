@@ -18,7 +18,6 @@
 
 #include <stdio.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 
 #include "tab.h"
 #include "colorscheme.h"
@@ -79,6 +78,7 @@ extern void writeSettings();
 extern QColor nextColor(QString, int *);
 
 extern int Cflag;
+extern int Dflag;
 extern int Lflag;
 extern int Wflag;
 extern char *outfile;

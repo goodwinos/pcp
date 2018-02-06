@@ -6,20 +6,23 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include "libpcp.h"
 #include <sys/types.h>
 #include <sys/wait.h>
 
 static void
 report_status(int status)
 {
-    if (WIFEXITED(status)) printf(" exit=%d", WEXITSTATUS(status));
-    if (WIFSIGNALED(status)) printf(" signal=%d", WTERMSIG(status));
-    if (WIFSTOPPED(status)) printf(" stop signal=%d", WSTOPSIG(status));
-#ifdef WIFCONTINUED
-    if (WIFCONTINUED(status)) printf(" continued");
-#endif
-    if (WCOREDUMP(status)) printf(" core dumped");
+    if (status == 0)
+	return;
+    else if (status < 0)
+	printf(" %s", pmErrStr(status));
+    else if (status >= 2000)
+	printf(" unknown cause");
+    else if (status >= 1000)
+	printf(" signal=%d", status-1000);
+    else
+	printf(" exit=%d", status);
 }
 
 int
@@ -27,16 +30,15 @@ main(int argc, char **argv)
 {
     __pmExecCtl_t	*h;
     int		sts;
-    int		status;
     int		c;
     int		errflag = 0;
     int		pipein = 0;
     int		pipeout = 0;
-    FILE	*f;
-    FILE	*fdata;
+    FILE	*fin;
+    FILE	*fout;
 
     /* trim cmd name of leading directory components */
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     setlinebuf(stdout);
     setlinebuf(stderr);
@@ -48,14 +50,14 @@ main(int argc, char **argv)
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
 
 	case 'p':	/* __pmProcessPipe(), reading */
 	    if (pipein || pipeout) {
-		fprintf(stderr, "%s: at most one of -p or -P allowed\n", pmProgname);
+		fprintf(stderr, "%s: at most one of -p or -P allowed\n", pmGetProgname());
 		errflag++;
 	    }
 	    pipein++;
@@ -63,13 +65,13 @@ main(int argc, char **argv)
 
 	case 'P':	/* __pmProcessPipe(), writing */
 	    if (pipein || pipeout) {
-		fprintf(stderr, "%s: at most one of -p or -P allowed\n", pmProgname);
+		fprintf(stderr, "%s: at most one of -p or -P allowed\n", pmGetProgname());
 		errflag++;
 	    }
 	    pipeout++;
-	    if ((fdata = fopen(optarg, "r")) == NULL) {
+	    if ((fin = fopen(optarg, "r")) == NULL) {
 		fprintf(stderr, "%s: cannot open \"%s\" for reading: \"%s\"\n",
-		    pmProgname, optarg, pmErrStr(-errno));
+		    pmGetProgname(), optarg, pmErrStr(-errno));
 		exit(1);
 	    }
 	    break;
@@ -89,7 +91,7 @@ Options:\n\
   -D debug[,...] set PCP debugging option(s)\n\
   -p             read to EOF from __pmProcessPipe\n\
   -P data        read data file and write to __pmProcessPipe\n",
-                pmProgname);
+                pmGetProgname());
         exit(1);
     }
 
@@ -105,32 +107,45 @@ Options:\n\
     }
 
     if (pipein) {
-	f = __pmProcessPipe(&h, "r", &status);
-	printf("__pmProcessPipe(..., \"r\", ...) -> %s", f == NULL ? "FAIL" : "OK");
-	if (f == NULL)
-	    sts = 1;
+	sts = __pmProcessPipe(&h, "r", PM_EXEC_TOSS_NONE, &fin);
+	printf("__pmProcessPipe(..., \"r\", ...) -> %d", sts);
+	if (sts < 0) {
+	    printf(": %s\n", pmErrStr(sts));
+	}
 	else {
-	    /* TODO */
-	    sts = 0;
+	    putchar('\n');
+	    while ((c = fgetc(fin)) != EOF) {
+		putchar(c);
+	    }
+	    sts = __pmProcessPipeClose(fin);
+	    printf("__pmProcessPipeClose() -> %d", sts);
+	    report_status(sts);
+	    putchar('\n');
 	}
     }
     else if (pipeout) {
-	f = __pmProcessPipe(&h, "w", &status);
-	printf("__pmProcessPipe(..., \"w\", ...) -> %s", f == NULL ? "FAIL" : "OK");
-	if (f == NULL)
-	    sts = 1;
+	sts = __pmProcessPipe(&h, "w", PM_EXEC_TOSS_NONE, &fout);
+	printf("__pmProcessPipe(..., \"w\", ...) -> %d", sts);
+	if (sts < 0) {
+	    printf(": %s\n", pmErrStr(sts));
+	}
 	else {
-	    /* TODO */
-	    sts = 0;
+	    putchar('\n');
+	    while ((c = fgetc(fin)) != EOF) {
+		fputc(c, fout);
+	    }
+	    sts = __pmProcessPipeClose(fout);
+	    printf("__pmProcessPipeClose() -> %d", sts);
+	    report_status(sts);
+	    putchar('\n');
 	}
     }
     else {
-	sts = __pmProcessExec(&h, PM_EXEC_TOSS_NONE, PM_EXEC_WAIT, &status);
+	sts = __pmProcessExec(&h, PM_EXEC_TOSS_NONE, PM_EXEC_WAIT);
 	printf("__pmProcessExec -> %d", sts);
+	report_status(sts);
+	putchar('\n');
     }
-    if (sts == -1)
-	report_status(status);
-    putchar('\n');
 
     return(0);
 }

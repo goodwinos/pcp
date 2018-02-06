@@ -18,7 +18,6 @@
 ** See the GNU General Public License for more details.
 */
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 
 #include "atop.h"
 #include "ifprop.h"
@@ -89,7 +88,7 @@ initifprop(void)
 	{
 		fprintf(stderr,
 			"%s: allocating interface table: %s [%ld bytes]\n",
-			pmProgname, strerror(errno), (long)propsize);
+			pmGetProgname(), strerror(errno), (long)propsize);
 		cleanstop(1);
 	}
 
@@ -105,6 +104,19 @@ initifprop(void)
 		ip->speed = speed < 0 ? 0 : BTOMBIT(speed); /* Mbits/second */
 		sts = extract_integer_inst(result, descs, IF_DUPLEX, ids[i]);
 		ip->fullduplex = sts < 0 ? 0 : sts;
+		sts = extract_integer_inst(result, descs, IF_WIRELESS, ids[i]);
+		if (sts == 1)
+			ip->type = 'w';
+		else
+		{
+			sts = extract_integer_inst(result, descs, IF_TYPE, ids[i]);
+			if (sts == 0)
+				ip->type = 'w';
+			else if (sts == 1)
+				ip->type = 'e';
+			else
+				ip->type = '?';
+		}
 	}
 	ifprops[i].name[0] = '\0';
 	pmFreeResult(result);

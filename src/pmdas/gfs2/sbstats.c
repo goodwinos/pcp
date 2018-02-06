@@ -15,7 +15,7 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "pmda.h"
 
 #include "pmdagfs2.h"
@@ -130,13 +130,13 @@ gfs2_refresh_sbstats(const char *sysfs, const char *name, struct sbstats *sb)
 	unsigned int type = id / NUM_LOCKSTATS;
 	unsigned int stat = id % NUM_LOCKSTATS;
 	if (strcmp(typestr, locktype[type]) != 0) {
-	    __pmNotifyErr(LOG_ERR,
+	    pmNotifyErr(LOG_ERR,
 			"unexpected sbstat type \"%s\" (want %s at line %u)",
 			typestr, locktype[type], id);
 	    break;	/* eh? */
 	}
 	if (strcmp(statstr, stattype[stat]) != 0) {
-	    __pmNotifyErr(LOG_ERR,
+	    pmNotifyErr(LOG_ERR,
 			"unexpected sbstat stat \"%s\" (want %s at line %u)",
 			statstr, stattype[stat], id);
 	    break;	/* wha? */
@@ -154,7 +154,7 @@ gfs2_refresh_sbstats(const char *sysfs, const char *name, struct sbstats *sb)
 	}
 
 	if (pmDebugOptions.appl0)
-	    __pmNotifyErr(LOG_INFO,
+	    pmNotifyErr(LOG_INFO,
 			"got expected sbstat type \"%s\", stat \"%s\" at line %u",
 			typestr, statstr, id);
 
@@ -169,7 +169,7 @@ static void
 add_pmns_node(__pmnsTree *tree, int domain, int cluster, int lock, int stat)
 {
     char entry[64];
-    pmID pmid = pmid_build(domain, cluster, (lock * NUM_LOCKSTATS) + stat);
+    pmID pmid = pmID_build(domain, cluster, (lock * NUM_LOCKSTATS) + stat);
 
     pmsprintf(entry, sizeof(entry),
 	     "gfs2.sbstats.%s.%s", locktype[lock], stattype[stat]);
@@ -188,8 +188,8 @@ refresh_sbstats(pmdaExt *pmda, __pmnsTree **tree)
     if (sbstats_tree) {
 	*tree = sbstats_tree;
     } else if ((sts = __pmNewPMNS(&sbstats_tree)) < 0) {
-	__pmNotifyErr(LOG_ERR, "%s: failed to create sbstats names: %s\n",
-			pmProgname, pmErrStr(sts));
+	pmNotifyErr(LOG_ERR, "%s: failed to create sbstats names: %s\n",
+			pmGetProgname(), pmErrStr(sts));
 	*tree = NULL;
     } else {
         for (t = 0; t < NUM_LOCKTYPES; t++)
@@ -209,19 +209,19 @@ refresh_sbstats(pmdaExt *pmda, __pmnsTree **tree)
 static void
 refresh_metrictable(pmdaMetric *source, pmdaMetric *dest, int lock)
 {
-    int item = pmid_item(source->m_desc.pmid);
-    int domain = pmid_domain(source->m_desc.pmid);
-    int cluster = pmid_cluster(source->m_desc.pmid);
+    int item = pmID_item(source->m_desc.pmid);
+    int domain = pmID_domain(source->m_desc.pmid);
+    int cluster = pmID_cluster(source->m_desc.pmid);
 
     memcpy(dest, source, sizeof(pmdaMetric));
     item += lock * NUM_LOCKSTATS;
-    dest->m_desc.pmid = pmid_build(domain, cluster, item);
+    dest->m_desc.pmid = pmID_build(domain, cluster, item);
 
     if (pmDebugOptions.appl0)
 	fprintf(stderr, "GFS2 sbstats refresh_metrictable: (%p -> %p) "
 			"metric ID dup: %d.%d.%d -> %d.%d.%d\n",
 			source, dest, domain, cluster,
-			pmid_item(source->m_desc.pmid), domain, cluster, item);
+			pmID_item(source->m_desc.pmid), domain, cluster, item);
 }
 
 /*
@@ -239,10 +239,10 @@ size_metrictable(int *total, int *trees)
 static int
 sbstats_text(pmdaExt *pmda, pmID pmid, int type, char **buf)
 {
-    int item = pmid_item(pmid);
+    int item = pmID_item(pmid);
     static char text[128];
 
-    if (pmid_cluster(pmid) != CLUSTER_SBSTATS)
+    if (pmID_cluster(pmid) != CLUSTER_SBSTATS)
 	return PM_ERR_PMID;
     if (item < 0 || item >= SBSTATS_COUNT)
 	return PM_ERR_PMID;
@@ -255,13 +255,13 @@ sbstats_text(pmdaExt *pmda, pmID pmid, int type, char **buf)
 }
 
 void
-gfs2_sbstats_init(pmdaMetric *metrics, int nmetrics)
+gfs2_sbstats_init(pmdaExt *pmda, pmdaMetric *metrics, int nmetrics)
 {
     int set[] = { CLUSTER_SBSTATS };
 
-    pmdaDynamicPMNS("gfs2.sbstats",
-		    set, sizeof(set)/sizeof(int),
-		    refresh_sbstats, sbstats_text,
-		    refresh_metrictable, size_metrictable,
-		    metrics, nmetrics);
+    pmdaExtDynamicPMNS("gfs2.sbstats",
+			set, sizeof(set)/sizeof(int),
+			refresh_sbstats, sbstats_text,
+			refresh_metrictable, size_metrictable,
+			metrics, nmetrics, pmda);
 }

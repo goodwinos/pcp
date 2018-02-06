@@ -51,14 +51,13 @@ static int
 solaris_fetch_callback(pmdaMetric *mdesc, unsigned int inst, pmAtomValue *atom)
 {
     metricdesc_t *mdp = (metricdesc_t *)mdesc->m_user;
-    int cluster = pmid_cluster(mdesc->m_desc.pmid);
+    int cluster = pmID_cluster(mdesc->m_desc.pmid);
     method_t *m = methodtab + cluster;
     hrtime_t start;
     int rv;
-    __pmID_int *id = __pmid_int(&mdesc->m_desc.pmid);
 
     if (cluster == 4095) {
-	switch (id->item) {
+	switch (pmID_item(mdesc->m_desc.pmid)) {
 	case 0: /* pmda.prefetch.time */
 		if ((inst <= 0) || (inst > methodtab_sz+1))
 			return PM_ERR_INST;
@@ -108,7 +107,7 @@ __PMDA_INIT_CALL
 solaris_init(pmdaInterface *dp)
 {
     if (_isDSO) {
-	int sep = __pmPathSeparator();
+	int sep = pmPathSeparator();
 	pmsprintf(mypath, sizeof(mypath), "%s%c" "solaris" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
 	pmdaDSO(dp, PMDA_INTERFACE_3, "Solaris DSO", mypath);
@@ -126,7 +125,7 @@ solaris_init(pmdaInterface *dp)
 static void
 usage(void)
 {
-    fprintf(stderr, "Usage: %s [options]\n\n", pmProgname);
+    fprintf(stderr, "Usage: %s [options]\n\n", pmGetProgname());
     fputs("Options:\n"
 	  "  -d domain    use domain (numeric) for metrics domain of PMDA\n"
 	  "  -l logfile   write log into logfile rather than using default log name\n"
@@ -153,17 +152,17 @@ int
 main(int argc, char **argv)
 {
     int			err = 0;
-    int			sep = __pmPathSeparator();
+    int			sep = pmPathSeparator();
     pmdaInterface	desc;
     int			c;
     char		*namespace = PM_NS_DEFAULT;
 
     _isDSO = 0;
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     pmsprintf(mypath, sizeof(mypath), "%s%c" "solaris" "%c" "help",
 		pmGetConfig("PCP_PMDAS_DIR"), sep, sep);
-    pmdaDaemon(&desc, PMDA_INTERFACE_3, pmProgname, SOLARIS,
+    pmdaDaemon(&desc, PMDA_INTERFACE_3, pmGetProgname(), SOLARIS,
 		"solaris.log", mypath);
 
     while ((c = pmdaGetOpt(argc, argv, "N:D:d:l:?", &desc, &err)) != EOF) {
@@ -190,8 +189,8 @@ main(int argc, char **argv)
 	    char **names;
 	    int	i;
 	    int e;
-	    __pmID_int *id = __pmid_int(&metricdesc[c].md_desc.pmid);
-	    id->domain = desc.domain;
+
+	    metricdesc[c].md_desc.pmid = pmID_build(desc.domain, pmID_cluster(metricdesc[c].md_desc.pmid), pmID_item(metricdesc[c].md_desc.pmid));
 
 	    if ((e = pmNameAll(metricdesc[c].md_desc.pmid, &names)) < 1) {
 		printf ("Cannot find %s(%s) in %s: %s\n",

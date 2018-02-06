@@ -8,7 +8,7 @@
 
 #include <stdio.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include "libpcp.h"
 
 int
 main(int argc, char **argv)
@@ -24,7 +24,7 @@ main(int argc, char **argv)
     pmID	pmid;
     char	*name = "sample.seconds";
 
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     if (argc > 1) {
 	while ((c = getopt(argc, argv, "D:")) != EOF) {
@@ -33,7 +33,7 @@ main(int argc, char **argv)
 	    sts = pmSetDebug(optarg);
 	    if (sts < 0) {
 		fprintf(stderr, "%s: unrecognized debug options specification (%s)\n",
-		    pmProgname, optarg);
+		    pmGetProgname(), optarg);
 		errflag++;
 	    }
 	    break;
@@ -46,7 +46,7 @@ main(int argc, char **argv)
 	}
 
 	if (errflag || optind > argc) {
-	    fprintf(stderr, "Usage: %s [-D]\n", pmProgname);
+	    fprintf(stderr, "Usage: %s [-D]\n", pmGetProgname());
 	    exit(1);
 	}
     }

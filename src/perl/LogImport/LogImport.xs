@@ -2,7 +2,7 @@
 #include "perl.h"
 #include "XSUB.h"
 #include <pmapi.h>
-#include <impl.h>
+#include <libpcp.h>
 #include <import.h>
 
 MODULE = PCP::LogImport              PACKAGE = PCP::LogImport
@@ -10,35 +10,37 @@ MODULE = PCP::LogImport              PACKAGE = PCP::LogImport
 # helper methods
 #
 
-# name here is a little odd ... follows impl.h definition rather
+# name here is a little odd ... follows libpcp.h definition rather
 # than pmi* naming so calls from C and Perl are the same
+pmID
+pmID_build(domain, cluster, item)
+	unsigned int	domain;
+	unsigned int	cluster;
+	unsigned int	item;
+    CODE:
+	RETVAL = pmID_build(domain, cluster, item);
+    OUTPUT:
+	RETVAL
+
+# and old name for backwards compatibility
 pmID
 pmid_build(domain, cluster, item)
 	unsigned int	domain;
 	unsigned int	cluster;
 	unsigned int	item;
     CODE:
-	pmID id;
-	__pmid_int(&id)->flag = 0;
-	__pmid_int(&id)->domain = domain;
-	__pmid_int(&id)->cluster = cluster;
-	__pmid_int(&id)->item = item;
-	RETVAL = id;
+	RETVAL = pmID_build(domain, cluster, item);
     OUTPUT:
 	RETVAL
 
-# name here is a little odd ... follows impl.h definition rather
+# name here is a little odd ... follows libpcp.h definition rather
 # than pmi* naming so calls from C and Perl are the same
 pmInDom
 pmInDom_build(domain, serial)
 	unsigned int	domain;
 	unsigned int	serial;
     CODE:
-	pmInDom indom;
-	__pmindom_int(&indom)->flag = 0;
-	__pmindom_int(&indom)->domain = domain;
-	__pmindom_int(&indom)->serial = serial;
-	RETVAL = indom;
+	RETVAL = pmInDom_build(domain, serial);
     OUTPUT:
 	RETVAL
 

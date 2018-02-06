@@ -16,7 +16,7 @@
  */
 
 #include "pmapi.h"
-#include "impl.h"
+#include "libpcp.h"
 #include "logger.h"
 #include <assert.h>
 
@@ -182,7 +182,7 @@ do_desc(void)
 	    }
 	    if (i == numnames) {
 		fprintf(stderr, "%s: Botch: old name %s not found in list of %d names for pmid %s ...",
-			pmProgname, mp->old_name, numnames, pmIDStr(mp->old_desc.pmid));
+			pmGetProgname(), mp->old_name, numnames, pmIDStr(mp->old_desc.pmid));
 		for (i = 0; i < numnames; i++) {
 		    if (i > 0) fputc(',', stderr);
 		    fprintf(stderr, " %s", names[i]);
@@ -202,9 +202,9 @@ do_desc(void)
 	    desc.units = mp->new_desc.units;	/* struct assignment */
 	break;
     }
-    if ((sts = __pmLogPutDesc(&outarch.logctl, &desc, numnames, names)) < 0) {
+    if ((sts = __pmLogPutDesc(&outarch.archctl, &desc, numnames, names)) < 0) {
 	fprintf(stderr, "%s: Error: __pmLogPutDesc: %s (%s): %s\n",
-		pmProgname, names[0], pmIDStr(desc.pmid), pmErrStr(sts));
+		pmGetProgname(), names[0], pmIDStr(desc.pmid), pmErrStr(sts));
 	abandon();
 	/*NOTREACHED*/
     }

@@ -2,8 +2,8 @@
 # Copyright (c) 2000,2004-2008 Silicon Graphics, Inc.  All Rights Reserved.
 # Portions Copyright (c) International Business Machines Corp., 2002
 # Portions Copyright (c) 2007-2009 Aconex.  All Rights Reserved.
-# Portions Copyright (c) 2013-2017 Red Hat.
 # Portions Copyright (c) 2016-2017 Fujitsu.
+# Portions Copyright (c) 2013-2018 Red Hat.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
@@ -62,6 +62,7 @@
 The scsi tape instance domain includes st[0-9]+ devices, but not any of the
 derived devices such as nst0, nst0a, st0l, st0m and so forth. The derived
 devices all share the same statistics in the kernel as the st devices.
+@ 60.35 serial devices (aka ttys)
 
 @ kernel.uname.release release level of the running kernel
 Release level of the running kernel as reported via the release[]
@@ -830,6 +831,10 @@ from /proc/vmstat
 @ mem.vmstat.pgrefill_movable movable mem pages inspected in refill_inactive_zone
 Count of movable mem pages inspected in refill_inactive_zone since boot,
 from /proc/vmstat
+@ mem.vmstat.pgsteal_direct mem pages directly reclaimed
+Count of mem pages directly reclaimed since boot, from /proc/vmstat
+@ mem.vmstat.pgsteal_kswapd mem pages reclaimed by kswapd
+Count of mem pages reclaimed by kswapd since boot, from /proc/vmstat
 @ mem.vmstat.pgsteal_high high mem pages reclaimed
 Count of high mem pages reclaimed since boot, from /proc/vmstat
 @ mem.vmstat.pgsteal_normal normal mem pages reclaimed
@@ -840,6 +845,39 @@ Count of dma mem pages reclaimed since boot, from /proc/vmstat
 Count of dma32 mem pages reclaimed since boot, from /proc/vmstat
 @ mem.vmstat.pgsteal_movable movable mem pages reclaimed
 Count of movable mem pages reclaimed since boot, from /proc/vmstat
+@ mem.vmstat.pgsteal_kswapd_dma dma mem pages reclaimed by kswapd
+Count of dma mem pages reclaimed by kswapd since boot, from /proc/vmstat
+since Linux 3.4
+@ mem.vmstat.pgsteal_kswapd_dma32 dma32 mem pages reclaimed by kswapd
+Count of dma32 mem pages reclaimed by kswapd since boot, from /proc/vmstat
+since Linux 3.4
+@ mem.vmstat.pgsteal_kswapd_normal normal mem pages reclaimed by kswapd
+Count of normal mem pages reclaimed by kswapd since boot, from /proc/vmstat
+since Linux 3.4
+@ mem.vmstat.pgsteal_kswapd_movable movable mem pages reclaimed by kswapd
+Count of movable mem pages reclaimed by kswapd since boot, from /proc/vmstat
+since Linux 3.4
+@ mem.vmstat.pgsteal_direct_dma dma mem pages reclaimed
+Count of dma mem pages reclaimed since boot, from /proc/vmstat
+since Linux 3.4
+@ mem.vmstat.pgsteal_direct_dma32 dma32 mem pages reclaimed
+Count of dma32 mem pages reclaimed since boot, from /proc/vmstat
+since Linux 3.4
+@ mem.vmstat.pgsteal_direct_normal normal mem pages reclaimed
+Count of normal mem pages reclaimed since boot, from /proc/vmstat
+since Linux 3.4
+@ mem.vmstat.pgsteal_direct_movable movable mem pages reclaimed
+Count of movable mem pages reclaimed since boot, from /proc/vmstat
+since Linux 2.6.23
+@ mem.vmstat.pgscan_direct directly scanned mem pages
+Count of mem pages scanned directly since boot, from /proc/vmstat
+since Linux 3.4
+@ mem.vmstat.pgscan_direct_throttle throttled direct scanned mem pages
+Count of throttled mem pages scanned directly since boot, from /proc/vmstat
+since Linux 3.4
+@ mem.vmstat.pgscan_kswapd mem pages scanned by kswapd
+Count of mem pages scanned by kswapd since boot, from /proc/vmstat
+since Linux 3.4
 @ mem.vmstat.pgscan_kswapd_high high mem pages scanned by kswapd
 Count of high mem pages scanned by kswapd since boot, from /proc/vmstat
 @ mem.vmstat.pgscan_kswapd_normal normal mem pages scanned by kswapd
@@ -949,6 +987,9 @@ Count of huge TLB page buddy allocation successes, from /proc/vmstat
 @ mem.vmstat.nr_vmscan_immediate_reclaim prioritise for reclaim when writeback ends
 @ mem.vmstat.numa_pages_migrated count of NUMA page migrations
 @ mem.vmstat.numa_pte_updates count of NUMA page table entry updates
+@ mem.vmstat.numa_huge_pte_updates count of NUMA huge page table entry updates
+@ mem.vmstat.numa_hint_faults count of page migrations from NUMA PTE fault hints
+@ mem.vmstat.numa_hint_faults_local count of NUMA PTE fault hints satisfied locally
 @ mem.vmstat.pglazyfreed count of pages lazily freed
 @ mem.vmstat.pgmigrate_fail count of unsuccessful NUMA page migrations
 @ mem.vmstat.pgmigrate_success count of successful NUMA page migrations
@@ -1167,6 +1208,8 @@ See also network.interface.speed for the Megabytes/second value.
 @ network.interface.duplex value one for half or two for full duplex interface
 @ network.interface.up boolean for whether interface is currently up or down
 @ network.interface.running boolean for whether interface has resources allocated
+@ network.interface.wireless boolean for whether interface is wireless
+@ network.interface.type sysfs interface name assignment type value
 @ network.interface.inet_addr string INET interface address (ifconfig style)
 @ network.interface.ipv6_addr string IPv6 interface address (ifconfig style)
 @ network.interface.ipv6_scope string IPv6 interface scope (ifconfig style)
@@ -1617,7 +1660,7 @@ See also the kernel.uname.* metrics
 @ pmda.version build version of Linux PMDA
 @ hinv.map.cpu_num logical to physical CPU mapping for each CPU
 @ hinv.map.cpu_node logical CPU to NUMA node mapping for each CPU
-@ hinv.machine machine name, IP35 if SGI SNIA, else uname(2) hardware identifier
+@ hinv.machine hardware identifier as reported by uname(2)
 @ hinv.cpu.clock clock rate in Mhz for each CPU as reported by /proc/cpuinfo
 @ hinv.cpu.vendor manufacturer of each CPU as reported by /proc/cpuinfo
 @ hinv.cpu.model model number of each CPU as reported by /proc/cpuinfo
@@ -1632,7 +1675,8 @@ See also the kernel.uname.* metrics
 @ kernel.all.hz value of HZ (jiffies/second) for the currently running kernel
 @ kernel.all.uptime time the current kernel has been running
 @ kernel.all.idletime time the current kernel has been idle since boot
-@ kernel.all.lastpid most recently allocated process id
+@ kernel.all.lastpid most recently allocated process identifier
+@ kernel.all.pid_max maximum process identifier from /proc/sys/kernel/pid_max
 @ kernel.all.runnable total number of processes in the (per-CPU) run queues
 @ kernel.all.nprocs total number of processes (lightweight)
 @ mem.slabinfo.objects.active number of active objects in each cache
@@ -1721,3 +1765,11 @@ For writes it means not all data made it to tape.
 @ tape.dev.write_byte_cnt number of bytes written to the tape drive
 @ tape.dev.write_cnt number of write requests issued to the tape drive
 @ tape.dev.write_ns cummulative amount of time spent waiting for write requests to complete
+
+@ tty.serial.rx Number of receive interrupts for current serial line.
+@ tty.serial.tx Number of transmit interrupts for current serial line.
+@ tty.serial.frame Number of frame errors for current serial line.
+@ tty.serial.parity Number of parity errors for current serial line.
+@ tty.serial.brk Number of breaks for current serial line.
+@ tty.serial.overrun Number of overrun errors for current serial line.
+@ tty.serial.irq IRQ number.

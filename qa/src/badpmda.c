@@ -4,7 +4,6 @@
  */
 
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
 #include <pcp/pmda.h>
 
 static pmdaInterface dispatch;
@@ -20,7 +19,7 @@ main(int argc, char **argv)
     char	*sockname = NULL;
 
     /* trim cmd name of leading directory components */
-    __pmSetProgname(argv[0]);
+    pmSetProgname(argv[0]);
 
     while ((c = getopt(argc, argv, "c:p:s:?")) != EOF) {
 	switch (c) {
@@ -52,7 +51,7 @@ Options:\n\
   -c number     case number (default 0)\n\
   -s name       socket name\n\
   -p number     port number\n",
-                pmProgname);
+                pmGetProgname());
         exit(1);
     }
 

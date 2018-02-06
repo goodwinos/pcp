@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pcp/pmapi.h>
-#include <pcp/impl.h>
+#include "libpcp.h"
 #include <pthread.h>
 #if darwin_hack
 #include <dlfcn.h>
