@@ -361,6 +361,16 @@ FILE *
 pmOpenLog(const char *progname, const char *logname, FILE *oldstream,
 	    int *status)
 {
+    if (oldstream == stderr && logname && strcmp(logname, "stderr") == 0) {
+	/*
+	 * Special case to just write to existing stderr stream,
+	 * no need to reopen or dup anything.
+	 */
+	logheader(progname, oldstream, "started");
+    	*status = 0;
+	return oldstream;
+    }
+
     oldstream = logreopen(progname, logname, oldstream, status);
     logheader(progname, oldstream, "started");
 
@@ -387,6 +397,11 @@ __pmRotateLog(const char *progname, const char *logname, FILE *oldstream,
 {
     int		i;
     FILE	*newstream = oldstream;
+
+    if (oldstream == stderr && logname && strcmp(logname, "stderr") == 0) {
+	/* special case, as for pmOpenLog(), see above */
+    	return oldstream;
+    }
 
     PM_LOCK(util_lock);
     for (i = 0; i < nfilelog; i++) {
