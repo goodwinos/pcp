@@ -239,7 +239,7 @@ logfooter(FILE *log, const char *act)
 
     time(&now);
     ctime_r(&now, ct_buf);
-    fprintf(log, "\nLog %s %s", act, ct_buf);
+    fprintf(log, "\nLog %s %s pid=%d stdout=%d stderr=%d", act, ct_buf, getpid(), fileno(stdout), fileno(stderr));
 }
 
 static void
