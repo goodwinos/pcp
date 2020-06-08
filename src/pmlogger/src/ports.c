@@ -539,7 +539,7 @@ init_ports(void)
     }
 
 #if defined(HAVE_ATEXIT)
-    if (atexit(cleanup) != 0) {
+    if (!pmlogger_reexec && atexit(cleanup) != 0) {
 	perror("atexit");
 	fprintf(stderr, "%s: unable to register atexit cleanup function.  Exiting\n",
 		pmGetProgname());
