@@ -1134,6 +1134,7 @@ __pmServerStart(int argc, char **argv, int flags)
 	/* but keep going */
     else if (childpid > 0) {
 	/* parent, let her exit, but avoid ugly "Log finished" messages */
+	fclose(stdout);
 	fclose(stderr);
 	exit(0);
     }
