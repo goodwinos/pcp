@@ -11,6 +11,9 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
  * License for more details.
  */
+#include <sys/time.h>
+#include <sys/resource.h>
+
 #include "server.h"
 #include "uv_callback.h"
 #include <assert.h>
@@ -107,15 +110,39 @@ proxymetrics_close(struct proxy *proxy, enum proxy_registry prid)
 }
 
 static void
+server_metrics_refresh(void *arg)
+{
+    struct proxy	*proxy = (struct proxy *)arg;
+    struct rusage	usage;
+    double		user, sys;
+    pmAtomValue		*value;
+
+    if (getrusage(RUSAGE_SELF, &usage) < 0)
+    	return;
+    user = 1000.0 * pmtimevalToReal(&usage.ru_utime);
+    sys = 1000.0 * pmtimevalToReal(&usage.ru_stime);
+
+    if ((value = mmv_lookup_value_desc(proxy->metrics_handle, "mem.maxrss", NULL)) != NULL)
+	mmv_set_value(proxy->metrics_handle, value, usage.ru_maxrss);
+    if ((value = mmv_lookup_value_desc(proxy->metrics_handle, "cpu.user", NULL)) != NULL)
+	mmv_set_value(proxy->metrics_handle, value, user);
+    if ((value = mmv_lookup_value_desc(proxy->metrics_handle, "cpu.sys", NULL)) != NULL)
+	mmv_set_value(proxy->metrics_handle, value, sys);
+    if ((value = mmv_lookup_value_desc(proxy->metrics_handle, "cpu.total", NULL)) != NULL)
+	mmv_set_value(proxy->metrics_handle, value, user + sys);
+}
+
+static void
 server_metrics_init(struct proxy *proxy)
 {
     mmv_registry_t	*registry;
     pmAtomValue		*value;
     pmInDom		noindom = MMV_INDOM_NULL;
     pmUnits		nounits = MMV_UNITS(0,0,0,0,0,0);
+    pmUnits		units_kbytes = MMV_UNITS(1, 0, 0, PM_SPACE_KBYTE, 0, 0);
+    pmUnits		units_msec = MMV_UNITS(0, 1, 0, 0, PM_TIME_MSEC, 0);
     pid_t		pid = getpid();
     char		buffer[64];
-    void		*map;
 
     if ((registry = proxy->metrics[METRICS_SERVER]) == NULL)
 	return;
@@ -124,17 +151,39 @@ server_metrics_init(struct proxy *proxy)
 		MMV_TYPE_U32, MMV_SEM_DISCRETE, nounits, noindom,
 		"pmproxy PID",
 		"PID for the current pmproxy invocation");
+
     pmsprintf(buffer, sizeof(buffer), "%u", pid);
     mmv_stats_add_metric_label(registry, SERVER_PID,
 		"pid", buffer, MMV_NUMBER_TYPE, 0);
 
-    if ((map = mmv_stats_start(registry)) == NULL) {
+    mmv_stats_add_metric(registry, "mem.maxrss", SERVER_MEM_MAXRSS,
+	MMV_TYPE_U64, MMV_SEM_INSTANT, units_kbytes, noindom,
+	"pmproxy maximum RSS",
+	"pmproxy process maximum resident set memory size");
+
+    mmv_stats_add_metric(registry, "cpu.user", SERVER_CPU_USER,
+	MMV_TYPE_U64, MMV_SEM_COUNTER, units_msec, noindom,
+	"pmproxy user CPU",
+	"pmproxy process user CPU time counter");
+
+    mmv_stats_add_metric(registry, "cpu.sys", SERVER_CPU_SYS,
+	MMV_TYPE_U64, MMV_SEM_COUNTER, units_msec, noindom,
+	"pmproxy system CPU",
+	"pmproxy process system CPU time counter");
+
+    mmv_stats_add_metric(registry, "cpu.total", SERVER_CPU_TOTAL,
+	MMV_TYPE_U64, MMV_SEM_COUNTER, units_msec, noindom,
+	"pmproxy system + user CPU",
+	"pmproxy process system + user CPU time");
+
+    if ((proxy->metrics_handle = mmv_stats_start(registry)) == NULL) {
 	fprintf(stderr, "%s: instrumentation disabled\n", pmGetProgname());
 	return;
     }
 
-    if ((value = mmv_lookup_value_desc(map, "pid", NULL)) != NULL)
-	mmv_set_value(map, value, pid);
+    /* never need to refresh pid, so just set it once */
+    if ((value = mmv_lookup_value_desc(proxy->metrics_handle, "pid", NULL)) != NULL)
+	mmv_set_value(proxy->metrics_handle, value, pid);
 }
 
 static struct proxy *
@@ -172,6 +221,7 @@ server_init(int portcount, const char *localpath)
 
     proxymetrics(proxy, METRICS_SERVER);
     server_metrics_init(proxy);
+    pmSeriesRegisterTimer(proxy, server_metrics_refresh);
 
     proxy->events = uv_default_loop();
 
@@ -768,6 +818,7 @@ shutdown_ports(void *arg)
 
     uv_loop_close(proxy->events);
     proxymetrics_close(proxy, METRICS_SERVER);
+    pmSeriesDeregisterTimers();
 
     free(proxy->servers);
     proxy->servers = NULL;
