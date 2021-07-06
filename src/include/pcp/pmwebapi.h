@@ -125,6 +125,7 @@ typedef int (*pmSeriesInstCallBack)(pmSID, pmSeriesInst *, void *);
 typedef int (*pmSeriesValueCallBack)(pmSID, pmSeriesValue *, void *);
 typedef int (*pmSeriesLabelCallBack)(pmSID, pmSeriesLabel *, void *);
 typedef void (*pmSeriesDoneCallBack)(int, void *);
+typedef void (*pmSeriesTimerCallBack)(void *);
 
 typedef struct pmSeriesCallBacks {
     pmSeriesMatchCallBack	on_match;	/* one series identifier */
@@ -156,6 +157,8 @@ extern int pmSeriesSetSlots(pmSeriesModule *, void *);
 extern int pmSeriesSetEventLoop(pmSeriesModule *, void *);
 extern int pmSeriesSetConfiguration(pmSeriesModule *, struct dict *);
 extern int pmSeriesSetMetricRegistry(pmSeriesModule *, struct mmv_registry *);
+extern int pmSeriesRegisterTimer(void *, pmSeriesTimerCallBack);
+extern void pmSeriesDeregisterTimers(void); /* stop and free all registered timers */
 extern void pmSeriesClose(pmSeriesModule *);
 
 extern int pmSeriesDescs(pmSeriesSettings *, int, sds *, void *);
